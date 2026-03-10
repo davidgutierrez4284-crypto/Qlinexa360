@@ -1,0 +1,1081 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String                   @id @default(uuid())
+  email               String                   @unique
+  password            String
+  role                UserRole
+  firstName           String
+  lastName            String
+  phone               String?
+  profilePictureUrl   String?
+  twoFactorEnabled    Boolean                  @default(false)
+  twoFactorSecret     String?
+  twoFactorVerifiedAt DateTime?
+  twoFactorRecoveryToken String?
+  twoFactorRecoveryExpiresAt DateTime?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  adminProfile        Admin?
+  appointments        Appointment[]
+  vinculosAsistente   AsistenteDoctorVinculo[] @relation("AsistenteVinculos")
+  consentHistory      ConsentHistory[]
+  doctorProfile       Doctor?
+  files               File[]                   @relation("UserFiles")
+  fileAccessLogs      FileAccessLog[]
+  medicalRecords      MedicalRecord[]
+  patientProfile      Patient?                 @relation("UserPatientProfile")
+  notifications       Notification[]
+  passwordResetTokens PasswordResetToken[]
+  patients            Patient[]                @relation("DoctorHasPatients")
+
+  @@map("users")
+}
+
+model Admin {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+model Doctor {
+  id                      String                          @id @default(uuid())
+  userId                  String                          @unique
+  licenseNumber           String                          @unique
+  specialization          String
+  officeAddress           String
+  officePhone             String
+  professionalTitle       String
+  taxId                   String
+  taxName                 String
+  taxAddress              String
+  taxCertificateUrl       String
+  dataConsent             Boolean
+  termsAccepted           Boolean
+  termsAcceptedAt         DateTime
+  accessType              String
+  trialStart              DateTime?
+  trialEnd                DateTime?
+  profilePictureUrl       String?
+  certificadoEspecialidad String?
+  certificadoMaestria     String?
+  certificadoProfesional  String?
+  consultorioDireccion    String?
+  consultorioTelefono     String?
+  timezone                String?                         @default("America/Mexico_City")
+  logoUrl                 String?
+  primaryColor            String?                         @default("#ffffff")
+  secondaryColor          String?                         @default("#ffffff")
+  appointments            Appointment[]                   @relation("DoctorAppointments")
+  asistentesVinculados    AsistenteDoctorVinculo[]
+  availabilitySlots       AvailabilitySlot[]
+  user                    User                            @relation(fields: [userId], references: [id])
+  calendar                DoctorCalendar?
+  patients                DoctorPatient[]
+  documents               Document[]
+  externalCalendarLinks   ExternalCalendarLink[]
+  files                   File[]                          @relation("DoctorFiles")
+  eventCreator            InternalCalendarEvent[]         @relation("EventCreator")
+  internalCalendarEvents  InternalCalendarEvent[]
+  invoices                Invoice[]
+  colaboraciones          PadecimientoDoctorColaborador[]
+  prescriptions           Prescription[]                  @relation("DoctorToPrescriptions")
+  prescriptionTemplates   PrescriptionTemplate[]
+  reminderConfig          ReminderConfig?
+  studyDocuments          StudyDocument[]                 @relation("DoctorStudyDocuments")
+  waitlistEntries         WaitlistEntry[]
+  agenda_pacientes_links  AgendaPacientesLink[]
+  assistantInvitations    AssistantInvitation[]
+  calendarSyncConfigs     CalendarSyncConfig[]
+  recipeTemplates         DoctorRecipeTemplate[]
+  scheduleConfig          DoctorScheduleConfig?
+  patientInvitations      PatientInvitation[]
+  recetasMedicas          RecetaMedica[]                  @relation("DoctorToRecetas")
+  subscription            Subscription?
+  preConsultations        PreConsultation[]                @relation("DoctorPreConsultations")
+  promoRedemptions        PromoRedemption[]
+  doctorFormTemplates     DoctorFormTemplate[]
+}
+
+model Patient {
+  id                     String                          @id @default(uuid())
+  userId                 String                          @unique
+  profilePictureUrl      String?
+  taxName                String?
+  taxId                  String?
+  taxAddress             String?
+  taxCertificateUrl      String?
+  dataConsent            Boolean
+  dataConsentAt          DateTime?
+  dateOfBirth            DateTime
+  gender                 String
+  address                String?
+  createdAt              DateTime                        @default(now())
+  email                  String?
+  firstName              String
+  lastName               String
+  phone                  String?
+  updatedAt              DateTime                        @updatedAt
+  bloodType              String?
+  allergies              String?
+  chronicDiseases        String?
+  insuranceCompany       String?
+  insuranceEndDate       DateTime?
+  insurancePolicyHolder  String?
+  insurancePolicyNumber  String?
+  insuranceStartDate     DateTime?
+  appointments           Appointment[]                   @relation("PatientAppointments")
+  clinicalCases          ClinicalCase[]
+  doctors                DoctorPatient[]
+  emergencyContacts      EmergencyContact[]
+  files                  File[]                          @relation("PatientFiles")
+  internalCalendarEvents InternalCalendarEvent[]
+  invoices               Invoice[]
+  medicalRecords         MedicalRecord[]                 @relation("PatientMedicalRecords")
+  colaboraciones         PadecimientoDoctorColaborador[]
+  user                   User                            @relation("UserPatientProfile", fields: [userId], references: [id])
+  prescriptions          Prescription[]                  @relation("PatientToPrescriptions")
+  waitlistEntries        WaitlistEntry[]
+  insurancePolicies      PatientInsurance[]
+  recetasMedicas         RecetaMedica[]                  @relation("PatientToRecetas")
+  doctorUsers            User[]                          @relation("DoctorHasPatients")
+  preConsultations       PreConsultation[]
+}
+
+model PatientInsurance {
+  id               String   @id @default(uuid())
+  patientId        String
+  insuranceCompany String
+  policyNumber     String
+  policyHolder     String
+  startDate        DateTime
+  endDate          DateTime
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  patient          Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("patient_insurances")
+}
+
+model EmergencyContact {
+  id           String  @id @default(uuid())
+  patientId    String
+  firstName    String
+  lastName     String
+  email        String
+  phone        String
+  relationship String
+  patient      Patient @relation(fields: [patientId], references: [id])
+}
+
+model DoctorPatient {
+  id                 String          @id @default(uuid())
+  doctorId           String
+  patientId          String
+  status             String
+  referredByDoctorId String?
+  createdAt          DateTime        @default(now())
+  context            String
+  endDate            DateTime?
+  specialization     String
+  startDate          DateTime        @default(now())
+  appointments       Appointment[]
+  doctor             Doctor          @relation(fields: [doctorId], references: [id])
+  patient            Patient         @relation(fields: [patientId], references: [id])
+  files              File[]          @relation("DoctorPatientFiles")
+  medicalRecords     MedicalRecord[]
+
+  @@unique([doctorId, patientId])
+}
+
+model Document {
+  id               String   @id @default(uuid())
+  doctorId         String
+  type             String
+  title            String
+  description      String?
+  url              String
+  visibleToPatient Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  doctor           Doctor   @relation(fields: [doctorId], references: [id])
+}
+
+model MedicalRecord {
+  id                String            @id @default(uuid())
+  patientId         String
+  diagnosis         String
+  treatment         String
+  notes             String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  doctorPatientId   String
+  userId            String
+  isPublic          Boolean           @default(true)
+  tags              String[]          @default([])
+  clinicalEvolution ClinicalEvolution
+  formData          Json?
+  clinicalCaseId    String
+  date              DateTime?
+  reason            String?
+  autorConsultaId   String
+  isEditable        Boolean           @default(true)
+  realizadoPor      String?
+  vinculadoADoctor  String?
+  hasAttachments    Boolean           @default(false)
+  isComplete        Boolean           @default(false)
+  files             File[]            @relation("MedicalRecordFiles")
+  links             Link[]
+  clinicalCase      ClinicalCase      @relation(fields: [clinicalCaseId], references: [id])
+  doctorPatient     DoctorPatient     @relation(fields: [doctorPatientId], references: [id])
+  patient           Patient           @relation("PatientMedicalRecords", fields: [patientId], references: [id])
+  user              User              @relation(fields: [userId], references: [id])
+  prescriptions     Prescription[]    @relation("MedicalRecordToPrescriptions")
+  recetasMedicas    RecetaMedica[]    @relation("MedicalRecordToRecetas")
+
+  @@index([doctorPatientId])
+  @@index([patientId])
+  @@index([autorConsultaId])
+}
+
+model ConsentHistory {
+  id         String   @id @default(uuid())
+  userId     String
+  type       String
+  version    String
+  acceptedAt DateTime @default(now())
+  content    String
+  pdfUrl     String?  // URL del PDF firmado (S3) - solo para nuevos pacientes/asistentes
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model Invoice {
+  id               String   @id @default(uuid())
+  createdAt        DateTime @default(now())
+  doctorId         String
+  patientId        String
+  invoiceDate      DateTime
+  patientLastName  String
+  patientName      String
+  patientRFC       String
+  pdfUrl           String
+  xmlUrl           String
+  realizadoPor     String?
+  vinculadoADoctor String?
+  doctor           Doctor   @relation(fields: [doctorId], references: [id])
+  patient          Patient  @relation(fields: [patientId], references: [id])
+
+  @@index([doctorId])
+  @@index([patientId])
+}
+
+model Subscription {
+  id                   String    @id @default(uuid())
+  doctorId             String    @unique
+  paypalSubscriptionId String
+  paypalPlanId         String
+  status               String
+  startDate            DateTime
+  endDate              DateTime
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  cancellationReason   String?
+  cancelledAt          DateTime?
+  freeMonthUsed        Boolean   @default(false)
+  resumeDate           DateTime?
+  doctor               Doctor    @relation(fields: [doctorId], references: [id])
+
+  @@map("subscriptions")
+}
+
+enum PromoCodeType {
+  LIFETIME
+  TRIAL_30D
+  DISCOUNT_50_3M
+  REACTIVATION_30D
+}
+
+model PromoCode {
+  id               String        @id @default(uuid())
+  code             String        @unique
+  type             PromoCodeType
+  maxRedemptions   Int           @default(1)
+  redemptionCount  Int           @default(0)
+  isActive         Boolean       @default(true)
+  validFrom        DateTime      @default(now())
+  validUntil       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  redemptions      PromoRedemption[]
+
+  @@index([type, isActive])
+  @@map("promo_codes")
+}
+
+model PromoRedemption {
+  id           String   @id @default(uuid())
+  promoCodeId  String
+  doctorId     String
+  redeemedAt   DateTime @default(now())
+
+  promoCode    PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  doctor       Doctor    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([promoCodeId, doctorId])
+  @@map("promo_redemptions")
+}
+
+model Appointment {
+  id                      String                           @id @default(uuid())
+  doctorId                String
+  patientId               String
+  date                    DateTime
+  status                  String
+  notes                   String?
+  createdAt               DateTime                         @default(now())
+  doctorPatientId         String
+  externalEventId         String?
+  reminderSent            Boolean                          @default(false)
+  updatedAt               DateTime                         @updatedAt
+  userId                  String
+  realizadoPor            String?
+  vinculadoADoctor        String?
+  cancellationReason      String?
+  cancelledAt             DateTime?
+  confirmationRequestedAt DateTime?
+  confirmationStatus      ConfirmationStatus               @default(PENDING)
+  confirmedAt             DateTime?
+  rescheduledFrom         DateTime?
+  rescheduledTo           DateTime?
+  doctor                  Doctor                           @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  doctorPatient           DoctorPatient                    @relation(fields: [doctorPatientId], references: [id])
+  patient                 Patient                          @relation("PatientAppointments", fields: [patientId], references: [id])
+  user                    User                             @relation(fields: [userId], references: [id])
+  confirmationRequests    AppointmentConfirmationRequest[]
+  waitlistEntries         WaitlistEntry[]
+  preConsultation         PreConsultation?
+
+  @@index([doctorPatientId])
+  @@index([date])
+  @@index([doctorId])
+  @@index([patientId])
+  @@index([confirmationStatus])
+  @@index([date, confirmationStatus])
+}
+
+model AppointmentConfirmationRequest {
+  id                String                @id @default(uuid())
+  appointmentId     String
+  reminderType      ReminderType
+  scheduledFor      DateTime
+  sentAt            DateTime?
+  status            ReminderStatus        @default(PENDING)
+  emailSent         Boolean               @default(false)
+  patientResponse   ConfirmationResponse?
+  respondedAt       DateTime?
+  confirmationToken String                @unique
+  expiresAt         DateTime
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  appointment       Appointment           @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@index([scheduledFor])
+  @@index([status])
+  @@index([confirmationToken])
+}
+
+model WaitlistEntry {
+  id                String         @id @default(uuid())
+  patientId         String
+  doctorId          String
+  appointmentId     String?
+  preferredDate     DateTime?
+  preferredTimeSlot String?
+  urgency           UrgencyLevel   @default(NORMAL)
+  notes             String?
+  status            WaitlistStatus @default(ACTIVE)
+  joinedAt          DateTime       @default(now())
+  assignedAt        DateTime?
+  expiresAt         DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  appointment       Appointment?   @relation(fields: [appointmentId], references: [id])
+  doctor            Doctor         @relation(fields: [doctorId], references: [id])
+  patient           Patient        @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([status])
+  @@index([urgency])
+  @@index([preferredDate])
+}
+
+model MedicalComment {
+  id               String   @id @default(uuid())
+  medicalRecordId  String
+  doctorId         String
+  content          String   @db.VarChar(1000)
+  visibleToPatient Boolean  @default(false)
+  createdAt        DateTime @default(now())
+}
+
+model PrescriptionTemplate {
+  id        String   @id @default(uuid())
+  doctorId  String
+  content   String
+  createdAt DateTime @default(now())
+  name      String
+  doctor    Doctor   @relation(fields: [doctorId], references: [id])
+}
+
+model DoctorRecipeTemplate {
+  id              String   @id @default(uuid())
+  doctorId        String
+  pdfUrl          String
+  camposEditables Json
+  createdAt       DateTime @default(now())
+  doctor          Doctor   @relation(fields: [doctorId], references: [id])
+
+  @@map("doctor_recipe_templates")
+}
+
+model RecetaMedica {
+  id                  String                     @id @default(uuid())
+  doctorId            String
+  pacienteId          String
+  citaId              String?
+  archivoPdf          String
+  fechaEmision        DateTime                   @default(now())
+  observaciones       String?
+  esRecetaMedicamento Boolean                    @default(true)
+  esSolicitudEstudios Boolean                    @default(false)
+  realizadoPor        String?
+  vinculadoADoctor    String?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  detalleMedicamentos RecetaDetalleMedicamento[]
+  estudiosSolicitados RecetaEstudioSolicitado[]
+  consulta            MedicalRecord?             @relation("MedicalRecordToRecetas", fields: [citaId], references: [id])
+  doctor              Doctor                     @relation("DoctorToRecetas", fields: [doctorId], references: [id])
+  paciente            Patient                    @relation("PatientToRecetas", fields: [pacienteId], references: [id])
+
+  @@map("recetas_medicas")
+}
+
+model RecetaDetalleMedicamento {
+  id          String       @id @default(uuid())
+  recetaId    String
+  medicamento String
+  dosis       String
+  frecuencia  String
+  duracion    String?
+  createdAt   DateTime     @default(now())
+  receta      RecetaMedica @relation(fields: [recetaId], references: [id], onDelete: Cascade)
+
+  @@map("receta_detalle_medicamentos")
+}
+
+model RecetaEstudioSolicitado {
+  id            String       @id @default(uuid())
+  recetaId      String
+  nombreEstudio String
+  indicaciones  String?
+  createdAt     DateTime     @default(now())
+  receta        RecetaMedica @relation(fields: [recetaId], references: [id], onDelete: Cascade)
+
+  @@map("receta_estudios_solicitados")
+}
+
+model Prescription {
+  id               String        @id @default(uuid())
+  doctorId         String
+  patientId        String
+  createdAt        DateTime      @default(now())
+  fileId           String
+  medicalRecordId  String
+  realizadoPor     String?
+  vinculadoADoctor String?
+  doctor           Doctor        @relation("DoctorToPrescriptions", fields: [doctorId], references: [id])
+  file             File          @relation("FileToPrescriptions", fields: [fileId], references: [id])
+  medicalRecord    MedicalRecord @relation("MedicalRecordToPrescriptions", fields: [medicalRecordId], references: [id])
+  patient          Patient       @relation("PatientToPrescriptions", fields: [patientId], references: [id])
+}
+
+model AccessLog {
+  id             String   @id @default(uuid())
+  userId         String
+  patientId      String
+  moduleAccessed String
+  timestamp      DateTime @default(now())
+  userIp         String?
+}
+
+model StudyDocument {
+  id               String   @id @default(uuid())
+  title            String   @db.VarChar(50)
+  summary          String   @db.VarChar(200)
+  type             String
+  url              String
+  doctorId         String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  isPublic         Boolean  @default(false)
+  notes            String?
+  realizadoPor     String?
+  vinculadoADoctor String?
+  doctor           Doctor   @relation("DoctorStudyDocuments", fields: [doctorId], references: [id])
+
+  @@index([doctorId])
+}
+
+model DoctorCalendar {
+  id             String   @id @default(uuid())
+  doctorId       String   @unique
+  calendarType   String
+  calendarId     String
+  accessToken    String
+  refreshToken   String
+  tokenExpiresAt DateTime
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  doctor         Doctor   @relation(fields: [doctorId], references: [id])
+}
+
+model ReminderConfig {
+  id          String     @id @default(uuid())
+  doctorId    String     @unique
+  useWhatsApp Boolean    @default(true)
+  useEmail    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  reminders   Reminder[]
+  doctor      Doctor     @relation(fields: [doctorId], references: [id])
+}
+
+model Reminder {
+  id               String         @id @default(uuid())
+  reminderConfigId String
+  daysBefore       Int
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  reminderConfig   ReminderConfig @relation(fields: [reminderConfigId], references: [id])
+}
+
+model AvailabilitySlot {
+  id             String   @id @default(uuid())
+  doctorId       String
+  startTime      DateTime
+  endTime        DateTime
+  isRecurring    Boolean  @default(false)
+  recurrenceRule String?
+  isAvailable    Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  doctor         Doctor   @relation(fields: [doctorId], references: [id])
+
+  @@index([doctorId])
+}
+
+model File {
+  id                String          @id @default(uuid())
+  fileName          String
+  fileType          String
+  size              Int
+  url               String          @unique
+  category          FileCategory?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  uploadedById      String
+  doctorId          String?
+  patientId         String?
+  doctorPatientId   String?
+  medicalRecordId   String?
+  securityHash      String?
+  securityValidated Boolean         @default(false)
+  securityWarnings  String[]        @default([])
+  doctor            Doctor?         @relation("DoctorFiles", fields: [doctorId], references: [id])
+  doctorPatient     DoctorPatient?  @relation("DoctorPatientFiles", fields: [doctorPatientId], references: [id])
+  medicalRecord     MedicalRecord?  @relation("MedicalRecordFiles", fields: [medicalRecordId], references: [id])
+  patient           Patient?        @relation("PatientFiles", fields: [patientId], references: [id])
+  uploadedBy        User            @relation("UserFiles", fields: [uploadedById], references: [id])
+  accessLogs        FileAccessLog[]
+  prescriptions     Prescription[]  @relation("FileToPrescriptions")
+
+  @@index([uploadedById])
+  @@index([medicalRecordId])
+}
+
+model FileAccessLog {
+  id        String   @id @default(uuid())
+  fileId    String
+  userId    String
+  ip        String?
+  userAgent String?
+  action    String
+  timestamp DateTime @default(now())
+  file      File     @relation(fields: [fileId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Link {
+  id              String        @id @default(uuid())
+  url             String
+  description     String
+  createdAt       DateTime      @default(now())
+  medicalRecordId String
+  medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id])
+
+  @@index([medicalRecordId])
+}
+
+model FormTemplate {
+  id          String          @id @default(uuid())
+  name        String
+  specialty   String
+  description String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  fields      TemplateField[]
+
+  @@index([specialty])
+}
+
+model TemplateField {
+  id           String       @id @default(uuid())
+  templateId   String
+  label        String
+  fieldType    FieldType
+  placeholder  String?
+  options      String[]
+  defaultValue String?
+  isRequired   Boolean      @default(false)
+  order        Int
+  template     FormTemplate @relation(fields: [templateId], references: [id])
+
+  @@index([templateId])
+}
+
+model DoctorFormTemplate {
+  id        String                    @id @default(uuid())
+  doctorId  String
+  name      String
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+  doctor    Doctor                   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  fields    DoctorFormTemplateField[]
+  formData  DoctorFormData[]
+
+  @@unique([doctorId, name])
+  @@index([doctorId])
+  @@map("doctor_form_templates")
+}
+
+model DoctorFormTemplateField {
+  id         String              @id @default(uuid())
+  templateId String
+  fieldType  String              // 'numeric' | 'text'
+  label      String
+  position   Int
+  createdAt  DateTime            @default(now())
+  template   DoctorFormTemplate  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@map("doctor_form_template_fields")
+}
+
+model DoctorFormData {
+  id              String            @id @default(uuid())
+  medicalRecordId String
+  templateId      String
+  patientId       String
+  doctorId        String
+  data            Json              // { "fieldId": value, ... }
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  template        DoctorFormTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([medicalRecordId])
+  @@index([patientId])
+  @@index([templateId])
+  @@index([doctorId])
+  @@map("doctor_form_data")
+}
+
+model ClinicalCase {
+  id             String                          @id @default(uuid())
+  patientId      String
+  padecimiento   String
+  status         String
+  createdAt      DateTime                        @default(now())
+  updatedAt      DateTime                        @updatedAt
+  patient        Patient                         @relation(fields: [patientId], references: [id])
+  medicalRecords MedicalRecord[]
+  colaboradores  PadecimientoDoctorColaborador[]
+}
+
+model PadecimientoDoctorColaborador {
+  id              String       @id @default(uuid())
+  patientId       String
+  padecimientoId  String
+  doctorId        String
+  rol             String
+  fechaAsignacion DateTime     @default(now())
+  doctor          Doctor       @relation(fields: [doctorId], references: [id])
+  clinicalCase    ClinicalCase @relation(fields: [padecimientoId], references: [id])
+  patient         Patient      @relation(fields: [patientId], references: [id])
+
+  @@unique([patientId, padecimientoId, doctorId])
+  @@index([patientId])
+  @@index([padecimientoId])
+  @@index([doctorId])
+}
+
+model AsistenteDoctorVinculo {
+  id                  String   @id @default(uuid())
+  doctorId            String
+  asistenteId         String
+  fechaAsignacion     DateTime @default(now())
+  activo              Boolean  @default(true)
+  permisosCitas       Boolean  @default(false)
+  permisosHistorial   Boolean  @default(false)
+  permisosRecetas     Boolean  @default(false)
+  permisosNotas       Boolean  @default(false)
+  permisosEstudios    Boolean  @default(false)
+  permisosEvolucion   Boolean  @default(false)
+  permisosFacturacion Boolean  @default(false)
+  asistente           User     @relation("AsistenteVinculos", fields: [asistenteId], references: [id])
+  doctor              Doctor   @relation(fields: [doctorId], references: [id])
+
+  @@unique([doctorId, asistenteId])
+  @@index([doctorId])
+  @@index([asistenteId])
+  @@index([activo])
+}
+
+model InternalCalendarEvent {
+  id                String    @id @default(uuid())
+  doctorId          String
+  patientId         String?
+  fechaHoraInicio   DateTime
+  fechaHoraFin      DateTime
+  titulo            String
+  descripcion       String?
+  origenEvento      String    @default("interno")
+  linkMeeting       String?
+  creadoPor         String
+  creadoEn          DateTime  @default(now())
+  externalProvider  String?
+  externalEventId   String?
+  externalUpdatedAt DateTime?
+  creador           Doctor    @relation("EventCreator", fields: [creadoPor], references: [id])
+  doctor            Doctor    @relation(fields: [doctorId], references: [id])
+  patient           Patient?  @relation(fields: [patientId], references: [id])
+
+  @@index([doctorId])
+  @@index([patientId])
+  @@index([fechaHoraInicio])
+  @@index([origenEvento])
+  @@index([doctorId, externalProvider, externalEventId])
+}
+
+model ExternalCalendarLink {
+  id               String   @id @default(uuid())
+  doctorId         String
+  accessToken      String
+  activo           Boolean  @default(true)
+  calendarioId     String
+  fechaVinculacion DateTime @default(now())
+  refreshToken     String?
+  tipoConexion     String
+  doctor           Doctor   @relation(fields: [doctorId], references: [id])
+
+  @@index([doctorId])
+  @@index([activo])
+  @@index([tipoConexion])
+}
+
+model AgendaPacientesLink {
+  id             String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  link           String    @unique
+  doctor_id      String
+  esta_activo    Boolean?  @default(false)
+  fecha_creacion DateTime? @default(now()) @db.Timestamp(6)
+  mensaje_custom String?
+  Doctor         Doctor    @relation(fields: [doctor_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_doctor")
+
+  @@index([doctor_id], map: "idx_agenda_pacientes_links_doctor_id")
+  @@map("agenda_pacientes_links")
+}
+
+model PatientInvitation {
+  id          String    @id @default(uuid())
+  token       String    @unique
+  email       String
+  phone       String?
+  firstName   String
+  lastName    String
+  doctorId    String
+  status      String    @default("PENDING")
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+  doctor      Doctor    @relation(fields: [doctorId], references: [id])
+
+  @@map("patient_invitations")
+}
+
+model AssistantInvitation {
+  id          String    @id @default(uuid())
+  token       String    @unique
+  email       String
+  firstName   String
+  lastName    String
+  doctorId    String
+  status      String    @default("PENDING")
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+  doctor      Doctor    @relation(fields: [doctorId], references: [id])
+
+  @@map("assistant_invitations")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  readAt    DateTime?
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  token     String    @unique
+  userId    String
+  email     String
+  expiresAt DateTime
+  used      Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  usedAt    DateTime?
+  purpose   String?   @default("password_reset") // "password_reset" | "patient_setup"
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+model EmailInvitation {
+  id          String    @id @default(uuid())
+  token       String    @unique
+  email       String
+  role        UserRole
+  invitedBy   String
+  status      String    @default("PENDING")
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+  metadata    Json?
+
+  @@map("email_invitations")
+}
+
+model CalendarSyncConfig {
+  id           String    @id @default(uuid())
+  doctorId     String
+  provider     String
+  isConnected  Boolean   @default(false)
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  lastSync     DateTime?
+  error        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  doctor       Doctor    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, provider])
+  @@map("calendar_sync_configs")
+}
+
+model DoctorScheduleConfig {
+  id                  String   @id @default(uuid())
+  doctorId            String   @unique
+  appointmentDuration Int      @default(30)
+  bufferTime          Int      @default(15)
+  weeklySchedule      Json
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  doctor              Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@map("doctor_schedule_configs")
+}
+
+model TutorialVideo {
+  id           String   @id @default(uuid())
+  title        String
+  description  String?
+  section      String
+  videoUrl     String
+  thumbnailUrl String?
+  duration     Int?
+  order        Int      @default(0)
+  isActive     Boolean  @default(true)
+  uploadedBy   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([section, isActive])
+  @@map("tutorial_videos")
+}
+
+enum ConfirmationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  RESCHEDULED
+  NO_SHOW
+  COMPLETED
+}
+
+enum ReminderType {
+  CONFIRMATION_48H
+  CONFIRMATION_24H
+  CONFIRMATION_12H
+  FINAL_REMINDER
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  RESPONDED
+  EXPIRED
+  CANCELLED
+}
+
+enum ConfirmationResponse {
+  CONFIRMED
+  CANCELLED
+  RESCHEDULE
+  NO_RESPONSE
+}
+
+enum UrgencyLevel {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum WaitlistStatus {
+  ACTIVE
+  ASSIGNED
+  EXPIRED
+  CANCELLED
+}
+
+enum PreConsultationStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+}
+
+model PreConsultation {
+  id            String                  @id @default(uuid())
+  token         String                  @unique
+  appointmentId String                  @unique
+  patientId     String
+  doctorId      String
+  formData      Json?
+  status        PreConsultationStatus   @default(PENDING)
+  expiresAt     DateTime
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  completedAt   DateTime?
+  appointment   Appointment             @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient       Patient                 @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor        Doctor                  @relation("DoctorPreConsultations", fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([token])
+  @@index([status])
+  @@map("pre_consultations")
+}
+
+enum UserRole {
+  ADMIN
+  DOCTOR
+  PATIENT
+  ASISTENTE
+}
+
+enum Role {
+  ADMIN
+  DOCTOR
+  USER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum FileCategory {
+  PRESCRIPTION_REQUEST
+  DOCTOR_PHOTO
+  STUDY_RESULT
+  PATIENT_PHOTO
+}
+
+enum ClinicalEvolution {
+  INITIAL_EVALUATION
+  CONFIRMED_DIAGNOSIS
+  TREATMENT_PLAN
+  FOLLOW_UP
+  STABILIZATION
+  MEDICAL_DISCHARGE
+  READMISSION
+}
+
+enum FieldType {
+  TEXT
+  TEXTAREA
+  NUMBER
+  SELECT
+  CHECKBOX
+  DATE
+}
+
+enum NotificationType {
+  COLLABORATION_REQUEST
+  COLLABORATION_ACCEPTED
+  COLLABORATION_REJECTED
+  NEW_CONSULTATION
+  APPOINTMENT_REMINDER
+  SYSTEM_MESSAGE
+}

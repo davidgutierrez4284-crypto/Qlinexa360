@@ -1,0 +1,23 @@
+{
+  "dependencies": {
+    "@azure/msal-node": "^3.6.3",
+    "crypto-js": "^4.2.0",
+    "googleapis": "^153.0.0",
+    "node-cron": "^4.2.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/crypto-js": "^4.2.2",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.7"
+  },
+  "scripts": {
+    "prepare": "husky",
+    "lint": "echo lint placeholder",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
+  },
+  "lint-staged": {
+    "**/*.{js,jsx,ts,tsx,json,md}": "echo lint-staged placeholder"
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "templates": [
+    {
+      "name": "appointment_confirmation_es",
+      "language": "es",
+      "category": "UTILITY",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Hola {{1}}, tu cita ha sido confirmada.\nDoctor: {{2}}\nFecha: {{3}}\nHora: {{4}}\nMotivo: {{5}}\nLugar/Enlace: {{6}}\nGuarda este mensaje como comprobante. ¡Te esperamos!"
+        },
+        { "type": "FOOTER", "text": "Qlinexa360 • Mensaje automático" },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            { "type": "URL", "text": "Ver detalles", "url": "{{7}}" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "appointment_reminder_24h_es",
+      "language": "es",
+      "category": "UTILITY",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Hola {{1}}, te recordamos tu cita de mañana.\nDoctor: {{2}}\nFecha: {{3}}\nHora: {{4}}\nMotivo: {{5}}\nLugar/Enlace: {{6}}\nSi necesitas reprogramar, responde a este mensaje."
+        },
+        { "type": "FOOTER", "text": "Qlinexa360 • Recordatorio 24 h" },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            { "type": "URL", "text": "Ver detalles", "url": "{{7}}" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "appointment_reminder_2h_es",
+      "language": "es",
+      "category": "UTILITY",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Hola {{1}}, tu cita es en aproximadamente 2 horas.\nDoctor: {{2}} • Hora: {{4}}\nMotivo: {{5}}\nLugar/Enlace: {{6}}\nLlega 10 minutos antes. ¡Gracias!"
+        },
+        { "type": "FOOTER", "text": "Qlinexa360 • Recordatorio 2 h" },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            { "type": "URL", "text": "Ver detalles", "url": "{{7}}" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "appointment_rescheduled_es",
+      "language": "es",
+      "category": "UTILITY",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Hola {{1}}, tu cita ha sido reprogramada.\nDoctor: {{2}}\nNueva fecha: {{3}}\nNueva hora: {{4}}\nMotivo: {{5}}\nLugar/Enlace: {{6}}\nSi no puedes asistir, responde para reprogramar."
+        },
+        { "type": "FOOTER", "text": "Qlinexa360" },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            { "type": "URL", "text": "Ver detalles", "url": "{{7}}" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "appointment_canceled_es",
+      "language": "es",
+      "category": "UTILITY",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Hola {{1}}, tu cita ha sido cancelada.\nDoctor: {{2}}\nFecha original: {{3}} • Hora: {{4}}\nMotivo: {{5}}\nSi deseas agendar otra cita, utiliza este enlace: {{6}}"
+        },
+        { "type": "FOOTER", "text": "Qlinexa360" },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            { "type": "URL", "text": "Agendar nueva", "url": "{{7}}" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "doctor_new_appointment_es",
+      "language": "es",
+      "category": "UTILITY",
+      "components": [
+        {
+          "type": "BODY",
+          "text": "Nueva cita agendada.\nPaciente: {{1}}\nFecha: {{3}} • Hora: {{4}}\nMotivo: {{5}}\nRevisa tu calendario o el detalle en el sistema."
+        },
+        { "type": "FOOTER", "text": "Qlinexa360" },
+        {
+          "type": "BUTTONS",
+          "buttons": [
+            { "type": "URL", "text": "Ver cita", "url": "{{6}}" }
+          ]
+        }
+      ]
+    }
+  ]
+}

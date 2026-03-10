@@ -1,0 +1,174 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - button [ref=e6] [cursor=pointer]:
+        - img [ref=e7]
+      - button "Qlinexa360 Logo Qlinexa360" [ref=e9] [cursor=pointer]:
+        - img "Qlinexa360 Logo" [ref=e10]
+        - generic [ref=e11]: Qlinexa360
+    - generic [ref=e12]:
+      - button [ref=e14] [cursor=pointer]:
+        - img [ref=e15]
+      - generic [ref=e17]: PATIENT | Ana Martínez
+      - img "avatar" [ref=e18]
+      - button "Cerrar sesión" [ref=e19] [cursor=pointer]
+  - main [ref=e21]:
+    - generic [ref=e22]:
+      - generic [ref=e24]:
+        - heading "Historial Clínico" [level=1] [ref=e26]
+        - generic [ref=e27]:
+          - generic [ref=e30]:
+            - generic [ref=e31]: "Email: test.paciente1@medilink360.com"
+            - generic [ref=e32]: "Fecha de nacimiento: ( años)"
+            - generic [ref=e33]: "Teléfono:"
+          - button "Datos adicionales" [ref=e34] [cursor=pointer]
+      - generic [ref=e35]:
+        - generic [ref=e37]:
+          - generic [ref=e38] [cursor=pointer]:
+            - generic [ref=e40]: Fractura
+            - generic [ref=e41]: "Creado: 07-Nov-25"
+            - button "Ver evolución" [ref=e43]
+          - generic [ref=e44] [cursor=pointer]:
+            - generic [ref=e46]: Fractura 2
+            - generic [ref=e47]: "Creado: 13-Nov-25"
+            - button "Ver evolución" [ref=e49]
+        - generic [ref=e51]:
+          - generic [ref=e52]:
+            - generic [ref=e53]:
+              - generic [ref=e54]:
+                - generic [ref=e55]: Evolución clínica del paciente
+                - generic [ref=e56]: Fractura
+                - generic [ref=e57]:
+                  - img [ref=e58]
+                  - generic: Este progreso se llena en automático con lo capturado en el historial clínico de cada consulta, es importante que el Doctor capture dicha evolución en cada consulta
+              - generic [ref=e60]:
+                - button "Evolución visual" [ref=e61] [cursor=pointer]:
+                  - img [ref=e62]
+                  - text: Evolución visual
+                - generic: A través de este visor de fotografías capturadas en la consulta médica podrás observar a manera de timeline y como galería el progreso de curación de tu paciente
+            - generic [ref=e66]:
+              - generic [ref=e67]:
+                - img [ref=e69]
+                - paragraph [ref=e71]: Evaluación Inicial
+                - paragraph [ref=e73]: 13-Nov-25
+              - generic [ref=e74]:
+                - generic [ref=e76]: "2"
+                - paragraph [ref=e77]: Diagnóstico
+              - generic [ref=e78]:
+                - generic [ref=e80]: "3"
+                - paragraph [ref=e81]: Plan de Tratamiento
+              - generic [ref=e82]:
+                - generic [ref=e84]: "4"
+                - paragraph [ref=e85]: Seguimiento
+              - generic [ref=e86]:
+                - generic [ref=e88]: "5"
+                - paragraph [ref=e89]: Estabilización
+              - generic [ref=e90]:
+                - generic [ref=e92]: "6"
+                - paragraph [ref=e93]: Alta Médica
+              - generic [ref=e94]:
+                - generic [ref=e96]: "7"
+                - paragraph [ref=e97]: Recaída
+          - generic [ref=e100]:
+            - generic [ref=e102]:
+              - heading "Historial de Consultas" [level=3] [ref=e103]
+              - button "¿Qué significan los estados?" [ref=e104] [cursor=pointer]:
+                - img [ref=e105]
+                - text: ¿Qué significan los estados?
+            - generic [ref=e107]:
+              - generic [ref=e108] [cursor=pointer]:
+                - generic [ref=e109]: "2"
+                - generic [ref=e111]:
+                  - img [ref=e112]
+                  - generic [ref=e114]: Con archivos
+                - generic [ref=e115]:
+                  - paragraph [ref=e117]: Contenido privado
+                  - generic [ref=e118]: Evaluación Inicial
+                  - paragraph [ref=e119]: "Fecha: 13-Nov-25"
+                - generic [ref=e120]:
+                  - generic [ref=e121]:
+                    - generic [ref=e122]:
+                      - generic [ref=e123]:
+                        - img [ref=e124]
+                        - generic [ref=e126]: "2"
+                      - generic:
+                        - generic: Fotos Paciente
+                        - generic:
+                          - generic:
+                            - generic: FB_IMG_1701439061884.jpg
+                            - generic: 30.83 KB
+                          - generic:
+                            - generic: FB_IMG_1701630886842.jpg
+                            - generic: 29.83 KB
+                    - generic [ref=e127]:
+                      - generic [ref=e128]:
+                        - img [ref=e129]
+                        - generic [ref=e131]: "1"
+                      - generic:
+                        - generic: Resultados
+                        - generic:
+                          - generic:
+                            - generic: 241211 Certificado JIRA.png
+                            - generic: 110.58 KB
+                    - generic [ref=e132]:
+                      - generic [ref=e133]:
+                        - img [ref=e134]
+                        - generic [ref=e136]: "1"
+                      - generic:
+                        - generic: Recetas
+                        - generic:
+                          - generic:
+                            - generic: receta_0c642480-cbd4-41d9-b63b-cf6afa58c952_1763570107573.pdf
+                            - generic: 162.71 KB
+                  - generic [ref=e137]:
+                    - generic [ref=e138]:
+                      - img [ref=e139]
+                      - generic [ref=e141]: "1"
+                    - generic:
+                      - generic: "Links adjuntos:"
+                      - generic:
+                        - generic:
+                          - generic: radiografias
+                          - generic: https://david-gutierrez-portafol-0nk5ubh.gamma.site/
+              - generic [ref=e142] [cursor=pointer]:
+                - generic [ref=e143]: "1"
+                - generic [ref=e145]:
+                  - img [ref=e146]
+                  - generic [ref=e148]: Con archivos
+                - generic [ref=e149]:
+                  - generic [ref=e150]:
+                    - paragraph [ref=e151]: se pegó bien feo en el brazo y se rompió cúbito y radio jugando futbol americano, pasó corriendo Lion y pum lo pisó y se le rompió
+                    - generic "Consulta en solo lectura" [ref=e152]: Solo lectura
+                  - generic [ref=e153]: Evaluación Inicial
+                  - paragraph [ref=e154]: "Fecha: 13-Nov-25"
+                - generic [ref=e155]:
+                  - generic [ref=e157]:
+                    - generic [ref=e158]:
+                      - img [ref=e159]
+                      - generic [ref=e161]: "3"
+                    - generic:
+                      - generic: Fotos Doctor
+                      - generic:
+                        - generic:
+                          - generic: 20180913_210538.png
+                          - generic: 76.68 KB
+                        - generic:
+                          - generic: FB_IMG_1539010025918.jpg
+                          - generic: 54.29 KB
+                        - generic:
+                          - generic: FB_IMG_1539913059790.jpg
+                          - generic: 34.32 KB
+                  - generic [ref=e162]:
+                    - generic [ref=e163]:
+                      - img [ref=e164]
+                      - generic [ref=e166]: "1"
+                    - generic:
+                      - generic: "Links adjuntos:"
+                      - generic:
+                        - generic:
+                          - generic: portfolio
+                          - generic: https://david-gutierrez-portafol-0nk5ubh.gamma.site/
+```

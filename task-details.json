@@ -1,0 +1,5 @@
+﻿{
+    "stoppedReason": "Essential container in task exited",
+    "containerReason": null,
+    "containerExitCode": 127
+}

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}} - Qlinexa360</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; line-height: 1.5; color: #333; background: white; }
+        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #2563eb; }
+        .header h1 { font-size: 20px; color: #1e40af; }
+        .content { font-size: 11px; margin-bottom: 40px; }
+        .content p { margin-bottom: 10px; }
+        .content ul { margin: 8px 0 8px 20px; }
+        .signature-block { margin-top: 30px; padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .signature-block p { margin: 4px 0; font-size: 11px; }
+        .signature-block .label { font-weight: bold; color: #1e40af; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{title}}</h1>
+            <p style="font-size: 12px; color: #64748b;">Plataforma Qlinexa360 - Documento de consentimiento firmado</p>
+        </div>
+        <div class="content">
+            {{{content}}}
+        </div>
+        <div class="signature-block">
+            <p><span class="label">Firma digital:</span> {{signature}}</p>
+            <p><span class="label">Nombre completo:</span> {{fullName}}</p>
+            <p><span class="label">Correo electrónico:</span> {{email}}</p>
+            <p><span class="label">Fecha y hora:</span> {{timestamp}}</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,11 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const consent_controller_1 = require("../controllers/consent.controller");
+const auth_middleware_1 = require("../middlewares/auth.middleware");
+const router = (0, express_1.Router)();
+router.post('/submit-after-setup', consent_controller_1.submitConsentAfterPatientSetup);
+router.post('/submit-assistant', consent_controller_1.submitConsentAssistant);
+router.get('/admin/:userId', (0, auth_middleware_1.authMiddleware)(['ADMIN']), consent_controller_1.getConsentsByUserId);
+router.get('/doctor/patient/:patientId/aviso-privacidad', (0, auth_middleware_1.authMiddleware)(['DOCTOR']), consent_controller_1.getPatientAvisoPrivacidad);
+exports.default = router;

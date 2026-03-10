@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const doctorFormTemplate_controller_1 = require("../controllers/doctorFormTemplate.controller");
+const auth_middleware_1 = require("../middlewares/auth.middleware");
+const router = (0, express_1.Router)();
+router.use((0, auth_middleware_1.authMiddleware)(['DOCTOR', 'ASISTENTE']));
+router.get('/', doctorFormTemplate_controller_1.getDoctorTemplates);
+router.post('/', doctorFormTemplate_controller_1.createDoctorTemplate);
+router.put('/:id', doctorFormTemplate_controller_1.updateDoctorTemplate);
+router.delete('/:id', doctorFormTemplate_controller_1.deleteDoctorTemplate);
+router.post('/data', doctorFormTemplate_controller_1.saveDoctorFormData);
+router.get('/data/charts', doctorFormTemplate_controller_1.getDoctorFormDataForCharts);
+exports.default = router;

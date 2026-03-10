@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "InternalCalendarEvent_doctorId_externalProvider_externalEventId" RENAME TO "InternalCalendarEvent_doctorId_externalProvider_externalEve_idx";

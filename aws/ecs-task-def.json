@@ -1,0 +1,85 @@
+{
+  "family": "qlinexa360-prod-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::268675503474:role/qlinexa360-ecs-task-execution",
+  "taskRoleArn": "arn:aws:iam::268675503474:role/qlinexa360-ecs-task-role",
+  "containerDefinitions": [
+    {
+      "name": "qlinexa360-prod-backend",
+      "image": "268675503474.dkr.ecr.us-east-2.amazonaws.com/qlinexa360-backend:prod",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "hostPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "PORT", "value": "3000" },
+        { "name": "AWS_REGION", "value": "us-east-2" },
+        { "name": "AWS_S3_BUCKET_NAME", "value": "qlinexa360" },
+        { "name": "AWS_BUCKET_NAME", "value": "qlinexa360" },
+        { "name": "FRONTEND_URL", "value": "https://www.qlinexa360.com" },
+        { "name": "BASE_URL", "value": "https://api.qlinexa360.com" },
+        { "name": "JWT_EXPIRES_IN", "value": "24h" },
+        { "name": "PAYPAL_ENVIRONMENT", "value": "live" },
+        { "name": "SMTP_HOST", "value": "smtp.zoho.com" },
+        { "name": "SMTP_PORT", "value": "465" },
+        { "name": "SMTP_SECURE", "value": "true" },
+        { "name": "SMTP_FROM_NOREPLY", "value": "no-reply@qlinexa360.com" },
+        { "name": "TZ", "value": "America/Mexico_City" },
+        { "name": "PRACTICE_TIMEZONE", "value": "America/Mexico_City" }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-database-url-Xi9kCo"
+        },
+        {
+          "name": "JWT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-jwt-secret-pPrBJl"
+        },
+        {
+          "name": "PAYPAL_CLIENT_ID",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-paypal-client-id-nvG5GY"
+        },
+        {
+          "name": "PAYPAL_CLIENT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-paypal-client-secret-hVyO5m"
+        },
+        {
+          "name": "SMTP_USER",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-smtp-user-6q49Cp"
+        },
+        {
+          "name": "SMTP_PASS",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-smtp-pass-jVChMX"
+        },
+        {
+          "name": "ADMIN_REPORT_TOKEN",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-admin-report-token-msV1fe"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/qlinexa360-prod-backend",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

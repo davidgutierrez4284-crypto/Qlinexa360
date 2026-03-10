@@ -1,0 +1,96 @@
+version: 2
+updates:
+  # Configuración para npm (Node.js)
+  - package-ecosystem: "npm"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "david"
+    assignees:
+      - "david"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "security"
+    ignore:
+      # Ignorar actualizaciones mayores que podrían romper la aplicación
+      - dependency-name: "@types/*"
+      - dependency-name: "typescript"
+      - dependency-name: "prisma"
+      - dependency-name: "@prisma/client"
+
+  # Configuración para npm (Frontend)
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "david"
+    assignees:
+      - "david"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "security"
+      - "frontend"
+    ignore:
+      # Ignorar actualizaciones mayores que podrían romper la aplicación
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+      - dependency-name: "vite"
+      - dependency-name: "@types/*"
+
+  # Configuración para GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "david"
+    assignees:
+      - "david"
+    commit-message:
+      prefix: "ci"
+      prefix-development: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "security"
+      - "github-actions"
+
+  # Configuración para Docker (si se usa)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "david"
+    assignees:
+      - "david"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "security"
+      - "docker" 

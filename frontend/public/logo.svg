@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle with gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563EB;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1D4ED8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main background circle -->
+  <circle cx="256" cy="256" r="256" fill="url(#bgGradient)"/>
+  
+  <!-- Medical briefcase - main body -->
+  <rect x="120" y="180" width="272" height="160" rx="20" fill="white"/>
+  
+  <!-- Medical briefcase - handle/top part -->
+  <rect x="180" y="140" width="152" height="60" rx="15" fill="white"/>
+  
+  <!-- Medical cross symbol - centered within the briefcase -->
+  <!-- Vertical part of cross -->
+  <rect x="246" y="220" width="20" height="80" rx="4" fill="#2563EB"/>
+  
+  <!-- Horizontal part of cross -->
+  <rect x="216" y="250" width="80" height="20" rx="4" fill="#2563EB"/>
+  
+  <!-- Small medical cross on the handle -->
+  <rect x="250" y="155" width="12" height="30" rx="2" fill="#2563EB"/>
+  <rect x="235" y="170" width="42" height="12" rx="2" fill="#2563EB"/>
+  
+  <!-- Qlinexa360 Text - positioned below the briefcase -->
+  <text x="256" y="400" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="white" text-anchor="middle">Qlinexa360</text>
+</svg> 

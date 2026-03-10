@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receta Médica</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.3;
+            color: #333;
+            background: white;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 12px;
+        }
+
+        /* Encabezado del Doctor */
+        .header {
+            padding-bottom: 12px;
+            margin-bottom: 15px;
+        }
+
+        .doctor-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .doctor-logo {
+            width: 90px;
+            height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid {{doctor.primaryColor}};
+            border-radius: 6px;
+            background: white;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .doctor-logo img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .doctor-logo-placeholder {
+            color: {{doctor.primaryColor}};
+            font-size: 9px;
+            text-align: center;
+            padding: 6px;
+        }
+
+        .doctor-details {
+            flex: 1;
+        }
+
+        .doctor-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 2px;
+        }
+
+        .doctor-title {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 6px;
+        }
+
+        .consultorio-info {
+            font-size: 11px;
+            line-height: 1.2;
+        }
+
+        .certifications {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 8px;
+            font-size: 11px;
+        }
+
+        .certifications h4 {
+            color: #2563eb;
+            margin-bottom: 6px;
+            font-size: 13px;
+        }
+
+        .cert-item {
+            margin-bottom: 2px;
+        }
+
+        /* Encabezado de Receta */
+        .recipe-header {
+            background: #2563eb;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 5px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .recipe-title {
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .recipe-meta {
+            font-size: 11px;
+            text-align: right;
+        }
+
+        .recipe-meta div {
+            margin-bottom: 1px;
+        }
+
+        /* Información del Paciente */
+        .patient-info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 12px;
+        }
+
+        .patient-info h3 {
+            color: #2563eb;
+            margin-bottom: 6px;
+            font-size: 15px;
+        }
+
+        .patient-info div {
+            margin-bottom: 2px;
+            font-size: 12px;
+        }
+
+        /* Secciones de Medicamentos y Estudios */
+        .section-title {
+            color: #2563eb;
+            margin-bottom: 8px;
+            font-size: 15px;
+            font-weight: bold;
+        }
+
+        .medications, .studies {
+            margin-bottom: 12px;
+        }
+
+        .medication-item {
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 6px;
+        }
+
+        .medication-line {
+            font-size: 12px;
+            line-height: 1.3;
+        }
+
+        .medication-header {
+            font-weight: bold;
+            color: {{doctor.primaryColor}};
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+
+        .medication-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 6px;
+            font-size: 11px;
+        }
+
+        .study-item {
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 6px;
+            font-size: 12px;
+        }
+
+        /* Observaciones */
+        .observations {
+            background: #fff3cd;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 12px;
+            border-left: 3px solid #ffc107;
+        }
+
+        .observations h3 {
+            color: #856404;
+            margin-bottom: 6px;
+            font-size: 15px;
+        }
+
+        .observations p {
+            font-size: 12px;
+            line-height: 1.3;
+        }
+
+        /* Pie de Página */
+        .footer {
+            padding-top: 12px;
+            margin-top: 15px;
+        }
+
+        .qr-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .qr-info {
+            flex: 1;
+            margin-right: 12px;
+        }
+
+        .qr-code {
+            width: 70px;
+            height: 70px;
+            border: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fa;
+            flex-shrink: 0;
+        }
+
+        .qr-text {
+            font-size: 9px;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        .signature-section {
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        .signature-line {
+            border-top: 1px solid #333;
+            width: 180px;
+            margin: 6px auto;
+        }
+
+        .terms {
+            font-size: 8px;
+            color: #666;
+            text-align: center;
+            margin-top: 12px;
+            line-height: 1.2;
+        }
+
+        .website-info {
+            text-align: center;
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+        }
+
+        .website-url {
+            font-size: 10px;
+            color: #2563eb;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        .website-url:hover {
+            text-decoration: underline;
+        }
+
+        /* Estilos para impresión */
+        @media print {
+            body {
+                font-size: 12px;
+            }
+            
+            .container {
+                padding: 10px;
+            }
+            
+            .medication-details {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Encabezado del Doctor -->
+        <div class="header">
+            <div class="doctor-info">
+                <!-- Logo del Doctor -->
+                <div class="doctor-logo">
+                    {{#if doctor.logoUrl}}
+                        <img src="{{doctor.logoUrl}}" alt="Logo del Consultorio" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+                    {{else}}
+                        <div class="doctor-logo-placeholder">
+                            LOGO<br>DEL<br>CONSULTORIO
+                        </div>
+                    {{/if}}
+                </div>
+                
+                <div class="doctor-details">
+                    <div class="doctor-name">{{doctor.firstName}} {{doctor.lastName}}</div>
+                    <div class="doctor-title">{{doctor.professionalTitle}} {{doctor.specialization}}</div>
+                    <div class="consultorio-info">
+                        <strong>Consultorio:</strong><br>
+                        {{doctor.consultorioDireccion}}<br>
+                        Tel: {{doctor.consultorioTelefono}}
+                    </div>
+                </div>
+                <div class="certifications">
+                    <h4>Certificaciones Profesionales</h4>
+                    <div class="cert-item"><strong>Cédula Profesional:</strong> {{doctor.certificadoProfesional}}</div>
+                    <div class="cert-item"><strong>Especialidad:</strong> {{doctor.certificadoEspecialidad}}</div>
+                    <div class="cert-item"><strong>Maestría:</strong> {{doctor.certificadoMaestria}}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Información de la Receta -->
+        <div class="recipe-header">
+            <div class="recipe-title">RECETA MÉDICA</div>
+            <div class="recipe-meta">
+                <div><strong>Folio:</strong> {{recipe.id}}</div>
+                <div><strong>Fecha:</strong> {{recipe.fechaEmision}}</div>
+            </div>
+        </div>
+
+        <!-- Información del Paciente -->
+        <div class="patient-info">
+            <h3>DATOS DEL PACIENTE</h3>
+            <div><strong>Nombre:</strong> {{patient.firstName}} {{patient.lastName}}</div>
+            <div><strong>Fecha de Nacimiento:</strong> {{patient.fechaNacimiento}}</div>
+            <div><strong>Expediente:</strong> {{patient.id}}</div>
+        </div>
+
+        <!-- Medicamentos -->
+        {{#if recipe.esRecetaMedicamento}}
+        <div class="medications">
+            <h3 class="section-title">MEDICAMENTOS PRESCRITOS</h3>
+            {{#each recipe.detalleMedicamentos}}
+            <div class="medication-item">
+                <div class="medication-line">
+                    <strong>{{medicamento}}</strong> - 
+                    Dosis: {{dosis}} | 
+                    Frecuencia: {{frecuencia}}
+                    {{#if duracion}} | Duración: {{duracion}}{{/if}}
+                </div>
+            </div>
+            {{/each}}
+        </div>
+        {{/if}}
+
+        <!-- Estudios Solicitados -->
+        {{#if recipe.esSolicitudEstudios}}
+        <div class="studies">
+            <h3 class="section-title">ESTUDIOS SOLICITADOS</h3>
+            {{#each recipe.estudiosSolicitados}}
+            <div class="study-item">
+                <div><strong>Estudio:</strong> {{nombreEstudio}}</div>
+                {{#if indicaciones}}<div><strong>Indicaciones:</strong> {{indicaciones}}</div>{{/if}}
+            </div>
+            {{/each}}
+        </div>
+        {{/if}}
+
+        <!-- Observaciones -->
+        {{#if recipe.observaciones}}
+        <div class="observations">
+            <h3>OBSERVACIONES MÉDICAS</h3>
+            <p>{{recipe.observaciones}}</p>
+        </div>
+        {{/if}}
+
+        <!-- Pie de Página -->
+        <div class="footer">
+            <div class="qr-section">
+                <div class="qr-info">
+                    <div><strong>Código QR de Verificación</strong></div>
+                    <div class="qr-text">Escanee este código para verificar la autenticidad de esta receta</div>
+                    <div class="qr-text">ID: {{recipe.id}} | Timestamp: {{recipe.timestamp}}</div>
+                </div>
+                <div class="qr-code">
+                    <!-- Aquí se insertará el código QR generado -->
+                    <img src="data:image/png;base64,{{qrCode}}" alt="QR Code" style="width: 100%; height: 100%;">
+                </div>
+            </div>
+
+            <div class="signature-section">
+                <div class="signature-line"></div>
+                <div><strong>{{doctor.firstName}} {{doctor.lastName}}</strong></div>
+                <div>{{doctor.professionalTitle}} {{doctor.specialization}}</div>
+                <div>Cédula Profesional: {{doctor.certificadoProfesional}}</div>
+            </div>
+
+            <div class="terms">
+                <strong>TÉRMINOS Y CONDICIONES:</strong><br>
+                Esta receta es válida por 30 días a partir de la fecha de emisión. 
+                Solo puede ser dispensada por farmacias autorizadas. 
+                Para verificar la autenticidad, escanee el código QR o consulte en el sistema.
+            </div>
+
+            <div class="website-info">
+                <a href="https://qlinexa360.com" target="_blank" class="website-url">www.qlinexa360.com</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
