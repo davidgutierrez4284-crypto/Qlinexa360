@@ -24,7 +24,7 @@
     "@mui/icons-material": "^5.15.10",
     "@mui/material": "^5.15.10",
     "@paypal/react-paypal-js": "^8.8.3",
-    "@reduxjs/toolkit": "^2.2.1",
+    "@reduxjs/toolkit": "^2.11.2",
     "axios": "^1.11.0",
     "date-fns": "^3.3.1",
     "moment": "^2.30.1",
