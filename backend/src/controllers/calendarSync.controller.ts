@@ -10,6 +10,11 @@ import { NotionCalendarSyncService } from '../services/notionCalendarSync.servic
 import { getOAuthConfig, isOAuthConfigured } from '../config/oauth.config';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { AppError } from '../utils/error.utils';
+import {
+  reconcileCalendarEventWithAppointment,
+  shouldPushInternalOverExternal
+} from '../utils/calendarSync.utils';
+import { AppointmentConfirmationController } from './appointmentConfirmation.controller';
 
 const prisma = new PrismaClient();
 
@@ -1516,15 +1521,56 @@ export class CalendarSyncController {
       let eventId: string;
 
       if (existing) {
-        await prisma.internalCalendarEvent.update({
-          where: { id: existing.id },
-          data: {
-            ...payload,
-            patientId: matchedPatientId || existing.patientId
+        const externalStart = startDate;
+        if (
+          existing.patientId &&
+          (await shouldPushInternalOverExternal(doctorId, existing, externalStart))
+        ) {
+          await reconcileCalendarEventWithAppointment(doctorId, existing);
+          const refreshed = await prisma.internalCalendarEvent.findUnique({ where: { id: existing.id } });
+          if (refreshed?.appointmentId) {
+            // Vínculo duro: resincronizar exactamente la cita de este evento
+            void AppointmentConfirmationController.syncAppointmentCalendars(refreshed.appointmentId);
+          } else if (refreshed?.patientId) {
+            const appt = await prisma.appointment.findFirst({
+              where: {
+                doctorId,
+                patientId: refreshed.patientId,
+                status: { in: ['SCHEDULED', 'CONFIRMED'] }
+              },
+              orderBy: { date: 'desc' }
+            });
+            if (appt) {
+              void AppointmentConfirmationController.syncAppointmentCalendars(appt.id);
+            }
           }
-        });
-        eventId = existing.id;
-        updated += 1;
+          eventId = existing.id;
+          updated += 0;
+        } else {
+          const isPresencial =
+            matchedPatientId &&
+            (await prisma.appointment.findFirst({
+              where: {
+                doctorId,
+                patientId: matchedPatientId,
+                appointmentType: 'presencial',
+                date: {
+                  gte: new Date(externalStart.getTime() - 30 * 60000),
+                  lte: new Date(externalStart.getTime() + 30 * 60000)
+                }
+              }
+            }));
+          await prisma.internalCalendarEvent.update({
+            where: { id: existing.id },
+            data: {
+              ...payload,
+              patientId: matchedPatientId || existing.patientId,
+              linkMeeting: isPresencial ? null : payload.linkMeeting
+            }
+          });
+          eventId = existing.id;
+          updated += 1;
+        }
       } else {
         let linkedEvent: InternalCalendarEvent | null = null;
 
@@ -1570,52 +1616,73 @@ export class CalendarSyncController {
       }
 
       // CRÍTICO: Verificar si algún attendee (paciente) aceptó o rechazó la invitación
-      // y actualizar el confirmationStatus del appointment relacionado
+      // y actualizar el confirmationStatus del appointment relacionado.
+      // Resolvemos la cita de forma DETERMINISTA vía el vínculo duro del evento interno
+      // (InternalCalendarEvent.appointmentId) para no confirmar una cita hermana por error.
       if (item.attendees && Array.isArray(item.attendees)) {
+        const linkedInternalEvent = await prisma.internalCalendarEvent.findUnique({
+          where: { id: eventId },
+          select: { appointmentId: true }
+        });
+
         for (const attendee of item.attendees) {
           // Verificar si el attendee aceptó o rechazó la invitación
           if ((attendee.responseStatus === 'accepted' || attendee.responseStatus === 'declined') && attendee.email) {
             try {
-              // Buscar el paciente por email
-              const patient = await prisma.patient.findFirst({
-                where: {
-                  OR: [
-                    { email: attendee.email },
-                    {
-                      user: {
-                        email: attendee.email
+              let appointment: { id: string } | null = null;
+
+              // 1) Vínculo duro: el evento externo ↔ evento interno ↔ cita
+              if (linkedInternalEvent?.appointmentId) {
+                appointment = await prisma.appointment.findUnique({
+                  where: { id: linkedInternalEvent.appointmentId },
+                  select: { id: true }
+                });
+              }
+
+              // 2) Fallback heredado (solo si no hay vínculo duro): por email + ventana de tiempo
+              if (!appointment) {
+                const patient = await prisma.patient.findFirst({
+                  where: {
+                    OR: [
+                      { email: attendee.email },
+                      {
+                        user: {
+                          email: attendee.email
+                        }
+                      }
+                    ],
+                    doctors: {
+                      some: {
+                        doctorId: doctorId
                       }
                     }
-                  ],
-                  doctors: {
-                    some: {
-                      doctorId: doctorId
-                    }
-                  }
-                },
-                select: {
-                  id: true
-                }
-              });
-
-              if (patient) {
-                // Buscar el appointment relacionado
-                const searchStart = new Date(startDate);
-                searchStart.setMinutes(searchStart.getMinutes() - 30);
-                const searchEnd = new Date(startDate);
-                searchEnd.setMinutes(searchEnd.getMinutes() + 30);
-
-                const appointment = await prisma.appointment.findFirst({
-                  where: {
-                    patientId: patient.id,
-                    doctorId: doctorId,
-                    date: {
-                      gte: searchStart,
-                      lte: searchEnd
-                    }
+                  },
+                  select: {
+                    id: true
                   }
                 });
 
+                if (patient) {
+                  const searchStart = new Date(startDate);
+                  searchStart.setMinutes(searchStart.getMinutes() - 30);
+                  const searchEnd = new Date(startDate);
+                  searchEnd.setMinutes(searchEnd.getMinutes() + 30);
+
+                  appointment = await prisma.appointment.findFirst({
+                    where: {
+                      patientId: patient.id,
+                      doctorId: doctorId,
+                      date: {
+                        gte: searchStart,
+                        lte: searchEnd
+                      }
+                    },
+                    select: { id: true }
+                  });
+                }
+              }
+
+              {
                 if (appointment) {
                   if (attendee.responseStatus === 'accepted') {
                     // Actualizar el appointment a CONFIRMED - SIEMPRE, incluso si estaba CANCELLED

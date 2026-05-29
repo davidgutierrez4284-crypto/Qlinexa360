@@ -30,6 +30,8 @@ model User {
   doctorProfile       Doctor?
   files               File[]                   @relation("UserFiles")
   fileAccessLogs      FileAccessLog[]
+  securityLoginAudits SecurityLoginAudit[]     @relation("UserSecurityLoginAudits")
+  adminAuditEvidenceExports AdminAuditEvidenceExport[]
   medicalRecords      MedicalRecord[]
   patientProfile      Patient?                 @relation("UserPatientProfile")
   notifications       Notification[]
@@ -67,6 +69,11 @@ model Doctor {
   certificadoEspecialidad String?
   certificadoMaestria     String?
   certificadoProfesional  String?
+  universidad             String?
+  socialMediaFacebook     String?
+  socialMediaInstagram    String?
+  socialMediaX            String?
+  socialMediaOther        String?
   consultorioDireccion    String?
   consultorioTelefono     String?
   timezone                String?                         @default("America/Mexico_City")
@@ -100,8 +107,34 @@ model Doctor {
   recetasMedicas          RecetaMedica[]                  @relation("DoctorToRecetas")
   subscription            Subscription?
   preConsultations        PreConsultation[]                @relation("DoctorPreConsultations")
+  clinicalIntakes         ClinicalIntake[]                 @relation("DoctorClinicalIntakes")
+  intakePortalToken       String?                          @unique
+  intakePortalSlug        String?                          @unique
   promoRedemptions        PromoRedemption[]
   doctorFormTemplates     DoctorFormTemplate[]
+  caseShareInvitesAsOwner  ClinicalCaseShareInvite[]     @relation("CaseShareOwnerDoctor")
+  caseShareInvitesAsInvited ClinicalCaseShareInvite[]     @relation("CaseShareInvitedDoctor")
+  referralCode               String?                       @unique
+  referralCreditPercent      Int                           @default(0)
+  referralFreeMonthsGranted  Int                           @default(0)
+  referrerDoctorId           String?
+  referrerDoctor             Doctor?                       @relation("DoctorReferrals", fields: [referrerDoctorId], references: [id])
+  referredDoctors            Doctor[]                      @relation("DoctorReferrals")
+  referralRewardsGiven       ReferralConversion[]          @relation("ReferrerInConversion")
+  referralConversionReceived ReferralConversion?
+}
+
+model ReferralConversion {
+  id               String   @id @default(uuid())
+  referrerDoctorId String
+  referredDoctorId String   @unique
+  percentGranted   Int      @default(20)
+  createdAt        DateTime @default(now())
+  referrerDoctor   Doctor   @relation("ReferrerInConversion", fields: [referrerDoctorId], references: [id])
+  referredDoctor   Doctor   @relation(fields: [referredDoctorId], references: [id])
+
+  @@index([referrerDoctorId])
+  @@map("referral_conversions")
 }
 
 model Patient {
@@ -111,6 +144,8 @@ model Patient {
   taxName                String?
   taxId                  String?
   taxAddress             String?
+  taxPostalCode          String?
+  taxRegime              String?
   taxCertificateUrl      String?
   dataConsent            Boolean
   dataConsentAt          DateTime?
@@ -147,6 +182,8 @@ model Patient {
   recetasMedicas         RecetaMedica[]                  @relation("PatientToRecetas")
   doctorUsers            User[]                          @relation("DoctorHasPatients")
   preConsultations       PreConsultation[]
+  clinicalIntakes        ClinicalIntake[]
+  caseShareInvitesPatient ClinicalCaseShareInvite[] @relation("CaseSharePatient")
 }
 
 model PatientInsurance {
@@ -338,6 +375,7 @@ model Appointment {
   patientId               String
   date                    DateTime
   status                  String
+  appointmentType         String                           @default("presencial") // presencial | teleconsulta
   notes                   String?
   createdAt               DateTime                         @default(now())
   doctorPatientId         String
@@ -361,6 +399,9 @@ model Appointment {
   confirmationRequests    AppointmentConfirmationRequest[]
   waitlistEntries         WaitlistEntry[]
   preConsultation         PreConsultation?
+  teleconsultation        Teleconsultation?
+  clinicalIntakes         ClinicalIntake[]
+  internalCalendarEvent   InternalCalendarEvent?           @relation("AppointmentCalendarEvent")
 
   @@index([doctorPatientId])
   @@index([date])
@@ -721,6 +762,34 @@ model ClinicalCase {
   patient        Patient                         @relation(fields: [patientId], references: [id])
   medicalRecords MedicalRecord[]
   colaboradores  PadecimientoDoctorColaborador[]
+  shareInvites   ClinicalCaseShareInvite[]
+}
+
+/// Invitación a colaborar: requiere consentimiento del paciente antes de crear el vínculo en PadecimientoDoctorColaborador
+model ClinicalCaseShareInvite {
+  id                   String                        @id @default(uuid())
+  token                String                        @unique
+  clinicalCaseId      String
+  patientId            String
+  invitedDoctorId     String
+  ownerDoctorId       String
+  status               ClinicalCaseShareInviteStatus @default(PENDING_CONSENT)
+  expiresAt            DateTime
+  signedAt             DateTime?
+  signedIp             String?
+  signatureText        String?
+  consentPdfUrl        String?
+  consentDocumentHash  String?
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+  clinicalCase         ClinicalCase                  @relation(fields: [clinicalCaseId], references: [id], onDelete: Cascade)
+  patient                Patient                      @relation("CaseSharePatient", fields: [patientId], references: [id], onDelete: Cascade)
+  invitedDoctor         Doctor                        @relation("CaseShareInvitedDoctor", fields: [invitedDoctorId], references: [id], onDelete: Cascade)
+  ownerDoctor           Doctor                        @relation("CaseShareOwnerDoctor", fields: [ownerDoctorId], references: [id], onDelete: Cascade)
+
+  @@index([clinicalCaseId, status])
+  @@index([patientId])
+  @@map("clinical_case_share_invites")
 }
 
 model PadecimientoDoctorColaborador {
@@ -766,6 +835,7 @@ model InternalCalendarEvent {
   id                String    @id @default(uuid())
   doctorId          String
   patientId         String?
+  appointmentId     String?   @unique
   fechaHoraInicio   DateTime
   fechaHoraFin      DateTime
   titulo            String
@@ -777,9 +847,10 @@ model InternalCalendarEvent {
   externalProvider  String?
   externalEventId   String?
   externalUpdatedAt DateTime?
-  creador           Doctor    @relation("EventCreator", fields: [creadoPor], references: [id])
-  doctor            Doctor    @relation(fields: [doctorId], references: [id])
-  patient           Patient?  @relation(fields: [patientId], references: [id])
+  creador           Doctor       @relation("EventCreator", fields: [creadoPor], references: [id])
+  doctor            Doctor       @relation(fields: [doctorId], references: [id])
+  patient           Patient?     @relation(fields: [patientId], references: [id])
+  appointment       Appointment? @relation("AppointmentCalendarEvent", fields: [appointmentId], references: [id], onDelete: SetNull)
 
   @@index([doctorId])
   @@index([patientId])
@@ -1019,6 +1090,118 @@ model PreConsultation {
   @@map("pre_consultations")
 }
 
+enum ClinicalIntakeStatus {
+  DRAFT
+  SUBMITTED_PENDING_VALIDATION
+  APPROVED
+  REJECTED
+  CONVERTED
+}
+
+model ClinicalIntake {
+  id                        String               @id @default(uuid())
+  token                     String               @unique
+  doctorId                  String
+  patientId                 String?
+  appointmentId             String?
+  status                    ClinicalIntakeStatus @default(DRAFT)
+  formData                  Json?
+  consultationReason        String?
+  consentPrivacy            Boolean              @default(false)
+  consentTreatment          Boolean              @default(false)
+  consentPlatform           Boolean              @default(false)
+  consentSignerName         String?
+  consentSignedAt           DateTime?
+  consentIp                   String?
+  consentFileId             String?
+  consentPdfUrl             String?
+  consentDocumentHash       String?
+  staffNotes                String?
+  expiresAt                 DateTime?
+  linkNeverExpires          Boolean              @default(false)
+  convertedClinicalCaseId   String?
+  convertedMedicalRecordId  String?
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+  doctor                    Doctor               @relation("DoctorClinicalIntakes", fields: [doctorId], references: [id], onDelete: Cascade)
+  patient                   Patient?             @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  appointment               Appointment?         @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([doctorId])
+  @@index([patientId])
+  @@index([appointmentId])
+  @@index([status])
+  @@index([token])
+  @@map("clinical_intakes")
+}
+
+model Teleconsultation {
+  id                  String    @id @default(uuid())
+  appointmentId       String    @unique
+  videoProvider       String    @default("google_meet") // google_meet | teams
+  externalEventId     String?
+  meetingUrl          String?
+  consentSigned       Boolean   @default(false)
+  consentPdfUrl       String?
+  consentDocumentHash String?
+  consentSignedAt     DateTime?
+  consentIp           String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  appointment         Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@map("teleconsultations")
+}
+
+model TeleconsultationAuditLog {
+  id                  String   @id @default(uuid())
+  teleconsultationId  String
+  action              String   // CONSENT_REQUESTED | CONSENT_SIGNED | PDF_GENERATED | PDF_SENT | MEETING_ACCESS
+  userId              String?
+  ip                  String?
+  userAgent           String?
+  metadata            Json?
+  createdAt           DateTime @default(now())
+
+  @@index([teleconsultationId])
+  @@map("teleconsultation_audit_logs")
+}
+
+/// Trazas de intento de login (HU-01 evidencia; sin texto de contraseña).
+model SecurityLoginAudit {
+  id        String   @id @default(uuid())
+  userId    String?
+  emailHash String?
+  success   Boolean
+  ipMasked  String?
+  userAgent String?  @db.VarChar(512)
+  createdAt DateTime @default(now())
+  user      User?    @relation("UserSecurityLoginAudits", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId])
+  @@map("security_login_audits")
+}
+
+/// Registro de exportaciones de evidencia de auditoría generadas por administradores.
+model AdminAuditEvidenceExport {
+  id             String   @id @default(uuid())
+  adminUserId    String
+  environment    String
+  format         String
+  categoriesJson String
+  daysBack       Int
+  rowCountsJson  String
+  fileSha256     String
+  createdAt      DateTime @default(now())
+  admin          User     @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
+
+  @@index([adminUserId])
+  @@index([createdAt])
+  @@map("admin_audit_evidence_exports")
+}
+
 enum UserRole {
   ADMIN
   DOCTOR
@@ -1045,11 +1228,19 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
+enum ClinicalCaseShareInviteStatus {
+  PENDING_CONSENT
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
 enum FileCategory {
   PRESCRIPTION_REQUEST
   DOCTOR_PHOTO
   STUDY_RESULT
   PATIENT_PHOTO
+  CONSENT_DOCUMENT
 }
 
 enum ClinicalEvolution {
