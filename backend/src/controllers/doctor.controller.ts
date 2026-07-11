@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/database';
 import bcrypt from 'bcryptjs';
 import { AppError } from '../utils/error.utils';
+import { parseClinicalHistoryVisibleFlag } from '../utils/patientPortal.utils';
 import { randomBytes, randomBytes as cryptoRandomBytes } from 'crypto';
 import { UserRole, FileCategory } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth.middleware';
@@ -173,7 +174,15 @@ export const getPatientDetails = async (req: AuthRequest, res: Response) => {
 
     if (!patient) throw new AppError('Paciente no encontrado.', 404);
     
-    res.json(patient);
+    res.json({
+      ...patient,
+      ...(doctorPatientLink
+        ? {
+            clinicalHistoryVisibleToPatient: doctorPatientLink.clinicalHistoryVisibleToPatient,
+            canManageClinicalHistoryAccess: true,
+          }
+        : { canManageClinicalHistoryAccess: false }),
+    });
   } catch (error: any) {
     const handled = error instanceof AppError ? error : new AppError('Error al obtener detalles del paciente.', 500);
     res.status(handled.statusCode).json({ message: handled.message });
@@ -187,34 +196,40 @@ export const getPatientDetails = async (req: AuthRequest, res: Response) => {
 export const searchMyPatients = async (req: AuthRequest, res: Response) => {
     try {
         if (!req.user) throw new AppError('Autenticación requerida.', 401);
-        const doctor = await prisma.doctor.findUnique({ where: { userId: req.user.userId } });
-        if (!doctor) throw new AppError('Perfil de doctor no encontrado.', 404);
-        // Debug minimal: doctor id
-        console.log('searchMyPatients - doctor.id:', doctor.id);
 
-        const searchTerm = req.query.term as string;
+        let doctorId: string;
+        if (req.user.role === 'DOCTOR') {
+            const doctor = await prisma.doctor.findUnique({ where: { userId: req.user.userId } });
+            if (!doctor) throw new AppError('Perfil de doctor no encontrado.', 404);
+            doctorId = doctor.id;
+        } else if (req.user.role === 'ASISTENTE') {
+            const selectedDoctorId = req.headers['x-selected-doctor-id'];
+            if (!selectedDoctorId || Array.isArray(selectedDoctorId)) {
+                throw new AppError('Doctor seleccionado requerido.', 400);
+            }
+            const link = await prisma.asistenteDoctorVinculo.findFirst({
+                where: { doctorId: selectedDoctorId, asistenteId: req.user.userId, activo: true }
+            });
+            if (!link) throw new AppError('Asistente no vinculado a este doctor.', 403);
+            doctorId = selectedDoctorId;
+        } else {
+            throw new AppError('No tienes permiso para buscar pacientes.', 403);
+        }
+
+        const searchTerm = (req.query.term as string)?.trim();
         if (!searchTerm || searchTerm.length < 2) return res.json([]);
 
+        // Búsqueda simplificada: solo por nombre/apellido/email del usuario (evita errores con medicalRecords/tags)
         const patients = await prisma.patient.findMany({
             where: {
-                doctors: { some: { doctorId: doctor.id } },
-                OR: [
-                    { user: {
-                        OR: [
-                            { firstName: { contains: searchTerm, mode: 'insensitive' } },
-                            { lastName: { contains: searchTerm, mode: 'insensitive' } },
-                            { email: { contains: searchTerm, mode: 'insensitive' } },
-                        ]
-                    }},
-                    { medicalRecords: {
-                        some: {
-                            OR: [
-                                { diagnosis: { contains: searchTerm, mode: 'insensitive' } },
-                                { tags: { has: searchTerm.toLowerCase() } }
-                            ]
-                        }
-                    }}
-                ]
+                doctors: { some: { doctorId } },
+                user: {
+                    OR: [
+                        { firstName: { contains: searchTerm, mode: 'insensitive' } },
+                        { lastName: { contains: searchTerm, mode: 'insensitive' } },
+                        { email: { contains: searchTerm, mode: 'insensitive' } },
+                    ]
+                }
             },
             include: {
                 user: {
@@ -226,7 +241,7 @@ export const searchMyPatients = async (req: AuthRequest, res: Response) => {
                 }
             }
         });
-        
+
         const results = patients.map(p => ({
             id: p.id,
             firstName: p.user.firstName,
@@ -234,7 +249,7 @@ export const searchMyPatients = async (req: AuthRequest, res: Response) => {
             email: (p.user?.email && !String(p.user.email).startsWith(NO_EMAIL_PLACEHOLDER_PREFIX)) ? p.user.email : null,
             profilePictureUrl: p.profilePictureUrl,
         }));
-        
+
         res.json(results);
     } catch (error: any) {
         console.error("Error en búsqueda de pacientes:", error);
@@ -585,14 +600,19 @@ export const updatePatient = async (req: AuthRequest, res: Response) => {
       taxName,
       taxId,
       taxAddress,
+      taxPostalCode,
+      taxRegime,
       gender,
       birthDate,
       bloodType,
       allergies,
       chronicDiseases,
       taxCertificateUrl,
-      emergencyContact // { firstName, lastName, email, phone, relationship }
+      emergencyContact, // { firstName, lastName, email, phone, relationship }
+      clinicalHistoryVisibleToPatient,
     } = req.body;
+
+    const parsedClinicalHistoryVisible = parseClinicalHistoryVisibleFlag(clinicalHistoryVisibleToPatient);
 
     // Verifica que el paciente esté asociado a este doctor, o que sea el doctor actualizando su propio perfil de paciente
     let patient = await prisma.patient.findFirst({
@@ -678,6 +698,8 @@ export const updatePatient = async (req: AuthRequest, res: Response) => {
         taxName,
         taxId,
         taxAddress,
+        taxPostalCode,
+        taxRegime,
         gender,
         dateOfBirth: birthDate ? new Date(birthDate) : undefined,
         allergies,
@@ -725,13 +747,32 @@ export const updatePatient = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Actualiza visibilidad del historial clínico en el portal del paciente (por doctor)
+    if (parsedClinicalHistoryVisible !== undefined) {
+      await prisma.doctorPatient.updateMany({
+        where: { doctorId: doctor.id, patientId },
+        data: { clinicalHistoryVisibleToPatient: parsedClinicalHistoryVisible },
+      });
+    }
+
     // Vuelve a obtener el paciente actualizado con contactos de emergencia
     const patientWithContacts = await prisma.patient.findUnique({
       where: { id: patientId },
       include: { emergencyContacts: true }
     });
 
-    res.json({ message: 'Datos del paciente actualizados correctamente', patient: patientWithContacts });
+    const doctorPatientLink = await prisma.doctorPatient.findUnique({
+      where: { doctorId_patientId: { doctorId: doctor.id, patientId } },
+      select: { clinicalHistoryVisibleToPatient: true },
+    });
+
+    res.json({
+      message: 'Datos del paciente actualizados correctamente',
+      patient: {
+        ...patientWithContacts,
+        clinicalHistoryVisibleToPatient: doctorPatientLink?.clinicalHistoryVisibleToPatient ?? true,
+      },
+    });
   } catch (error: any) {
     const handled = error instanceof AppError ? error : new AppError('Error al actualizar datos del paciente.', 500);
     res.status(handled.statusCode).json({ message: handled.message });
@@ -1025,6 +1066,12 @@ export const getAllMyPatients = async (req: AuthRequest, res: Response) => {
         profilePictureUrl: patient.profilePictureUrl,
         phone: patient.phone,
         dateOfBirth: patient.dateOfBirth,
+        taxName: patient.taxName,
+        taxId: patient.taxId,
+        rfc: patient.taxId,
+        taxAddress: patient.taxAddress,
+        taxPostalCode: patient.taxPostalCode,
+        taxRegime: patient.taxRegime,
         doctorPatientId: patient.doctors.find((d: any) => d.doctorId === doctorId)?.id,
         status: patient.doctors.find((d: any) => d.doctorId === doctorId)?.status || 'activo',
         startDate: patient.doctors.find((d: any) => d.doctorId === doctorId)?.startDate,
@@ -1176,7 +1223,10 @@ export const getAllMyPatients = async (req: AuthRequest, res: Response) => {
 
     res.json(patientsData);
   } catch (error: any) {
-    console.error("Error al obtener pacientes:", error);
+    const prismaCode = error?.code;
+    const prismaMeta = error?.meta ? JSON.stringify(error.meta) : 'n/a';
+    console.error("Error al obtener pacientes:", error?.message || error);
+    console.error("Prisma code:", prismaCode, "meta:", prismaMeta);
     const handled = error instanceof AppError ? error : new AppError('Error al obtener pacientes.', 500);
     res.status(handled.statusCode).json({ message: handled.message });
   }
@@ -1740,15 +1790,17 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
     weekEndDate.setHours(23, 59, 59, 999);
 
     // 1. Total de Pacientes: Contar pacientes únicos asociados al doctor
-    // Usar groupBy para obtener pacientes únicos y luego contar
-    const uniquePatients = await prisma.doctorPatient.groupBy({
-      by: ['patientId'],
-      where: {
-        doctorId: doctorId
-      }
-    });
-
-    const totalPatientsCount = uniquePatients.length;
+    let totalPatientsCount = 0;
+    try {
+      const uniquePatients = await prisma.doctorPatient.groupBy({
+        by: ['patientId'],
+        where: { doctorId }
+      });
+      totalPatientsCount = uniquePatients.length;
+    } catch (e: any) {
+      console.error('getDashboardStats FAIL at doctorPatient.groupBy:', e?.code, e?.message);
+      throw e;
+    }
 
     // 2. Citas de Hoy: Contar Appointment con date del día actual
     // Incluir todas las citas del día que no estén canceladas
@@ -1838,7 +1890,10 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('Error al obtener estadísticas del dashboard:', error);
+    const prismaCode = error?.code;
+    const prismaMeta = error?.meta ? JSON.stringify(error.meta) : 'n/a';
+    console.error('Error al obtener estadísticas del dashboard:', error?.message || error);
+    console.error('Prisma code:', prismaCode, 'meta:', prismaMeta);
     const handled = error instanceof AppError ? error : new AppError('Error al obtener estadísticas del dashboard.', 500);
     res.status(handled.statusCode).json({ message: handled.message });
   }

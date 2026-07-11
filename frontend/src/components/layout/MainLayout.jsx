@@ -3,15 +3,13 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import ResumeSubscriptionButton from '../common/ResumeSubscriptionButton';
+import { useAuth } from '../../context/AuthContext';
 
 const MainLayout = ({ children }) => {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const isLogin = location.pathname === '/login';
-  const isRegister = location.pathname === '/register';
-
-  const user = JSON.parse(localStorage.getItem('user'));
+  const { user } = useAuth();
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');

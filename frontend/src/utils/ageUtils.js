@@ -80,6 +80,25 @@ export function formatAgeForDisplay(dateOfBirth) {
 }
 
 /**
+ * Fecha de nacimiento solo para lectura (día civil), sin desfase por zona horaria.
+ * Evita mostrar un día menos cuando el backend envía ISO a medianoche UTC (p. ej. 1982-12-29T00:00:00.000Z en México → 28/12).
+ */
+export function formatDateOfBirthDisplay(dateInput) {
+  if (dateInput == null || dateInput === '') return '';
+  const str = String(dateInput).trim();
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, y, mo, d] = isoMatch;
+    return `${d}/${mo}/${y}`;
+  }
+  const parsed = parseDate(dateInput);
+  if (!parsed) return str;
+  const day = parsed.getDate().toString().padStart(2, '0');
+  const month = (parsed.getMonth() + 1).toString().padStart(2, '0');
+  return `${day}/${month}/${parsed.getFullYear()}`;
+}
+
+/**
  * Devuelve la edad en años (número) para cálculos médicos.
  * @param {string|Date} dateOfBirth - Fecha de nacimiento
  * @returns {number|null}

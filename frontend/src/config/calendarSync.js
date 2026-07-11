@@ -61,27 +61,6 @@ export const CALENDAR_SYNC_CONFIG = {
     }
   },
 
-  // Notion
-  notion: {
-    name: 'Notion Calendar',
-    description: 'Sincroniza con tu workspace de Notion',
-    icon: '📝',
-    color: 'gray',
-    authUrl: 'http://localhost:3000/api/calendar-sync/auth/notion',
-    features: [
-      'Base de datos personalizada',
-      'Templates de citas',
-      'Notas integradas',
-      'Colaboración en equipo'
-    ],
-    oauth: {
-      clientId: getEnvVar('VITE_NOTION_CLIENT_ID'),
-      redirectUri: getRedirectUri('VITE_NOTION_REDIRECT_URI', 'http://localhost:3000/api/calendar-sync/auth/notion/callback'),
-      scope: 'calendar',
-      authUrl: 'https://api.notion.com/v1/oauth/authorize'
-    }
-  },
-
   // Apple Calendar / iCloud
   apple: {
     name: 'Apple Calendar',

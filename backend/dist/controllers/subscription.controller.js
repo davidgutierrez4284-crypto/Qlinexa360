@@ -5,94 +5,211 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.fixResumeDateForFreeMonth = exports.syncFreeMonthToPayPal = exports.cancelSubscription = exports.resumeWithPayment = exports.resumeCancelledSubscription = exports.resumeSuspendedSubscriptions = exports.checkFreeMonthUsed = exports.extendSubscriptionFreeMonth = exports.handlePayPalWebhook = exports.getSubscriptionDetails = exports.getSubscriptionStatus = exports.renewSubscription = void 0;
 exports.runResumeSuspendedSubscriptions = runResumeSuspendedSubscriptions;
-const client_1 = require("@prisma/client");
 const axios_1 = __importDefault(require("axios"));
+const database_1 = __importDefault(require("../config/database"));
+const paypalAuth_utils_1 = require("../utils/paypalAuth.utils");
 const email_utils_1 = require("../utils/email.utils");
-const prisma = new client_1.PrismaClient();
-// Función para obtener token de acceso de PayPal
-const getPayPalAccessToken = async () => {
-    var _a, _b;
+const error_utils_1 = require("../utils/error.utils");
+const promo_utils_1 = require("../utils/promo.utils");
+const referral_service_1 = require("../services/referral.service");
+const affiliate_service_1 = require("../services/affiliate.service");
+const affiliatePayout_service_1 = require("../services/affiliatePayout.service");
+/** Resuelve doctorId desde el token o buscando en BD (para tokens antiguos sin doctorId) */
+async function resolveDoctorId(req) {
+    var _a, _b, _c;
+    if ((_a = req.user) === null || _a === void 0 ? void 0 : _a.doctorId)
+        return req.user.doctorId;
+    if (((_b = req.user) === null || _b === void 0 ? void 0 : _b.role) === 'DOCTOR' && ((_c = req.user) === null || _c === void 0 ? void 0 : _c.userId)) {
+        const doctor = await database_1.default.doctor.findUnique({ where: { userId: req.user.userId }, select: { id: true } });
+        return doctor === null || doctor === void 0 ? void 0 : doctor.id;
+    }
+    return undefined;
+}
+/** Próximo cobro y estado según API de suscripciones PayPal (fuente de verdad para la UI de facturación). */
+async function getPayPalSubscriptionBillingSnapshot(paypalSubscriptionId) {
+    var _a, _b, _c;
+    const id = (paypalSubscriptionId || '').trim();
+    if (!id)
+        return { nextBillingTime: null, paypalStatus: null };
+    // IDs de seed / local (no son IDs de suscripción PayPal) — evita 400 INVALID_PARAMETER_SYNTAX
+    if (id.startsWith('test_sub_'))
+        return { nextBillingTime: null, paypalStatus: null };
+    const paypalAccessToken = await (0, paypalAuth_utils_1.getPayPalAccessToken)();
+    if (!paypalAccessToken)
+        return { nextBillingTime: null, paypalStatus: null };
+    const isSandbox = process.env.PAYPAL_ENVIRONMENT === 'sandbox' || !process.env.PAYPAL_ENVIRONMENT;
+    const baseUrl = isSandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com';
     try {
-        const clientId = (process.env.PAYPAL_CLIENT_ID || '').trim();
-        const clientSecret = (process.env.PAYPAL_CLIENT_SECRET || '').trim();
-        const isSandbox = process.env.PAYPAL_ENVIRONMENT === 'sandbox' || !process.env.PAYPAL_ENVIRONMENT;
-        const baseUrl = isSandbox
-            ? 'https://api-m.sandbox.paypal.com'
-            : 'https://api-m.paypal.com';
-        if (!clientId || !clientSecret) {
-            console.error('PayPal credentials not configured (clientId:', !!clientId, ', clientSecret:', !!clientSecret, ')');
-            return null;
-        }
-        const response = await axios_1.default.post(`${baseUrl}/v1/oauth2/token`, 'grant_type=client_credentials', {
+        const { data } = await axios_1.default.get(`${baseUrl}/v1/billing/subscriptions/${encodeURIComponent(id)}`, {
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            auth: {
-                username: clientId,
-                password: clientSecret,
+                Authorization: `Bearer ${paypalAccessToken}`,
+                'Content-Type': 'application/json',
             },
         });
-        return response.data.access_token;
+        const raw = (_a = data === null || data === void 0 ? void 0 : data.billing_info) === null || _a === void 0 ? void 0 : _a.next_billing_time;
+        const nextBillingTime = raw && !Number.isNaN(Date.parse(String(raw))) ? new Date(String(raw)) : null;
+        const paypalStatus = typeof (data === null || data === void 0 ? void 0 : data.status) === 'string' ? data.status : null;
+        return { nextBillingTime, paypalStatus };
     }
-    catch (error) {
-        const paypalError = (_a = error.response) === null || _a === void 0 ? void 0 : _a.data;
-        const status = (_b = error.response) === null || _b === void 0 ? void 0 : _b.status;
-        console.error('Error obteniendo token de PayPal:', { status, error: (paypalError === null || paypalError === void 0 ? void 0 : paypalError.error) || (paypalError === null || paypalError === void 0 ? void 0 : paypalError.error_description) || error.message });
-        return null;
+    catch (e) {
+        console.error('getPayPalSubscriptionBillingSnapshot', (_b = e.response) === null || _b === void 0 ? void 0 : _b.status, ((_c = e.response) === null || _c === void 0 ? void 0 : _c.data) || e.message);
+        return { nextBillingTime: null, paypalStatus: null };
+    }
+}
+const sendSubscriptionRenewalEmail = async (doctorId, newEndDate, isLifetimePromo = false) => {
+    try {
+        const doctor = await database_1.default.doctor.findUnique({
+            where: { id: doctorId },
+            include: {
+                user: {
+                    select: { firstName: true, lastName: true, email: true }
+                }
+            }
+        });
+        if (!(doctor === null || doctor === void 0 ? void 0 : doctor.user))
+            return;
+        const body = isLifetimePromo
+            ? `Hola ${doctor.user.firstName || ''}, tu acceso con código de por vida ha quedado activo en Qlinexa360.
+
+¡Gracias por confiar en Qlinexa360!`
+            : `Hola ${doctor.user.firstName || ''}, tu suscripción ha sido reanudada exitosamente.
+
+Los cargos mensuales se realizarán normalmente a partir de ahora por $499 mxn/mes IVA incluido.
+
+Próximo cargo: ${newEndDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+
+¡Gracias por confiar en Qlinexa360!`;
+        await (0, email_utils_1.sendEmail)(doctor.user.email, isLifetimePromo ? 'Acceso activado - Qlinexa360' : 'Suscripción Reanudada - Qlinexa360', body);
+    }
+    catch (emailError) {
+        console.error('Error enviando email de confirmación:', emailError);
     }
 };
 const renewSubscription = async (req, res) => {
-    var _a, _b;
+    var _a, _b, _c;
     try {
-        const { subscriptionId, planId } = req.body;
         if (!req.user) {
-            return res.status(401).json({ message: "No autorizado" });
+            return res.status(401).json({ message: 'No autorizado' });
         }
-        if (!req.user.doctorId) {
-            return res.status(400).json({ message: "Usuario no es un doctor" });
+        const doctorId = await resolveDoctorId(req);
+        if (!doctorId) {
+            return res.status(400).json({ message: 'Usuario no es un doctor' });
         }
-        const doctorId = req.user.doctorId;
-        // Verificar la suscripción con PayPal
-        try {
-            const paypalAccessToken = await getPayPalAccessToken();
-            if (paypalAccessToken) {
-                const isSandbox = process.env.PAYPAL_ENVIRONMENT === 'sandbox' || !process.env.PAYPAL_ENVIRONMENT;
-                const baseUrl = isSandbox
-                    ? 'https://api-m.sandbox.paypal.com'
-                    : 'https://api-m.paypal.com';
-                const paypalResponse = await axios_1.default.get(`${baseUrl}/v1/billing/subscriptions/${subscriptionId}`, {
-                    headers: {
-                        'Authorization': `Bearer ${paypalAccessToken}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                if (paypalResponse.data.status !== 'ACTIVE' && paypalResponse.data.status !== 'APPROVAL_PENDING') {
-                    return res.status(400).json({ error: `La suscripción no está activa. Estado: ${paypalResponse.data.status}` });
+        const { subscriptionId, planId } = req.body;
+        const rawPromo = (_a = req.body) === null || _a === void 0 ? void 0 : _a.promoCode;
+        const promoCodeInput = rawPromo ? (0, promo_utils_1.normalizePromoCode)(String(rawPromo)) : '';
+        let promo = null;
+        if (promoCodeInput) {
+            promo = await (0, promo_utils_1.getPromoCodeOrThrow)(promoCodeInput);
+            const alreadyRedeemed = await database_1.default.promoRedemption.findUnique({
+                where: {
+                    promoCodeId_doctorId: { promoCodeId: promo.id, doctorId }
                 }
+            });
+            if (alreadyRedeemed) {
+                return res.status(400).json({ error: 'Ya utilizaste este código promocional' });
             }
         }
-        catch (paypalError) {
-            console.error('Error verificando suscripción en PayPal:', ((_a = paypalError.response) === null || _a === void 0 ? void 0 : _a.data) || paypalError.message);
-            // Continuar con la actualización en BD aunque falle la verificación
+        /** Código LIFETIME: sin PayPal (misma regla que en el registro) */
+        if ((promo === null || promo === void 0 ? void 0 : promo.type) === 'LIFETIME') {
+            const now = new Date();
+            const endDate = new Date(now.getTime() + 100 * 365 * 24 * 60 * 60 * 1000);
+            await database_1.default.$transaction([
+                database_1.default.promoCode.update({
+                    where: { id: promo.id },
+                    data: { redemptionCount: { increment: 1 } }
+                }),
+                database_1.default.promoRedemption.create({
+                    data: { promoCodeId: promo.id, doctorId }
+                }),
+                database_1.default.subscription.upsert({
+                    where: { doctorId },
+                    update: {
+                        paypalSubscriptionId: '',
+                        paypalPlanId: '',
+                        status: 'ACTIVE',
+                        startDate: now,
+                        endDate,
+                        cancelledAt: null,
+                        cancellationReason: null,
+                        freeMonthUsed: false,
+                        resumeDate: null,
+                        updatedAt: now
+                    },
+                    create: {
+                        doctorId,
+                        paypalSubscriptionId: '',
+                        paypalPlanId: '',
+                        status: 'ACTIVE',
+                        startDate: now,
+                        endDate,
+                        freeMonthUsed: false,
+                        createdAt: now,
+                        updatedAt: now
+                    }
+                }),
+                database_1.default.doctor.update({
+                    where: { id: doctorId },
+                    data: { accessType: 'lifetime' }
+                })
+            ]);
+            const subRow = await database_1.default.subscription.findUnique({ where: { doctorId } });
+            await sendSubscriptionRenewalEmail(doctorId, endDate, true);
+            return res.json({
+                message: 'Acceso activado con código de por vida',
+                subscription: subRow
+            });
         }
-        // Obtener la suscripción actual para verificar si hay una anterior
-        const existingSubscription = await prisma.subscription.findUnique({
-            where: { doctorId }
-        });
-        // Si existe una suscripción anterior en PayPal diferente, cancelarla
-        if ((existingSubscription === null || existingSubscription === void 0 ? void 0 : existingSubscription.paypalSubscriptionId) && existingSubscription.paypalSubscriptionId !== subscriptionId) {
+        if (promo && (promo.type === 'TRIAL_30D' || promo.type === 'DISCOUNT_50_3M' || promo.type === 'REACTIVATION_30D')) {
+            if (!subscriptionId || !planId) {
+                return res.status(400).json({
+                    error: 'Con este código debes completar la suscripción con el botón de PayPal. Registra tu método de pago: no se te cobrará durante el periodo promocional.'
+                });
+            }
+        }
+        else if (!promo) {
+            if (!subscriptionId || !planId) {
+                return res.status(400).json({ error: 'Faltan subscriptionId o planId' });
+            }
+        }
+        if (subscriptionId) {
             try {
-                const paypalAccessToken = await getPayPalAccessToken();
+                const paypalAccessToken = await (0, paypalAuth_utils_1.getPayPalAccessToken)();
                 if (paypalAccessToken) {
                     const isSandbox = process.env.PAYPAL_ENVIRONMENT === 'sandbox' || !process.env.PAYPAL_ENVIRONMENT;
-                    const baseUrl = isSandbox
-                        ? 'https://api-m.sandbox.paypal.com'
-                        : 'https://api-m.paypal.com';
-                    await axios_1.default.post(`${baseUrl}/v1/billing/subscriptions/${existingSubscription.paypalSubscriptionId}/cancel`, {
-                        reason: 'Reemplazada por nueva suscripción'
-                    }, {
+                    const baseUrl = isSandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com';
+                    const paypalResponse = await axios_1.default.get(`${baseUrl}/v1/billing/subscriptions/${subscriptionId}`, {
                         headers: {
-                            'Authorization': `Bearer ${paypalAccessToken}`,
+                            Authorization: `Bearer ${paypalAccessToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    if (paypalResponse.data.status !== 'ACTIVE' &&
+                        paypalResponse.data.status !== 'APPROVAL_PENDING') {
+                        return res.status(400).json({
+                            error: `La suscripción no está activa. Estado: ${paypalResponse.data.status}`
+                        });
+                    }
+                }
+            }
+            catch (paypalError) {
+                console.error('Error verificando suscripción en PayPal:', ((_b = paypalError.response) === null || _b === void 0 ? void 0 : _b.data) || paypalError.message);
+            }
+        }
+        const existingSubscription = await database_1.default.subscription.findUnique({
+            where: { doctorId }
+        });
+        if (subscriptionId &&
+            (existingSubscription === null || existingSubscription === void 0 ? void 0 : existingSubscription.paypalSubscriptionId) &&
+            existingSubscription.paypalSubscriptionId !== subscriptionId) {
+            try {
+                const paypalAccessToken = await (0, paypalAuth_utils_1.getPayPalAccessToken)();
+                if (paypalAccessToken) {
+                    const isSandbox = process.env.PAYPAL_ENVIRONMENT === 'sandbox' || !process.env.PAYPAL_ENVIRONMENT;
+                    const baseUrl = isSandbox ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com';
+                    await axios_1.default.post(`${baseUrl}/v1/billing/subscriptions/${existingSubscription.paypalSubscriptionId}/cancel`, { reason: 'Reemplazada por nueva suscripción' }, {
+                        headers: {
+                            Authorization: `Bearer ${paypalAccessToken}`,
                             'Content-Type': 'application/json'
                         }
                     });
@@ -100,76 +217,67 @@ const renewSubscription = async (req, res) => {
                 }
             }
             catch (error) {
-                console.error('Error cancelando suscripción anterior:', ((_b = error.response) === null || _b === void 0 ? void 0 : _b.data) || error.message);
-                // Continuar aunque falle
+                console.error('Error cancelando suscripción anterior:', ((_c = error.response) === null || _c === void 0 ? void 0 : _c.data) || error.message);
             }
         }
-        // Calcular nueva fecha de fin (30 días desde hoy)
         const now = new Date();
         const newEndDate = new Date(now);
-        newEndDate.setDate(newEndDate.getDate() + 30);
-        // Actualizar la suscripción en la base de datos
-        const subscription = await prisma.subscription.upsert({
-            where: {
-                doctorId
-            },
-            update: {
-                paypalSubscriptionId: subscriptionId,
-                paypalPlanId: planId,
-                status: 'ACTIVE',
-                startDate: now,
-                endDate: newEndDate,
-                cancelledAt: null,
-                cancellationReason: null,
-                updatedAt: new Date()
-            },
-            create: {
-                doctorId,
-                paypalSubscriptionId: subscriptionId,
-                paypalPlanId: planId,
-                status: 'ACTIVE',
-                startDate: now,
-                endDate: newEndDate,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            }
-        });
-        // Enviar email de confirmación si existe el usuario
-        try {
-            const doctor = await prisma.doctor.findUnique({
-                where: { id: doctorId },
-                include: {
-                    user: {
-                        select: {
-                            firstName: true,
-                            lastName: true,
-                            email: true
-                        }
-                    }
+        if (promo) {
+            newEndDate.setTime(now.getTime() + (0, promo_utils_1.getPromoDurationDays)(promo.type) * 24 * 60 * 60 * 1000);
+        }
+        else {
+            newEndDate.setDate(newEndDate.getDate() + 30);
+        }
+        const promoTx = promo
+            ? [
+                database_1.default.promoCode.update({
+                    where: { id: promo.id },
+                    data: { redemptionCount: { increment: 1 } }
+                }),
+                database_1.default.promoRedemption.create({
+                    data: { promoCodeId: promo.id, doctorId }
+                })
+            ]
+            : [];
+        const subscription = await database_1.default.$transaction([
+            ...promoTx,
+            database_1.default.subscription.upsert({
+                where: { doctorId },
+                update: {
+                    paypalSubscriptionId: String(subscriptionId),
+                    paypalPlanId: String(planId),
+                    status: 'ACTIVE',
+                    startDate: now,
+                    endDate: newEndDate,
+                    cancelledAt: null,
+                    cancellationReason: null,
+                    updatedAt: new Date()
+                },
+                create: {
+                    doctorId,
+                    paypalSubscriptionId: String(subscriptionId),
+                    paypalPlanId: String(planId),
+                    status: 'ACTIVE',
+                    startDate: now,
+                    endDate: newEndDate,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
                 }
-            });
-            if (doctor === null || doctor === void 0 ? void 0 : doctor.user) {
-                await (0, email_utils_1.sendEmail)(doctor.user.email, 'Suscripción Reanudada - Qlinexa360', `Hola ${doctor.user.firstName || ''}, tu suscripción ha sido reanudada exitosamente.
-
-Los cargos mensuales se realizarán normalmente a partir de ahora por $499 mxn/mes IVA incluido.
-
-Próximo cargo: ${newEndDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
-
-¡Gracias por confiar en Qlinexa360!`);
-            }
-        }
-        catch (emailError) {
-            console.error('Error enviando email de confirmación:', emailError);
-            // No fallar si el email falla
-        }
-        res.json({
+            })
+        ]);
+        const subResult = Array.isArray(subscription) ? subscription[subscription.length - 1] : subscription;
+        await sendSubscriptionRenewalEmail(doctorId, newEndDate, false);
+        return res.json({
             message: 'Suscripción renovada exitosamente',
-            subscription
+            subscription: subResult
         });
     }
     catch (error) {
         console.error('Error al renovar suscripción:', error);
-        res.status(500).json({ error: 'Error al procesar la suscripción' });
+        if (error instanceof error_utils_1.AppError) {
+            return res.status(error.statusCode).json({ error: error.message });
+        }
+        return res.status(500).json({ error: 'Error al procesar la suscripción' });
     }
 };
 exports.renewSubscription = renewSubscription;
@@ -182,11 +290,11 @@ const getSubscriptionStatus = async (req, res) => {
         if (req.user.role === 'ASISTENTE' || req.user.role === 'PATIENT') {
             return res.json({ status: 'ACTIVE' });
         }
-        if (!req.user.doctorId) {
+        const doctorId = await resolveDoctorId(req);
+        if (!doctorId) {
             return res.status(400).json({ message: "Usuario no es un doctor" });
         }
-        const doctorId = req.user.doctorId;
-        const subscription = await prisma.subscription.findUnique({
+        const subscription = await database_1.default.subscription.findUnique({
             where: { doctorId }
         });
         if (!subscription) {
@@ -195,7 +303,7 @@ const getSubscriptionStatus = async (req, res) => {
         // Verificar si la suscripción está activa
         const now = new Date();
         if (subscription.endDate < now) {
-            await prisma.subscription.update({
+            await database_1.default.subscription.update({
                 where: { doctorId },
                 data: { status: 'EXPIRED' }
             });
@@ -211,42 +319,90 @@ const getSubscriptionStatus = async (req, res) => {
 exports.getSubscriptionStatus = getSubscriptionStatus;
 // Obtener detalles completos de la suscripción
 const getSubscriptionDetails = async (req, res) => {
+    var _a;
     try {
         if (!req.user) {
             return res.status(401).json({ message: "No autorizado" });
         }
-        if (!req.user.doctorId) {
+        const doctorId = await resolveDoctorId(req);
+        if (!doctorId) {
             return res.status(400).json({ message: "Usuario no es un doctor" });
         }
-        const doctorId = req.user.doctorId;
-        const subscription = await prisma.subscription.findUnique({
-            where: { doctorId }
-        });
+        const [subscription, doctorRow] = await Promise.all([
+            database_1.default.subscription.findUnique({ where: { doctorId } }),
+            database_1.default.doctor.findUnique({ where: { id: doctorId }, select: { accessType: true } })
+        ]);
         if (!subscription) {
             return res.status(404).json({ message: "Suscripción no encontrada" });
         }
-        // Calcular fechas - todos los cargos son mensuales consecutivos (30 días)
-        // Corregir fechas si endDate es anterior a hoy (usar fecha actual como base)
         const now = new Date();
+        const noPaypal = !((_a = subscription.paypalSubscriptionId) === null || _a === void 0 ? void 0 : _a.trim());
+        const farFutureMs = 25 * 365 * 24 * 60 * 60 * 1000;
+        const endDateLooksLifetime = subscription.endDate.getTime() > now.getTime() + farFutureMs;
+        const isLifetime = subscription.status === 'ACTIVE' &&
+            ((doctorRow === null || doctorRow === void 0 ? void 0 : doctorRow.accessType) === 'lifetime' || (noPaypal && endDateLooksLifetime));
+        if (isLifetime) {
+            return res.json({
+                status: subscription.status,
+                isLifetime: true,
+                endDate: subscription.endDate.toISOString(),
+                freeMonthUsed: false,
+                freeMonthEndDate: null,
+                nextChargeDate: null,
+                nextChargeSource: null,
+                paypalSubscriptionStatus: null,
+                resumeDate: null,
+                scheduledBenefitPauseActive: false,
+                standardMonthlyPriceLabel: null,
+                nextBillingPeriodAmountLabel: null,
+                paypalPaymentIssueSuspected: false,
+            });
+        }
+        // Fechas en BD (acceso / periodos internos) + próximo cargo alineado con PayPal cuando la API responde
         const correctedEndDate = subscription.endDate > now ? subscription.endDate : now;
         const freeMonthEndDate = subscription.freeMonthUsed ? correctedEndDate : null;
-        const nextChargeDate = subscription.freeMonthUsed
-            ? (subscription.resumeDate && subscription.resumeDate > now
-                ? subscription.resumeDate
-                : (() => {
-                    // Si se usó el mes gratis, el siguiente cargo es 30 días después del fin del mes gratis
-                    const date = new Date(correctedEndDate);
-                    date.setDate(date.getDate() + 30);
-                    return date;
-                })())
-            : correctedEndDate;
+        let legacyNextChargeDate;
+        if (subscription.freeMonthUsed) {
+            if (subscription.resumeDate && subscription.resumeDate > now) {
+                legacyNextChargeDate = subscription.resumeDate;
+            }
+            else {
+                legacyNextChargeDate = new Date(correctedEndDate);
+                legacyNextChargeDate.setDate(legacyNextChargeDate.getDate() + 30);
+            }
+        }
+        else {
+            legacyNextChargeDate = correctedEndDate;
+        }
+        const { nextBillingTime: paypalNext, paypalStatus } = await getPayPalSubscriptionBillingSnapshot(subscription.paypalSubscriptionId || '');
+        const usePayPalNext = paypalNext != null &&
+            paypalNext.getTime() > now.getTime() &&
+            !!(subscription.paypalSubscriptionId || '').trim();
+        const nextChargeDate = usePayPalNext && paypalNext != null ? paypalNext : legacyNextChargeDate;
+        const nextChargeSource = usePayPalNext ? 'paypal' : 'database';
+        const resumeFuture = subscription.resumeDate != null && subscription.resumeDate.getTime() > now.getTime();
+        /** Pausa programada en PayPal (mes gratis manual, referidos, etc.): sin cargo hasta resumeDate. */
+        const scheduledBenefitPauseActive = !!(subscription.freeMonthUsed && resumeFuture);
+        const standardMonthlyPriceLabel = '$499 MXN/mes IVA incluido';
+        const nextBillingPeriodAmountLabel = scheduledBenefitPauseActive
+            ? 'Sin cargo (mes gratis / beneficio en PayPal hasta la fecha de reanudación)'
+            : standardMonthlyPriceLabel;
+        const paypalSuspended = (paypalStatus || '').toUpperCase() === 'SUSPENDED';
+        const paypalPaymentIssueSuspected = paypalSuspended && !scheduledBenefitPauseActive;
         res.json({
             status: subscription.status,
+            isLifetime: false,
             endDate: subscription.endDate.toISOString(),
             freeMonthUsed: subscription.freeMonthUsed || false,
             freeMonthEndDate: freeMonthEndDate ? freeMonthEndDate.toISOString() : null,
             nextChargeDate: nextChargeDate.toISOString(),
-            resumeDate: subscription.resumeDate ? subscription.resumeDate.toISOString() : null
+            nextChargeSource,
+            paypalSubscriptionStatus: paypalStatus,
+            resumeDate: subscription.resumeDate ? subscription.resumeDate.toISOString() : null,
+            scheduledBenefitPauseActive,
+            standardMonthlyPriceLabel,
+            nextBillingPeriodAmountLabel,
+            paypalPaymentIssueSuspected,
         });
     }
     catch (error) {
@@ -256,6 +412,7 @@ const getSubscriptionDetails = async (req, res) => {
 };
 exports.getSubscriptionDetails = getSubscriptionDetails;
 const handlePayPalWebhook = async (req, res) => {
+    var _a, _b;
     try {
         const event = req.body;
         const webhookId = process.env.PAYPAL_WEBHOOK_ID;
@@ -267,6 +424,11 @@ const handlePayPalWebhook = async (req, res) => {
         if (!isValid) {
             return res.status(401).json({ error: 'Firma de webhook inválida' });
         }
+        // Idempotencia: si ya procesamos este evento, responder 200 sin re-procesar.
+        const { alreadyProcessed } = await (0, affiliate_service_1.registerWebhookEvent)(event);
+        if (alreadyProcessed) {
+            return res.status(200).json({ received: true, duplicate: true });
+        }
         // Procesar diferentes tipos de eventos
         switch (event.event_type) {
             case 'BILLING.SUBSCRIPTION.ACTIVATED':
@@ -274,9 +436,21 @@ const handlePayPalWebhook = async (req, res) => {
                 break;
             case 'BILLING.SUBSCRIPTION.CANCELLED':
                 await handleSubscriptionCancelled(event);
+                // Afiliados: si el doctor cancela antes del primer pago, marcar referral CANCELLED.
+                await (0, affiliate_service_1.markReferralCancelledIfNoPayment)((_a = event === null || event === void 0 ? void 0 : event.resource) === null || _a === void 0 ? void 0 : _a.id);
                 break;
             case 'PAYMENT.SALE.COMPLETED':
                 await handlePaymentCompleted(event);
+                // Afiliados: generar comisión sobre base sin IVA (idempotente por paypalPaymentId).
+                await (0, affiliate_service_1.processPaymentForCommission)(event);
+                break;
+            case 'PAYMENT.SALE.REFUNDED':
+                // Afiliados: reversar/cancelar la comisión del pago reembolsado.
+                await (0, affiliate_service_1.reverseCommissionForRefund)(event);
+                break;
+            case 'BILLING.SUBSCRIPTION.PAYMENT.FAILED':
+                // No se genera comisión por pagos fallidos. Solo se registra el evento.
+                console.log('Pago de suscripción fallido (sin comisión):', (_b = event === null || event === void 0 ? void 0 : event.resource) === null || _b === void 0 ? void 0 : _b.id);
                 break;
             case 'BILLING.SUBSCRIPTION.SUSPENDED':
                 await handleSubscriptionSuspended(event);
@@ -285,9 +459,23 @@ const handlePayPalWebhook = async (req, res) => {
                 // Cuando PayPal reanuda una suscripción después de estar suspendida
                 await handleSubscriptionResumed(event);
                 break;
+            case 'PAYMENT.PAYOUTS-ITEM.SUCCEEDED':
+            case 'PAYMENT.PAYOUTS-ITEM.FAILED':
+            case 'PAYMENT.PAYOUTS-ITEM.BLOCKED':
+            case 'PAYMENT.PAYOUTS-ITEM.DENIED':
+            case 'PAYMENT.PAYOUTS-ITEM.RETURNED':
+            case 'PAYMENT.PAYOUTS-ITEM.REFUNDED':
+            case 'PAYMENT.PAYOUTS-ITEM.CANCELED':
+            case 'PAYMENT.PAYOUTS-ITEM.UNCLAIMED':
+            case 'PAYMENT.PAYOUTS-ITEM.HELD':
+                // Pago de comisiones a afiliados vía PayPal Payouts: concilia el estatus.
+                await (0, affiliatePayout_service_1.handlePayoutItemEvent)(event);
+                break;
             default:
                 console.log('Evento no manejado:', event.event_type);
         }
+        // Marcar el evento como procesado (tras éxito) para idempotencia futura.
+        await (0, affiliate_service_1.markWebhookEventProcessed)(event);
         res.status(200).json({ received: true });
     }
     catch (error) {
@@ -298,7 +486,14 @@ const handlePayPalWebhook = async (req, res) => {
 exports.handlePayPalWebhook = handlePayPalWebhook;
 const verifyWebhookSignature = async (req, webhookId) => {
     try {
-        const response = await axios_1.default.post('https://api-m.paypal.com/v1/notifications/verify-webhook-signature', {
+        // Usar base URL acorde al entorno (sandbox/live) y un token fresco (con fallback al estático).
+        const baseUrl = (0, paypalAuth_utils_1.getPayPalApiBaseUrl)();
+        const accessToken = (await (0, paypalAuth_utils_1.getPayPalAccessToken)()) || process.env.PAYPAL_ACCESS_TOKEN;
+        if (!accessToken) {
+            console.error('No hay token de PayPal para verificar la firma del webhook');
+            return false;
+        }
+        const response = await axios_1.default.post(`${baseUrl}/v1/notifications/verify-webhook-signature`, {
             auth_algo: req.headers['paypal-auth-algo'],
             cert_url: req.headers['paypal-cert-url'],
             transmission_id: req.headers['paypal-transmission-id'],
@@ -308,7 +503,7 @@ const verifyWebhookSignature = async (req, webhookId) => {
             webhook_event: req.body
         }, {
             headers: {
-                'Authorization': `Bearer ${process.env.PAYPAL_ACCESS_TOKEN}`,
+                'Authorization': `Bearer ${accessToken}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -321,7 +516,7 @@ const verifyWebhookSignature = async (req, webhookId) => {
 };
 const handleSubscriptionActivated = async (event) => {
     const subscription = event.resource;
-    const doctor = await prisma.doctor.findFirst({
+    const doctor = await database_1.default.doctor.findFirst({
         where: {
             subscription: {
                 paypalSubscriptionId: subscription.id
@@ -332,7 +527,7 @@ const handleSubscriptionActivated = async (event) => {
         }
     });
     if (doctor) {
-        await prisma.subscription.update({
+        await database_1.default.subscription.update({
             where: { doctorId: doctor.id },
             data: {
                 status: 'ACTIVE',
@@ -341,13 +536,19 @@ const handleSubscriptionActivated = async (event) => {
                 updatedAt: new Date()
             }
         });
+        try {
+            await (0, referral_service_1.applyReferralRewardIfEligible)(doctor.id);
+        }
+        catch (refErr) {
+            console.error('[referrals] handleSubscriptionActivated: applyReferralRewardIfEligible', refErr);
+        }
         // Enviar email de confirmación
         await (0, email_utils_1.sendEmail)(doctor.user.email, 'Suscripción Activada - Qlinexa360', `Tu suscripción ha sido activada exitosamente. Tu acceso está activo hasta ${new Date(subscription.billing_info.next_billing_time).toLocaleDateString()}.`);
     }
 };
 const handleSubscriptionCancelled = async (event) => {
     const subscription = event.resource;
-    const doctor = await prisma.doctor.findFirst({
+    const doctor = await database_1.default.doctor.findFirst({
         where: {
             subscription: {
                 paypalSubscriptionId: subscription.id
@@ -358,7 +559,7 @@ const handleSubscriptionCancelled = async (event) => {
         }
     });
     if (doctor) {
-        await prisma.subscription.update({
+        await database_1.default.subscription.update({
             where: { doctorId: doctor.id },
             data: {
                 status: 'EXPIRED',
@@ -375,7 +576,7 @@ const handlePaymentCompleted = async (event) => {
     const subId = payment.billing_agreement_id;
     if (!subId)
         return;
-    const doctor = await prisma.doctor.findFirst({
+    const doctor = await database_1.default.doctor.findFirst({
         where: {
             subscription: {
                 paypalSubscriptionId: subId
@@ -390,10 +591,16 @@ const handlePaymentCompleted = async (event) => {
         // Extender endDate 30 días al recibir cada pago (renovación mensual)
         const newEndDate = new Date(doctor.subscription.endDate);
         newEndDate.setDate(newEndDate.getDate() + 30);
-        await prisma.subscription.update({
+        await database_1.default.subscription.update({
             where: { doctorId: doctor.id },
             data: { endDate: newEndDate, updatedAt: new Date() }
         });
+        try {
+            await (0, referral_service_1.redeemReferralFreeMonthsForReferrer)(doctor.id);
+        }
+        catch (refErr) {
+            console.error('[referrals] handlePaymentCompleted: redeemReferralFreeMonthsForReferrer', refErr);
+        }
         // Enviar email de confirmación de pago
         await (0, email_utils_1.sendEmail)(doctor.user.email, 'Pago Recibido - Qlinexa360', `Hemos recibido tu pago de $${((_a = payment.amount) === null || _a === void 0 ? void 0 : _a.total) || '499'} ${((_b = payment.amount) === null || _b === void 0 ? void 0 : _b.currency) || 'MXN'}. Gracias por tu confianza.`);
     }
@@ -401,7 +608,7 @@ const handlePaymentCompleted = async (event) => {
 const handleSubscriptionSuspended = async (event) => {
     var _a;
     const subscription = event.resource;
-    const doctor = await prisma.doctor.findFirst({
+    const doctor = await database_1.default.doctor.findFirst({
         where: {
             subscription: {
                 paypalSubscriptionId: subscription.id
@@ -415,7 +622,7 @@ const handleSubscriptionSuspended = async (event) => {
     if (doctor) {
         // Solo actualizar a SUSPENDED si no es una pausa programada por mes gratis
         if (!((_a = doctor.subscription) === null || _a === void 0 ? void 0 : _a.resumeDate)) {
-            await prisma.subscription.update({
+            await database_1.default.subscription.update({
                 where: { doctorId: doctor.id },
                 data: {
                     status: 'SUSPENDED',
@@ -430,7 +637,7 @@ const handleSubscriptionSuspended = async (event) => {
 // Manejar reanudación de suscripción (después del mes gratis)
 const handleSubscriptionResumed = async (event) => {
     const subscription = event.resource;
-    const doctor = await prisma.doctor.findFirst({
+    const doctor = await database_1.default.doctor.findFirst({
         where: {
             subscription: {
                 paypalSubscriptionId: subscription.id
@@ -444,7 +651,7 @@ const handleSubscriptionResumed = async (event) => {
     if (doctor && doctor.subscription) {
         // Si tiene resumeDate y estamos después de esa fecha, limpiar el campo
         if (doctor.subscription.resumeDate && new Date() >= doctor.subscription.resumeDate) {
-            await prisma.subscription.update({
+            await database_1.default.subscription.update({
                 where: { doctorId: doctor.id },
                 data: {
                     status: 'ACTIVE',
@@ -452,6 +659,18 @@ const handleSubscriptionResumed = async (event) => {
                     updatedAt: new Date()
                 }
             });
+            try {
+                await (0, referral_service_1.redeemReferralFreeMonthsForReferrer)(doctor.id);
+            }
+            catch (refErr) {
+                console.error('[referrals] handleSubscriptionResumed: redeemReferralFreeMonthsForReferrer', refErr);
+            }
+            try {
+                await (0, referral_service_1.applyReferralRewardIfEligible)(doctor.id);
+            }
+            catch (refErr) {
+                console.error('[referrals] handleSubscriptionResumed: applyReferralRewardIfEligible', refErr);
+            }
             // Enviar email de confirmación
             await (0, email_utils_1.sendEmail)(doctor.user.email, 'Suscripción Reanudada - Qlinexa360', `Hola ${doctor.user.firstName || ''}, tu suscripción ha sido reanudada. Los cargos mensuales se realizarán normalmente a partir de ahora por $499 mxn/mes IVA incluido.`);
         }
@@ -464,12 +683,12 @@ const extendSubscriptionFreeMonth = async (req, res) => {
         if (!req.user) {
             return res.status(401).json({ message: "No autorizado" });
         }
-        if (!req.user.doctorId) {
+        const doctorId = await resolveDoctorId(req);
+        if (!doctorId) {
             return res.status(400).json({ message: "Usuario no es un doctor" });
         }
-        const doctorId = req.user.doctorId;
         // Obtener la suscripción del doctor
-        const subscription = await prisma.subscription.findUnique({
+        const subscription = await database_1.default.subscription.findUnique({
             where: { doctorId },
             include: {
                 doctor: {
@@ -509,7 +728,7 @@ const extendSubscriptionFreeMonth = async (req, res) => {
         // Si es LIFETIME (sin PayPal): solo actualizamos BD.
         const hasPayPal = !!(subscription.paypalSubscriptionId && subscription.paypalSubscriptionId.trim() !== '');
         if (hasPayPal) {
-            const paypalAccessToken = await getPayPalAccessToken();
+            const paypalAccessToken = await (0, paypalAuth_utils_1.getPayPalAccessToken)();
             if (!paypalAccessToken) {
                 return res.status(503).json({
                     success: false,
@@ -538,7 +757,7 @@ const extendSubscriptionFreeMonth = async (req, res) => {
             }
         }
         // 2. Actualizar en la base de datos (solo si PayPal suspendió OK o no tiene PayPal)
-        await prisma.subscription.update({
+        await database_1.default.subscription.update({
             where: { doctorId },
             data: {
                 endDate: newEndDate,
@@ -584,11 +803,11 @@ const checkFreeMonthUsed = async (req, res) => {
         if (!req.user) {
             return res.status(401).json({ message: "No autorizado" });
         }
-        if (!req.user.doctorId) {
+        const doctorId = await resolveDoctorId(req);
+        if (!doctorId) {
             return res.status(400).json({ message: "Usuario no es un doctor" });
         }
-        const doctorId = req.user.doctorId;
-        const subscription = await prisma.subscription.findUnique({
+        const subscription = await database_1.default.subscription.findUnique({
             where: { doctorId },
             select: {
                 freeMonthUsed: true
@@ -610,15 +829,17 @@ const checkFreeMonthUsed = async (req, res) => {
     }
 };
 exports.checkFreeMonthUsed = checkFreeMonthUsed;
-/** Lógica compartida: reanudar suscripciones que pasaron su resumeDate. Usado por controller y cron. */
+/**
+ * Reanuda en PayPal las suscripciones cuyo `resumeDate` ya venció (mes gratis manual, meses por referidos, etc.).
+ * Tras `activate`, PayPal retoma los ciclos de facturación según el plan contratado (precio completo del plan).
+ */
 async function runResumeSuspendedSubscriptions() {
     const now = new Date();
-    const subscriptionsToResume = await prisma.subscription.findMany({
+    const subscriptionsToResume = await database_1.default.subscription.findMany({
         where: {
             resumeDate: {
                 lte: now // Fecha de reanudación ya pasó
             },
-            freeMonthUsed: true,
             status: {
                 not: 'CANCELLED'
             }
@@ -640,15 +861,16 @@ async function runResumeSuspendedSubscriptions() {
     const results = [];
     for (const subscription of subscriptionsToResume) {
         try {
-            if (subscription.paypalSubscriptionId) {
-                const paypalAccessToken = await getPayPalAccessToken();
+            const paypalId = (subscription.paypalSubscriptionId || '').trim();
+            if (paypalId) {
+                const paypalAccessToken = await (0, paypalAuth_utils_1.getPayPalAccessToken)();
                 if (paypalAccessToken) {
                     const isSandbox = process.env.PAYPAL_ENVIRONMENT === 'sandbox' || !process.env.PAYPAL_ENVIRONMENT;
                     const baseUrl = isSandbox
                         ? 'https://api-m.sandbox.paypal.com'
                         : 'https://api-m.paypal.com';
                     // Reanudar la suscripción en PayPal
-                    await axios_1.default.post(`${baseUrl}/v1/billing/subscriptions/${subscription.paypalSubscriptionId}/activate`, {
+                    await axios_1.default.post(`${baseUrl}/v1/billing/subscriptions/${paypalId}/activate`, {
                         reason: 'Reanudación después del mes gratis'
                     }, {
                         headers: {
@@ -657,7 +879,7 @@ async function runResumeSuspendedSubscriptions() {
                         }
                     });
                     // Actualizar en la base de datos
-                    await prisma.subscription.update({
+                    await database_1.default.subscription.update({
                         where: { doctorId: subscription.doctorId },
                         data: {
                             status: 'ACTIVE',
@@ -675,6 +897,28 @@ async function runResumeSuspendedSubscriptions() {
                         message: 'Suscripción reanudada exitosamente'
                     });
                 }
+                else {
+                    results.push({
+                        doctorId: subscription.doctorId,
+                        status: 'error',
+                        message: 'Sin token de PayPal; no se reanudó la suscripción',
+                    });
+                }
+            }
+            else {
+                await database_1.default.subscription.update({
+                    where: { doctorId: subscription.doctorId },
+                    data: {
+                        status: 'ACTIVE',
+                        resumeDate: null,
+                        updatedAt: new Date()
+                    }
+                });
+                results.push({
+                    doctorId: subscription.doctorId,
+                    status: 'resumed',
+                    message: 'Sin PayPal: fechas de pausa limpiadas en base de datos',
+                });
             }
         }
         catch (error) {
@@ -714,12 +958,12 @@ const resumeCancelledSubscription = async (req, res) => {
         if (!req.user) {
             return res.status(401).json({ message: "No autorizado" });
         }
-        if (!req.user.doctorId) {
+        const doctorId = await resolveDoctorId(req);
+        if (!doctorId) {
             return res.status(400).json({ message: "Usuario no es un doctor" });
         }
-        const doctorId = req.user.doctorId;
         // Obtener la suscripción
-        const subscription = await prisma.subscription.findUnique({
+        const subscription = await database_1.default.subscription.findUnique({
             where: { doctorId },
             include: {
                 doctor: {
@@ -744,7 +988,7 @@ const resumeCancelledSubscription = async (req, res) => {
         // 1. Reanudar en PayPal si existe paypalSubscriptionId
         if (subscription.paypalSubscriptionId) {
             try {
-                const paypalAccessToken = await getPayPalAccessToken();
+                const paypalAccessToken = await (0, paypalAuth_utils_1.getPayPalAccessToken)();
                 if (paypalAccessToken) {
                     const isSandbox = process.env.PAYPAL_ENVIRONMENT === 'sandbox' || !process.env.PAYPAL_ENVIRONMENT;
                     const baseUrl = isSandbox
@@ -772,7 +1016,7 @@ const resumeCancelledSubscription = async (req, res) => {
         const newEndDate = new Date(now);
         newEndDate.setDate(newEndDate.getDate() + 30);
         // 3. Actualizar en la base de datos
-        await prisma.subscription.update({
+        await database_1.default.subscription.update({
             where: { doctorId },
             data: {
                 status: 'ACTIVE',
@@ -815,15 +1059,15 @@ const resumeWithPayment = async (req, res) => {
         if (!req.user) {
             return res.status(401).json({ message: "No autorizado" });
         }
-        if (!req.user.doctorId) {
+        const doctorId = await resolveDoctorId(req);
+        if (!doctorId) {
             return res.status(400).json({ message: "Usuario no es un doctor" });
         }
         if (!subscriptionId) {
             return res.status(400).json({ message: "subscriptionId es requerido" });
         }
-        const doctorId = req.user.doctorId;
         // Obtener la suscripción actual
-        const subscription = await prisma.subscription.findUnique({
+        const subscription = await database_1.default.subscription.findUnique({
             where: { doctorId },
             include: {
                 doctor: {
@@ -847,7 +1091,7 @@ const resumeWithPayment = async (req, res) => {
         }
         // Verificar la suscripción con PayPal
         try {
-            const paypalAccessToken = await getPayPalAccessToken();
+            const paypalAccessToken = await (0, paypalAuth_utils_1.getPayPalAccessToken)();
             if (paypalAccessToken) {
                 const isSandbox = process.env.PAYPAL_ENVIRONMENT === 'sandbox' || !process.env.PAYPAL_ENVIRONMENT;
                 const baseUrl = isSandbox
@@ -873,7 +1117,7 @@ const resumeWithPayment = async (req, res) => {
         // Si existe una suscripción anterior en PayPal, cancelarla
         if (subscription.paypalSubscriptionId && subscription.paypalSubscriptionId !== subscriptionId) {
             try {
-                const paypalAccessToken = await getPayPalAccessToken();
+                const paypalAccessToken = await (0, paypalAuth_utils_1.getPayPalAccessToken)();
                 if (paypalAccessToken) {
                     const isSandbox = process.env.PAYPAL_ENVIRONMENT === 'sandbox' || !process.env.PAYPAL_ENVIRONMENT;
                     const baseUrl = isSandbox
@@ -900,7 +1144,7 @@ const resumeWithPayment = async (req, res) => {
         const newEndDate = new Date(now);
         newEndDate.setDate(newEndDate.getDate() + 30);
         // Actualizar en la base de datos con el nuevo paypalSubscriptionId
-        await prisma.subscription.update({
+        await database_1.default.subscription.update({
             where: { doctorId },
             data: {
                 status: 'ACTIVE',
@@ -944,12 +1188,12 @@ const cancelSubscription = async (req, res) => {
         if (!req.user) {
             return res.status(401).json({ message: "No autorizado" });
         }
-        if (!req.user.doctorId) {
+        const doctorId = await resolveDoctorId(req);
+        if (!doctorId) {
             return res.status(400).json({ message: "Usuario no es un doctor" });
         }
-        const doctorId = req.user.doctorId;
         // Obtener la suscripción para obtener el paypalSubscriptionId
-        const subscription = await prisma.subscription.findUnique({
+        const subscription = await database_1.default.subscription.findUnique({
             where: { doctorId },
             include: {
                 doctor: {
@@ -971,7 +1215,7 @@ const cancelSubscription = async (req, res) => {
         let paypalCancelSucceeded = !subscription.paypalSubscriptionId; // Sin PayPal = OK
         if (subscription.paypalSubscriptionId) {
             try {
-                const paypalAccessToken = await getPayPalAccessToken();
+                const paypalAccessToken = await (0, paypalAuth_utils_1.getPayPalAccessToken)();
                 if (paypalAccessToken) {
                     const isSandbox = process.env.PAYPAL_ENVIRONMENT === 'sandbox' || !process.env.PAYPAL_ENVIRONMENT;
                     const baseUrl = isSandbox
@@ -998,7 +1242,7 @@ const cancelSubscription = async (req, res) => {
             paypalCancelSucceeded = true; // Sin PayPal, no hay nada que cancelar
         }
         // 2. Actualizar en la base de datos usando el doctorId
-        await prisma.subscription.update({
+        await database_1.default.subscription.update({
             where: { doctorId },
             data: {
                 status: 'CANCELLED',
@@ -1047,17 +1291,17 @@ const syncFreeMonthToPayPal = async (req, res) => {
             where.doctorId = doctorId;
         }
         else if (email) {
-            const user = await prisma.user.findUnique({ where: { email: String(email).trim() }, select: { id: true } });
+            const user = await database_1.default.user.findUnique({ where: { email: String(email).trim() }, select: { id: true } });
             if (!user) {
                 return res.status(404).json({ success: false, message: `Usuario no encontrado con email: ${email}` });
             }
-            const doctor = await prisma.doctor.findUnique({ where: { userId: user.id }, select: { id: true } });
+            const doctor = await database_1.default.doctor.findUnique({ where: { userId: user.id }, select: { id: true } });
             if (!doctor) {
                 return res.status(404).json({ success: false, message: `No hay doctor asociado al email: ${email}` });
             }
             where.doctorId = doctor.id;
         }
-        const subscriptions = await prisma.subscription.findMany({
+        const subscriptions = await database_1.default.subscription.findMany({
             where,
             include: {
                 doctor: {
@@ -1068,7 +1312,7 @@ const syncFreeMonthToPayPal = async (req, res) => {
             }
         });
         const results = [];
-        const paypalAccessToken = await getPayPalAccessToken();
+        const paypalAccessToken = await (0, paypalAuth_utils_1.getPayPalAccessToken)();
         if (!paypalAccessToken) {
             return res.status(503).json({
                 success: false,
@@ -1152,21 +1396,21 @@ const fixResumeDateForFreeMonth = async (req, res) => {
         if (!email || typeof email !== 'string') {
             return res.status(400).json({ success: false, message: 'email es requerido' });
         }
-        const user = await prisma.user.findUnique({
+        const user = await database_1.default.user.findUnique({
             where: { email: email.trim().toLowerCase() },
             select: { id: true }
         });
         if (!user) {
             return res.status(404).json({ success: false, message: `Usuario no encontrado: ${email}` });
         }
-        const doctor = await prisma.doctor.findUnique({
+        const doctor = await database_1.default.doctor.findUnique({
             where: { userId: user.id },
             select: { id: true }
         });
         if (!doctor) {
             return res.status(404).json({ success: false, message: `No hay doctor asociado: ${email}` });
         }
-        const subscription = await prisma.subscription.findUnique({
+        const subscription = await database_1.default.subscription.findUnique({
             where: { doctorId: doctor.id }
         });
         if (!subscription) {
@@ -1176,7 +1420,7 @@ const fixResumeDateForFreeMonth = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Esta suscripción no tiene mes gratis aplicado' });
         }
         const newResumeDate = new Date(subscription.endDate);
-        await prisma.subscription.update({
+        await database_1.default.subscription.update({
             where: { doctorId: doctor.id },
             data: { resumeDate: newResumeDate, updatedAt: new Date() }
         });

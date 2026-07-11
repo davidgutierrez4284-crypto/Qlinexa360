@@ -21,6 +21,8 @@ router.get('/test', (req, res) => {
         }
     });
 });
+/** Prueba real de SMTP: verify + envío al correo del usuario autenticado */
+router.get('/test-smtp', auth_middleware_1.authenticateToken, recipe_controller_1.RecipeController.testSmtpConnection);
 // ===== TEMPLATES DE RECETAS =====
 /**
  * @route POST /api/recipes/templates/:doctorId
@@ -47,7 +49,7 @@ router.post('/', (0, auth_middleware_1.authMiddleware)(['DOCTOR']), recipe_contr
  * @desc Obtener recetas de un paciente
  * @access Private (Doctor/Asistente)
  */
-router.get('/patient/:pacienteId', auth_middleware_1.authMiddleware, (0, subscription_middleware_1.subscriptionAccess)('read'), recipe_controller_1.RecipeController.getPatientRecipes);
+router.get('/patient/:pacienteId', (0, auth_middleware_1.authMiddleware)(['DOCTOR', 'ASISTENTE']), (0, subscription_middleware_1.subscriptionAccess)('read'), recipe_controller_1.RecipeController.getPatientRecipes);
 /**
  * @route GET /api/recipes/doctor/:doctorId
  * @desc Obtener recetas de un doctor

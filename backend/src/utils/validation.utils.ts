@@ -14,8 +14,11 @@ export const validateRegister = (data: any): void => {
     }
   }
 
-  if (password.length < 6) {
-    throw new AppError('La contraseña debe tener al menos 6 caracteres', 400);
+  if (!validatePassword(password)) {
+    throw new AppError(
+      'La contraseña debe tener al menos 8 caracteres e incluir al menos una mayúscula, una minúscula y un número',
+      400
+    );
   }
 
   if (!isValidEmail(email)) {
@@ -51,9 +54,17 @@ export const validateEmail = (email: string): boolean => {
 };
 
 export const validatePassword = (password: string): boolean => {
-  // Mínimo 8 caracteres, al menos una letra mayúscula, una minúscula y un número
-  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$/;
-  return passwordRegex.test(password);
+  // Mínimo 8 caracteres, al menos una mayúscula, una minúscula y un número (caracteres especiales permitidos)
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(password);
+};
+
+export const getPasswordValidationMessage = (password: string): string => {
+  if (!password) return 'Debes ingresar una contraseña.';
+  if (password.length < 8) return 'La contraseña debe tener al menos 8 caracteres';
+  if (!/[a-z]/.test(password)) return 'Debe incluir al menos una letra minúscula';
+  if (!/[A-Z]/.test(password)) return 'Debe incluir al menos una letra mayúscula';
+  if (!/\d/.test(password)) return 'Debe incluir al menos un número';
+  return '';
 };
 
 export const validatePhone = (phone: string): boolean => {

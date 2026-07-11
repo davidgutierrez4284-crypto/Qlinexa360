@@ -8,20 +8,22 @@ import {
   CalendarIcon
 } from '@heroicons/react/24/outline';
 import { getApiUrl, getApiHeaders } from '../../utils/api';
+import { useAuth } from '../../context/AuthContext';
 
 export default function RecipeStats() {
+  const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchStats();
-  }, []);
+  }, [user]);
 
   const fetchStats = async () => {
     try {
       setLoading(true);
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const doctorId = user.doctorId || localStorage.getItem('selectedDoctorId');
+      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const doctorId = user?.doctorId || storedUser.doctorId || localStorage.getItem('selectedDoctorId');
       if (!doctorId) {
         toast.error('No se pudo determinar el doctor');
         setLoading(false);

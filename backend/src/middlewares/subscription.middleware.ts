@@ -98,6 +98,7 @@ export const blockWriteOperationsIfCancelled = async (req: AuthRequest, res: Res
     '/api/subscriptions/extend-free-month',
     '/api/auth/logout',
     '/api/auth/profile-picture', // Permitir actualizar foto de perfil
+    '/api/referrals/send-invite-email', // Invitar colegas aunque la suscripción esté cancelada
   ];
 
   if (allowedPaths.some(path => req.path.startsWith(path))) {

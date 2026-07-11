@@ -7,6 +7,7 @@ exports.unlinkPatientFromDoctor = exports.listDoctorPatientsAdmin = exports.getD
 const database_1 = __importDefault(require("../config/database"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const error_utils_1 = require("../utils/error.utils");
+const patientPortal_utils_1 = require("../utils/patientPortal.utils");
 const crypto_1 = require("crypto");
 const client_1 = require("@prisma/client");
 const file_utils_1 = require("../utils/file.utils");
@@ -161,7 +162,12 @@ const getPatientDetails = async (req, res) => {
         });
         if (!patient)
             throw new error_utils_1.AppError('Paciente no encontrado.', 404);
-        res.json(patient);
+        res.json(Object.assign(Object.assign({}, patient), (doctorPatientLink
+            ? {
+                clinicalHistoryVisibleToPatient: doctorPatientLink.clinicalHistoryVisibleToPatient,
+                canManageClinicalHistoryAccess: true,
+            }
+            : { canManageClinicalHistoryAccess: false })));
     }
     catch (error) {
         const handled = error instanceof error_utils_1.AppError ? error : new error_utils_1.AppError('Error al obtener detalles del paciente.', 500);
@@ -173,37 +179,46 @@ exports.getPatientDetails = getPatientDetails;
 // BUSCAR PACIENTES ASIGNADOS AL DOCTOR
 // =================================================================
 const searchMyPatients = async (req, res) => {
+    var _a;
     try {
         if (!req.user)
             throw new error_utils_1.AppError('Autenticación requerida.', 401);
-        const doctor = await database_1.default.doctor.findUnique({ where: { userId: req.user.userId } });
-        if (!doctor)
-            throw new error_utils_1.AppError('Perfil de doctor no encontrado.', 404);
-        // Debug minimal: doctor id
-        console.log('searchMyPatients - doctor.id:', doctor.id);
-        const searchTerm = req.query.term;
+        let doctorId;
+        if (req.user.role === 'DOCTOR') {
+            const doctor = await database_1.default.doctor.findUnique({ where: { userId: req.user.userId } });
+            if (!doctor)
+                throw new error_utils_1.AppError('Perfil de doctor no encontrado.', 404);
+            doctorId = doctor.id;
+        }
+        else if (req.user.role === 'ASISTENTE') {
+            const selectedDoctorId = req.headers['x-selected-doctor-id'];
+            if (!selectedDoctorId || Array.isArray(selectedDoctorId)) {
+                throw new error_utils_1.AppError('Doctor seleccionado requerido.', 400);
+            }
+            const link = await database_1.default.asistenteDoctorVinculo.findFirst({
+                where: { doctorId: selectedDoctorId, asistenteId: req.user.userId, activo: true }
+            });
+            if (!link)
+                throw new error_utils_1.AppError('Asistente no vinculado a este doctor.', 403);
+            doctorId = selectedDoctorId;
+        }
+        else {
+            throw new error_utils_1.AppError('No tienes permiso para buscar pacientes.', 403);
+        }
+        const searchTerm = (_a = req.query.term) === null || _a === void 0 ? void 0 : _a.trim();
         if (!searchTerm || searchTerm.length < 2)
             return res.json([]);
+        // Búsqueda simplificada: solo por nombre/apellido/email del usuario (evita errores con medicalRecords/tags)
         const patients = await database_1.default.patient.findMany({
             where: {
-                doctors: { some: { doctorId: doctor.id } },
-                OR: [
-                    { user: {
-                            OR: [
-                                { firstName: { contains: searchTerm, mode: 'insensitive' } },
-                                { lastName: { contains: searchTerm, mode: 'insensitive' } },
-                                { email: { contains: searchTerm, mode: 'insensitive' } },
-                            ]
-                        } },
-                    { medicalRecords: {
-                            some: {
-                                OR: [
-                                    { diagnosis: { contains: searchTerm, mode: 'insensitive' } },
-                                    { tags: { has: searchTerm.toLowerCase() } }
-                                ]
-                            }
-                        } }
-                ]
+                doctors: { some: { doctorId } },
+                user: {
+                    OR: [
+                        { firstName: { contains: searchTerm, mode: 'insensitive' } },
+                        { lastName: { contains: searchTerm, mode: 'insensitive' } },
+                        { email: { contains: searchTerm, mode: 'insensitive' } },
+                    ]
+                }
             },
             include: {
                 user: {
@@ -518,6 +533,7 @@ exports.createConsultation = createConsultation;
 // ACTUALIZAR DATOS DE UN PACIENTE
 // =================================================================
 const updatePatient = async (req, res) => {
+    var _a;
     try {
         if (!req.user)
             throw new error_utils_1.AppError('Autenticación requerida.', 401);
@@ -540,8 +556,9 @@ const updatePatient = async (req, res) => {
         if (!doctor)
             throw new error_utils_1.AppError('Perfil de doctor no encontrado.', 404);
         const { patientId } = req.params;
-        const { phone, email, taxName, taxId, taxAddress, gender, birthDate, bloodType, allergies, chronicDiseases, taxCertificateUrl, emergencyContact // { firstName, lastName, email, phone, relationship }
-         } = req.body;
+        const { phone, email, taxName, taxId, taxAddress, taxPostalCode, taxRegime, gender, birthDate, bloodType, allergies, chronicDiseases, taxCertificateUrl, emergencyContact, // { firstName, lastName, email, phone, relationship }
+        clinicalHistoryVisibleToPatient, } = req.body;
+        const parsedClinicalHistoryVisible = (0, patientPortal_utils_1.parseClinicalHistoryVisibleFlag)(clinicalHistoryVisibleToPatient);
         // Verifica que el paciente esté asociado a este doctor, o que sea el doctor actualizando su propio perfil de paciente
         let patient = await database_1.default.patient.findFirst({
             where: { id: patientId, doctors: { some: { doctorId: doctor.id } } },
@@ -623,6 +640,8 @@ const updatePatient = async (req, res) => {
             data: Object.assign(Object.assign({ phone }, (newPatientEmail !== undefined && { email: newPatientEmail })), { taxName,
                 taxId,
                 taxAddress,
+                taxPostalCode,
+                taxRegime,
                 gender, dateOfBirth: birthDate ? new Date(birthDate) : undefined, allergies,
                 chronicDiseases, taxCertificateUrl: newTaxCertificateUrl, bloodType,
                 profilePictureUrl })
@@ -637,7 +656,7 @@ const updatePatient = async (req, res) => {
             try {
                 parsedEmergencyContact = JSON.parse(emergencyContact);
             }
-            catch (_a) {
+            catch (_b) {
                 parsedEmergencyContact = undefined;
             }
         }
@@ -657,12 +676,26 @@ const updatePatient = async (req, res) => {
                 });
             }
         }
+        // Actualiza visibilidad del historial clínico en el portal del paciente (por doctor)
+        if (parsedClinicalHistoryVisible !== undefined) {
+            await database_1.default.doctorPatient.updateMany({
+                where: { doctorId: doctor.id, patientId },
+                data: { clinicalHistoryVisibleToPatient: parsedClinicalHistoryVisible },
+            });
+        }
         // Vuelve a obtener el paciente actualizado con contactos de emergencia
         const patientWithContacts = await database_1.default.patient.findUnique({
             where: { id: patientId },
             include: { emergencyContacts: true }
         });
-        res.json({ message: 'Datos del paciente actualizados correctamente', patient: patientWithContacts });
+        const doctorPatientLink = await database_1.default.doctorPatient.findUnique({
+            where: { doctorId_patientId: { doctorId: doctor.id, patientId } },
+            select: { clinicalHistoryVisibleToPatient: true },
+        });
+        res.json({
+            message: 'Datos del paciente actualizados correctamente',
+            patient: Object.assign(Object.assign({}, patientWithContacts), { clinicalHistoryVisibleToPatient: (_a = doctorPatientLink === null || doctorPatientLink === void 0 ? void 0 : doctorPatientLink.clinicalHistoryVisibleToPatient) !== null && _a !== void 0 ? _a : true }),
+        });
     }
     catch (error) {
         const handled = error instanceof error_utils_1.AppError ? error : new error_utils_1.AppError('Error al actualizar datos del paciente.', 500);
@@ -941,6 +974,12 @@ const getAllMyPatients = async (req, res) => {
                 profilePictureUrl: patient.profilePictureUrl,
                 phone: patient.phone,
                 dateOfBirth: patient.dateOfBirth,
+                taxName: patient.taxName,
+                taxId: patient.taxId,
+                rfc: patient.taxId,
+                taxAddress: patient.taxAddress,
+                taxPostalCode: patient.taxPostalCode,
+                taxRegime: patient.taxRegime,
                 doctorPatientId: (_c = patient.doctors.find((d) => d.doctorId === doctorId)) === null || _c === void 0 ? void 0 : _c.id,
                 status: ((_d = patient.doctors.find((d) => d.doctorId === doctorId)) === null || _d === void 0 ? void 0 : _d.status) || 'activo',
                 startDate: (_e = patient.doctors.find((d) => d.doctorId === doctorId)) === null || _e === void 0 ? void 0 : _e.startDate,
@@ -1063,7 +1102,10 @@ const getAllMyPatients = async (req, res) => {
         res.json(patientsData);
     }
     catch (error) {
-        console.error("Error al obtener pacientes:", error);
+        const prismaCode = error === null || error === void 0 ? void 0 : error.code;
+        const prismaMeta = (error === null || error === void 0 ? void 0 : error.meta) ? JSON.stringify(error.meta) : 'n/a';
+        console.error("Error al obtener pacientes:", (error === null || error === void 0 ? void 0 : error.message) || error);
+        console.error("Prisma code:", prismaCode, "meta:", prismaMeta);
         const handled = error instanceof error_utils_1.AppError ? error : new error_utils_1.AppError('Error al obtener pacientes.', 500);
         res.status(handled.statusCode).json({ message: handled.message });
     }
@@ -1592,14 +1634,18 @@ const getDashboardStats = async (req, res) => {
         weekEndDate.setDate(weekEndDate.getDate() + 6);
         weekEndDate.setHours(23, 59, 59, 999);
         // 1. Total de Pacientes: Contar pacientes únicos asociados al doctor
-        // Usar groupBy para obtener pacientes únicos y luego contar
-        const uniquePatients = await database_1.default.doctorPatient.groupBy({
-            by: ['patientId'],
-            where: {
-                doctorId: doctorId
-            }
-        });
-        const totalPatientsCount = uniquePatients.length;
+        let totalPatientsCount = 0;
+        try {
+            const uniquePatients = await database_1.default.doctorPatient.groupBy({
+                by: ['patientId'],
+                where: { doctorId }
+            });
+            totalPatientsCount = uniquePatients.length;
+        }
+        catch (e) {
+            console.error('getDashboardStats FAIL at doctorPatient.groupBy:', e === null || e === void 0 ? void 0 : e.code, e === null || e === void 0 ? void 0 : e.message);
+            throw e;
+        }
         // 2. Citas de Hoy: Contar Appointment con date del día actual
         // Incluir todas las citas del día que no estén canceladas
         const todayAppointments = await database_1.default.appointment.count({
@@ -1684,7 +1730,10 @@ const getDashboardStats = async (req, res) => {
         });
     }
     catch (error) {
-        console.error('Error al obtener estadísticas del dashboard:', error);
+        const prismaCode = error === null || error === void 0 ? void 0 : error.code;
+        const prismaMeta = (error === null || error === void 0 ? void 0 : error.meta) ? JSON.stringify(error.meta) : 'n/a';
+        console.error('Error al obtener estadísticas del dashboard:', (error === null || error === void 0 ? void 0 : error.message) || error);
+        console.error('Prisma code:', prismaCode, 'meta:', prismaMeta);
         const handled = error instanceof error_utils_1.AppError ? error : new error_utils_1.AppError('Error al obtener estadísticas del dashboard.', 500);
         res.status(handled.statusCode).json({ message: handled.message });
     }

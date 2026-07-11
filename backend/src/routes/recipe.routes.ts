@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { RecipeController } from '../controllers/recipe.controller';
-import { authMiddleware } from '../middlewares/auth.middleware';
+import { authMiddleware, authenticateToken } from '../middlewares/auth.middleware';
 import { AssistantMiddleware } from '../middlewares/assistant.middleware';
 import { subscriptionAccess } from '../middlewares/subscription.middleware';
 
@@ -22,6 +22,9 @@ router.get('/test', (req, res) => {
     }
   });
 });
+
+/** Prueba real de SMTP: verify + envío al correo del usuario autenticado */
+router.get('/test-smtp', authenticateToken, RecipeController.testSmtpConnection);
 
 // ===== TEMPLATES DE RECETAS =====
 
@@ -66,7 +69,7 @@ router.post('/', authMiddleware(['DOCTOR']), RecipeController.createRecipe);
  */
 router.get(
   '/patient/:pacienteId',
-  authMiddleware,
+  authMiddleware(['DOCTOR', 'ASISTENTE']),
   subscriptionAccess('read'),
   RecipeController.getPatientRecipes
 );

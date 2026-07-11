@@ -6,6 +6,7 @@ exports.formatAppointmentDate = formatAppointmentDate;
 exports.formatAppointmentDateShort = formatAppointmentDateShort;
 exports.getDatePartsInTimezone = getDatePartsInTimezone;
 exports.createDateInTimezone = createDateInTimezone;
+exports.formatDateTimeForExternalCalendar = formatDateTimeForExternalCalendar;
 exports.formatAppointmentTimeWithAmPm = formatAppointmentTimeWithAmPm;
 /**
  * Utilidades para formatear fechas/horas en la zona horaria correcta.
@@ -110,6 +111,26 @@ function createDateInTimezone(year, month, day, hour, minute, timezone = DEFAULT
 /**
  * Formatea la hora con am/pm para mayor claridad (ej: "9:00 a.m.", "3:00 p.m.").
  */
+/**
+ * Formato local sin sufijo Z para APIs de calendario (Google/Outlook).
+ * Ej: "2026-05-29T11:15:00" en la zona del profesional.
+ */
+function formatDateTimeForExternalCalendar(date, timezone) {
+    const tz = resolveTimezone(timezone);
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
+    const parts = formatter.formatToParts(date);
+    const get = (type) => { var _a; return ((_a = parts.find((p) => p.type === type)) === null || _a === void 0 ? void 0 : _a.value) || '00'; };
+    return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`;
+}
 function formatAppointmentTimeWithAmPm(date, timezone) {
     const tz = resolveTimezone(timezone);
     return new Date(date).toLocaleTimeString('es-ES', {

@@ -49,7 +49,7 @@ export const submitConsentAfterPatientSetup = async (req: Request, res: Response
       return res.status(400).json({ error: 'El tiempo para firmar los consentimientos ha expirado. Inicie sesión y contacte a soporte.' });
     }
 
-    await createConsentRecords(resetToken.user, signature.trim());
+    await createConsentRecords(resetToken.user, signature.trim(), req.ip || req.socket.remoteAddress || 'IP no disponible');
     res.json({ message: 'Consentimientos registrados exitosamente' });
   } catch (error: any) {
     console.error('Error en submitConsentAfterPatientSetup:', error);
@@ -85,7 +85,7 @@ export const submitConsentAssistant = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Token inválido' });
     }
 
-    await createConsentRecords(user, signature.trim());
+    await createConsentRecords(user, signature.trim(), req.ip || req.socket.remoteAddress || 'IP no disponible');
     res.json({ message: 'Consentimientos registrados exitosamente' });
   } catch (error: any) {
     console.error('Error en submitConsentAssistant:', error);
@@ -93,7 +93,11 @@ export const submitConsentAssistant = async (req: Request, res: Response) => {
   }
 };
 
-async function createConsentRecords(user: { id: string; email: string; firstName: string; lastName: string; role: string }, signature: string) {
+async function createConsentRecords(
+  user: { id: string; email: string; firstName: string; lastName: string; role: string },
+  signature: string,
+  ipAddress: string
+) {
   const fullName = `${user.firstName} ${user.lastName}`.trim();
   const consentDate = new Date();
 
@@ -101,7 +105,10 @@ async function createConsentRecords(user: { id: string; email: string; firstName
     userId: user.id,
     email: user.email,
     fullName,
-    signature
+    signature,
+    role: user.role,
+    ipAddress,
+    signedAt: consentDate
   });
 
   await prisma.consentHistory.createMany({
@@ -140,9 +147,9 @@ async function createConsentRecords(user: { id: string; email: string; firstName
     ]
   });
 
-  // Enviar notificación a legal@qlinexa360.com con datos del usuario y PDFs
+  // Enviar documentos firmados en mails independientes al usuario y a legal
   try {
-    await NotificationService.sendNewUserConsentToLegal({
+    const payload = {
       fullName,
       email: user.email,
       role: user.role,
@@ -151,9 +158,13 @@ async function createConsentRecords(user: { id: string; email: string; firstName
         terminos: pdfResults.TERMS_OF_SERVICE.buffer,
         contrato: pdfResults.PLATFORM_CONTRACT.buffer
       }
-    });
+    };
+    await Promise.all([
+      NotificationService.sendNewUserConsentToUser(payload),
+      NotificationService.sendNewUserConsentToLegal(payload)
+    ]);
   } catch (emailError) {
-    console.error('Error enviando notificación a legal@qlinexa360.com:', emailError);
+    console.error('Error enviando consentimientos por email:', emailError);
     // No fallar el registro si el email falla
   }
 }

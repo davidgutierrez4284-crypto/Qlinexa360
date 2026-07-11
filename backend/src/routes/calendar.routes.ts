@@ -6,7 +6,9 @@ import {
   deleteCalendarEvent, 
   getCalendarEvent,
   shareCalendarEvent,
-  cancelAppointment
+  resendCalendarInvite,
+  cancelAppointment,
+  getRescheduleAvailableSlots
 } from '../controllers/calendar.controller';
 // Rutas para calendarios externos se manejan en '/external-calendars'
 // import { ExternalCalendarController } from '../controllers/externalCalendar.controller';
@@ -14,6 +16,13 @@ import { authMiddleware } from '../middlewares/auth.middleware';
 import { AssistantMiddleware } from '../middlewares/assistant.middleware';
 
 const router = Router();
+
+router.get(
+  '/reschedule-slots',
+  authMiddleware(['DOCTOR', 'ASISTENTE']),
+  AssistantMiddleware.checkAssistantModulePermission('appointments'),
+  getRescheduleAvailableSlots
+);
 
 // Rutas para eventos del calendario interno
 router.get(
@@ -45,6 +54,12 @@ router.delete(
   authMiddleware(['DOCTOR', 'ASISTENTE']),
   AssistantMiddleware.checkAssistantModulePermission('appointments'),
   deleteCalendarEvent
+);
+router.post(
+  '/events/:eventId/resend-calendar-invite',
+  authMiddleware(['DOCTOR', 'ASISTENTE']),
+  AssistantMiddleware.checkAssistantModulePermission('appointments'),
+  resendCalendarInvite
 );
 router.post(
   '/events/:eventId/share',

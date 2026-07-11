@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { XMarkIcon, CalendarIcon, ClockIcon, UserIcon, VideoCameraIcon } from '@heroicons/react/24/outline';
+import React, { useState, useEffect, useCallback } from 'react';
+import { XMarkIcon, CalendarIcon, ClockIcon, UserIcon, VideoCameraIcon, BanknotesIcon } from '@heroicons/react/24/outline';
+import axios from 'axios';
+import { getApiUrl, getApiHeaders } from '../../utils/api';
 
 const CreateEventModal = ({ open, onClose, onSave, selectedDate, patients, supportsGoogleMeet, supportsTeams, doctorName }) => {
   const [formData, setFormData] = useState({
@@ -13,11 +15,66 @@ const CreateEventModal = ({ open, onClose, onSave, selectedDate, patients, suppo
     minutosFin: '00',
     origenEvento: 'google',
     modalidadConsulta: 'presencial',
-    linkMeeting: ''
+    linkMeeting: '',
+    teleconsultationAmount: '',
+    offerInPersonMercadoPago: false,
+    inPersonPaymentAmount: '',
   });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [titleManuallyEdited, setTitleManuallyEdited] = useState(false);
+  const [mpChargePolicy, setMpChargePolicy] = useState({
+    showAmountField: false,
+    amountRequired: false,
+    defaultAmount: 0,
+    currency: 'MXN',
+    inPersonShowOfferCheckbox: false,
+    inPersonDefaultAmount: 0,
+  });
+
+  const loadMpChargePolicy = useCallback(async () => {
+    try {
+      const res = await axios.get(getApiUrl('/api/payments/mercadopago/teleconsultation-settings'), {
+        headers: getApiHeaders(),
+      });
+      if (res.data?.success && res.data.chargePolicy) {
+        setMpChargePolicy(res.data.chargePolicy);
+      } else {
+        setMpChargePolicy({
+          showAmountField: false,
+          amountRequired: false,
+          defaultAmount: 0,
+          currency: 'MXN',
+        });
+      }
+    } catch {
+      setMpChargePolicy({
+        showAmountField: false,
+        amountRequired: false,
+        defaultAmount: 0,
+        currency: 'MXN',
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) loadMpChargePolicy();
+  }, [open, loadMpChargePolicy]);
+
+  const requiresTeleconsultationAmount =
+    formData.modalidadConsulta === 'virtual' && mpChargePolicy.showAmountField;
+
+  const canOfferInPersonMercadoPago =
+    formData.modalidadConsulta === 'presencial' && mpChargePolicy.inPersonShowOfferCheckbox;
+
+  // Cualquier cita (presencial o virtual) se sincroniza al calendario externo seleccionado para que el
+  // paciente la reciba en su dispositivo. Si ese calendario no está enlazado, bloqueamos la creación.
+  const selectedProviderConnected =
+    formData.origenEvento === 'google'
+      ? !!supportsGoogleMeet
+      : formData.origenEvento === 'outlook'
+        ? !!supportsTeams
+        : true;
 
   useEffect(() => {
     if (selectedDate && open) {
@@ -97,18 +154,39 @@ const CreateEventModal = ({ open, onClose, onSave, selectedDate, patients, suppo
           return; // Ya actualizamos, no necesitamos el setFormData de abajo
         }
       }
+    } else if (name === 'modalidadConsulta') {
+      setFormData((prev) => {
+        const next = { ...prev, [name]: value };
+        if (
+          value === 'virtual' &&
+          mpChargePolicy.showAmountField &&
+          !prev.teleconsultationAmount &&
+          mpChargePolicy.defaultAmount > 0
+        ) {
+          next.teleconsultationAmount = String(mpChargePolicy.defaultAmount);
+        }
+        if (value === 'presencial') {
+          next.teleconsultationAmount = '';
+          next.offerInPersonMercadoPago = false;
+          next.inPersonPaymentAmount = '';
+        }
+        if (value === 'virtual') {
+          next.offerInPersonMercadoPago = false;
+          next.inPersonPaymentAmount = '';
+        }
+        return next;
+      });
     } else {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
-        [name]: value
+        [name]: value,
       }));
     }
-    
-    // Limpiar error del campo cuando el usuario empieza a escribir
+
     if (errors[name]) {
-      setErrors(prev => ({
+      setErrors((prev) => ({
         ...prev,
-        [name]: ''
+        [name]: '',
       }));
     }
   };
@@ -159,6 +237,26 @@ const CreateEventModal = ({ open, onClose, onSave, selectedDate, patients, suppo
       }
     }
 
+    if (requiresTeleconsultationAmount) {
+      if (!formData.patientId) {
+        newErrors.patientId = 'Selecciona un paciente para teleconsulta con cobro obligatorio';
+      }
+      const amount = parseFloat(formData.teleconsultationAmount);
+      if (!formData.teleconsultationAmount || !Number.isFinite(amount) || amount <= 0) {
+        newErrors.teleconsultationAmount = 'Indica el monto de teleconsulta (MXN)';
+      }
+    }
+
+    if (canOfferInPersonMercadoPago && formData.offerInPersonMercadoPago) {
+      if (!formData.patientId) {
+        newErrors.patientId = 'Selecciona un paciente para ofrecer cobro con Mercado Pago';
+      }
+      const inPersonAmount = parseFloat(formData.inPersonPaymentAmount);
+      if (!formData.inPersonPaymentAmount || !Number.isFinite(inPersonAmount) || inPersonAmount <= 0) {
+        newErrors.inPersonPaymentAmount = 'Indica el monto de la consulta presencial (MXN)';
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -183,8 +281,18 @@ const CreateEventModal = ({ open, onClose, onSave, selectedDate, patients, suppo
         fechaHoraInicio: fechaHoraInicio.toISOString(),
         fechaHoraFin: fechaHoraFin.toISOString(),
         origenEvento: formData.origenEvento,
+        modalidadConsulta: formData.modalidadConsulta,
         meetingPlatform: formData.modalidadConsulta === 'virtual' ? formData.origenEvento : null,
-        linkMeeting: formData.modalidadConsulta === 'virtual' ? null : null // El backend generará el link si es virtual
+        linkMeeting: formData.modalidadConsulta === 'virtual' ? null : null,
+        teleconsultationAmount: requiresTeleconsultationAmount
+          ? parseFloat(formData.teleconsultationAmount)
+          : null,
+        offerInPersonMercadoPago:
+          canOfferInPersonMercadoPago && formData.offerInPersonMercadoPago,
+        inPersonPaymentAmount:
+          canOfferInPersonMercadoPago && formData.offerInPersonMercadoPago
+            ? parseFloat(formData.inPersonPaymentAmount)
+            : null,
       };
 
       await onSave(eventData);
@@ -200,7 +308,10 @@ const CreateEventModal = ({ open, onClose, onSave, selectedDate, patients, suppo
         minutosFin: '00',
         origenEvento: 'google',
         modalidadConsulta: 'presencial',
-        linkMeeting: ''
+        linkMeeting: '',
+        teleconsultationAmount: '',
+        offerInPersonMercadoPago: false,
+        inPersonPaymentAmount: '',
       });
       setErrors({});
       setTitleManuallyEdited(false);
@@ -258,9 +369,8 @@ const CreateEventModal = ({ open, onClose, onSave, selectedDate, patients, suppo
                 </option>
               ))}
             </select>
+            {errors.patientId && <p className="mt-1 text-sm text-red-600">{errors.patientId}</p>}
           </div>
-
-          {/* Título */}
           <div>
             <label htmlFor="titulo" className="block text-sm font-medium text-gray-700 mb-2">
               Título de la cita <span className="text-red-500">*</span>
@@ -435,11 +545,15 @@ const CreateEventModal = ({ open, onClose, onSave, selectedDate, patients, suppo
             >
               <option value="google">Google Calendar</option>
               <option value="outlook">Outlook</option>
-              <option value="notion">Notion</option>
             </select>
             <p className="mt-1 text-xs text-gray-500">
               Selecciona el calendario externo para sincronizar la cita con el paciente
             </p>
+            {!selectedProviderConnected && (
+              <p className="mt-1 text-xs text-red-600">
+                No tienes enlazado el calendario de {formData.origenEvento === 'google' ? 'Google' : 'Microsoft Outlook'}. Enlázalo en Configuración → Calendario para crear citas. Sin calendario, el paciente solo recibe correo y no ve la cita en su dispositivo.
+              </p>
+            )}
           </div>
 
           {/* Modalidad de consulta */}
@@ -458,12 +572,89 @@ const CreateEventModal = ({ open, onClose, onSave, selectedDate, patients, suppo
               <option value="presencial">Consulta presencial</option>
               <option value="virtual">Sesión virtual</option>
             </select>
-            {formData.modalidadConsulta === 'virtual' && (
+            {formData.modalidadConsulta === 'virtual' && selectedProviderConnected && (
               <p className="mt-1 text-xs text-gray-500">
                 El link de la reunión se generará automáticamente desde el calendario configurado ({formData.origenEvento === 'google' ? 'Google Meet' : formData.origenEvento === 'outlook' ? 'Microsoft Teams' : 'Calendario externo'})
               </p>
             )}
           </div>
+
+          {requiresTeleconsultationAmount && (
+            <div>
+              <label htmlFor="teleconsultationAmount" className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                <BanknotesIcon className="h-4 w-4 text-sky-600" />
+                Monto teleconsulta (MXN) <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="number"
+                id="teleconsultationAmount"
+                name="teleconsultationAmount"
+                min="0"
+                step="0.01"
+                value={formData.teleconsultationAmount}
+                onChange={handleChange}
+                className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  errors.teleconsultationAmount ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="Ej. 500"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Cobro obligatorio antes de generar el enlace de videollamada (Mercado Pago).
+              </p>
+              {errors.teleconsultationAmount && (
+                <p className="mt-1 text-sm text-red-600">{errors.teleconsultationAmount}</p>
+              )}
+            </div>
+          )}
+
+          {canOfferInPersonMercadoPago && (
+            <div className="space-y-3 rounded-lg border border-sky-200 bg-sky-50 p-4">
+              <label className="flex items-center gap-2 text-sm text-gray-800">
+                <input
+                  type="checkbox"
+                  name="offerInPersonMercadoPago"
+                  checked={formData.offerInPersonMercadoPago}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      offerInPersonMercadoPago: e.target.checked,
+                      inPersonPaymentAmount:
+                        e.target.checked && !prev.inPersonPaymentAmount && mpChargePolicy.inPersonDefaultAmount > 0
+                          ? String(mpChargePolicy.inPersonDefaultAmount)
+                          : prev.inPersonPaymentAmount,
+                    }))
+                  }
+                />
+                Ofrecer pago opcional con Mercado Pago (consulta presencial)
+              </label>
+              {formData.offerInPersonMercadoPago && (
+                <div>
+                  <label htmlFor="inPersonPaymentAmount" className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                    <BanknotesIcon className="h-4 w-4 text-sky-600" />
+                    Monto consulta presencial (MXN) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    id="inPersonPaymentAmount"
+                    name="inPersonPaymentAmount"
+                    min="0"
+                    step="0.01"
+                    value={formData.inPersonPaymentAmount}
+                    onChange={handleChange}
+                    className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      errors.inPersonPaymentAmount ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Opcional para el paciente: puede pagar en efectivo o en el consultorio sin usar la plataforma.
+                  </p>
+                  {errors.inPersonPaymentAmount && (
+                    <p className="mt-1 text-sm text-red-600">{errors.inPersonPaymentAmount}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Botones */}
           <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
@@ -478,7 +669,8 @@ const CreateEventModal = ({ open, onClose, onSave, selectedDate, patients, suppo
             <button
               type="submit"
               className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={saving}
+              disabled={saving || !selectedProviderConnected}
+              title={!selectedProviderConnected ? 'Enlaza tu calendario para crear citas' : undefined}
             >
               {saving ? 'Guardando...' : 'Crear Cita'}
             </button>

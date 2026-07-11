@@ -64,6 +64,9 @@ class AssistantMiddleware {
                         case 'billing':
                             hasPermission = link.permisosFacturacion;
                             break;
+                        case 'finanzas':
+                            hasPermission = link.permisosFacturacion;
+                            break;
                         default:
                             hasPermission = false;
                     }

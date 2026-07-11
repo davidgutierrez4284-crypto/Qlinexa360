@@ -88,9 +88,14 @@ export class DoctorProfileController {
           certificadoProfesional: doctor.certificadoProfesional,
           certificadoEspecialidad: doctor.certificadoEspecialidad,
           certificadoMaestria: doctor.certificadoMaestria,
+          universidad: doctor.universidad,
           logoUrl: doctor.logoUrl,
           primaryColor: doctor.primaryColor,
           secondaryColor: doctor.secondaryColor,
+          socialMediaFacebook: doctor.socialMediaFacebook,
+          socialMediaInstagram: doctor.socialMediaInstagram,
+          socialMediaX: doctor.socialMediaX,
+          socialMediaOther: doctor.socialMediaOther,
           timezone: (doctor as { timezone?: string | null }).timezone
         }
       });
@@ -150,8 +155,13 @@ export class DoctorProfileController {
         certificadoProfesional,
         certificadoEspecialidad,
         certificadoMaestria,
+        universidad,
         primaryColor,
         secondaryColor,
+        socialMediaFacebook,
+        socialMediaInstagram,
+        socialMediaX,
+        socialMediaOther,
         timezone
       } = req.body;
 
@@ -176,8 +186,13 @@ export class DoctorProfileController {
         certificadoProfesional,
         certificadoEspecialidad,
         certificadoMaestria,
+        universidad,
         primaryColor,
-        secondaryColor
+        secondaryColor,
+        socialMediaFacebook,
+        socialMediaInstagram,
+        socialMediaX,
+        socialMediaOther
       };
       if (timezone !== undefined) updateData.timezone = timezone;
 
@@ -215,7 +230,12 @@ export class DoctorProfileController {
           certificadoProfesional: updatedDoctor.certificadoProfesional,
           certificadoEspecialidad: updatedDoctor.certificadoEspecialidad,
           certificadoMaestria: updatedDoctor.certificadoMaestria,
+          universidad: updatedDoctor.universidad,
           logoUrl: updatedDoctor.logoUrl,
+          socialMediaFacebook: updatedDoctor.socialMediaFacebook,
+          socialMediaInstagram: updatedDoctor.socialMediaInstagram,
+          socialMediaX: updatedDoctor.socialMediaX,
+          socialMediaOther: updatedDoctor.socialMediaOther,
           primaryColor: updatedDoctor.primaryColor,
           secondaryColor: updatedDoctor.secondaryColor,
           timezone: (updatedDoctor as { timezone?: string | null }).timezone
@@ -496,7 +516,12 @@ export class DoctorProfileController {
           certificadoProfesional: doctor.certificadoProfesional || doctor.licenseNumber,
           certificadoEspecialidad: doctor.certificadoEspecialidad || 'No especificado',
           certificadoMaestria: doctor.certificadoMaestria || 'No especificado',
+          universidad: doctor.universidad || null,
           logoUrl: doctor.logoUrl,
+          socialMediaFacebook: doctor.socialMediaFacebook || null,
+          socialMediaInstagram: doctor.socialMediaInstagram || null,
+          socialMediaX: doctor.socialMediaX || null,
+          socialMediaOther: doctor.socialMediaOther || null,
           primaryColor: doctor.primaryColor || '#2563eb',
           secondaryColor: doctor.secondaryColor || '#1e40af'
         },

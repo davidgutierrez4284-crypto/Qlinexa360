@@ -5,7 +5,8 @@ import {
   LinkIcon,
   CogIcon,
   CheckCircleIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  BanknotesIcon,
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-toastify';
 import axios from 'axios';
@@ -22,14 +23,14 @@ import { GlobeAmericasIcon } from '@heroicons/react/24/outline';
 import CalendlyStyleScheduleConfig from './CalendlyStyleScheduleConfig';
 import ReminderConfigSection from './ReminderConfigSection';
 import TimezoneConfigSection from './TimezoneConfigSection';
+import MercadoPagoSettings from '../payments/MercadoPagoSettings';
 
 // Componente de gestión de calendarios externos (integrado para evitar problemas de importación)
 const CalendarSyncManager = () => {
   const [syncStatus, setSyncStatus] = useState({
     google: { connected: false, lastSync: null, error: null },
     outlook: { connected: false, lastSync: null, error: null },
-    apple: { connected: false, lastSync: null, error: null },
-    notion: { connected: false, lastSync: null, error: null }
+    apple: { connected: false, lastSync: null, error: null }
   });
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState({});
@@ -50,8 +51,7 @@ const CalendarSyncManager = () => {
         setSyncStatus({
           google: data.google || { connected: false, lastSync: null, error: null },
           outlook: data.outlook || { connected: false, lastSync: null, error: null },
-          apple: data.apple || { connected: false, lastSync: null, error: null },
-          notion: data.notion || { connected: false, lastSync: null, error: null }
+          apple: data.apple || { connected: false, lastSync: null, error: null }
         });
       }
     } catch (error) {
@@ -196,8 +196,11 @@ const CalendarSyncManager = () => {
         {isConnected && (
           <div className="mb-4 space-y-2">
             <div className="text-sm text-gray-600">
-              <span className="font-medium">Última sincronización:</span>{' '}
+              <span className="font-medium">Última actividad con Google:</span>{' '}
               {formatLastSync(status?.lastSync)}
+              <span className="block text-xs text-gray-500 mt-0.5">
+                Incluye citas enviadas al calendario, no solo importación masiva
+              </span>
             </div>
             {status?.error && (
               <div className="text-sm text-red-600">
@@ -263,7 +266,6 @@ const CalendarSyncManager = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {renderProviderCard('google')}
         {renderProviderCard('outlook')}
-        {renderProviderCard('notion')}
       </div>
     </div>
   );
@@ -345,7 +347,8 @@ const OptimizedCalendarConfig = () => {
     timezone: { data: null, loading: false, error: null, loaded: false },
     linked: { data: null, loading: false, error: null, loaded: false },
     schedule: { data: null, loading: false, error: null, loaded: false },
-    reminders: { data: null, loading: false, error: null, loaded: false }
+    reminders: { data: null, loading: false, error: null, loaded: false },
+    mercadopago: { data: null, loading: false, error: null, loaded: false },
   });
   const [overallLoading, setOverallLoading] = useState(false);
 
@@ -354,7 +357,8 @@ const OptimizedCalendarConfig = () => {
     { id: 'timezone', name: 'Zona horaria', icon: GlobeAmericasIcon, color: 'green' },
     { id: 'linked', name: 'Calendarios Vinculados', icon: LinkIcon, color: 'blue' },
     { id: 'schedule', name: 'Configuración de Horarios', icon: ClockIcon, color: 'purple' },
-    { id: 'reminders', name: 'Configuración de Recordatorios', icon: BellIcon, color: 'orange' }
+    { id: 'reminders', name: 'Configuración de Recordatorios', icon: BellIcon, color: 'orange' },
+    { id: 'mercadopago', name: 'Cobros MP', icon: BanknotesIcon, color: 'sky' },
   ];
 
   // Cargar configuración de una sección específica
@@ -438,6 +442,11 @@ const OptimizedCalendarConfig = () => {
               reminders: []
             };
           }
+          break;
+
+        case 'mercadopago':
+          await new Promise(resolve => setTimeout(resolve, 50));
+          data = { loaded: true };
           break;
       }
 
@@ -534,6 +543,9 @@ const OptimizedCalendarConfig = () => {
             }}
           />
         );
+
+      case 'mercadopago':
+        return <MercadoPagoSettings compact />;
 
       default:
         return null;

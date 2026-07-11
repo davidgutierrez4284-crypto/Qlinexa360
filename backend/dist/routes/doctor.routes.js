@@ -41,9 +41,9 @@ router.post('/register', upload_middleware_1.upload.fields([
     { name: 'taxCertificate', maxCount: 1 }
 ]), doctor_controller_1.registerDoctor);
 // --- RUTA PARA LA BÚSQUEDA DE PACIENTES ---
-router.get('/search-patients', (0, auth_middleware_1.authMiddleware)(['DOCTOR']), doctor_controller_1.searchMyPatients);
-// --- RUTA PARA LA BÚSQUEDA DE PROFESIONALES DE LA SALUD (solo rol DOCTOR, colaboración en expedientes) ---
-router.get('/', (0, auth_middleware_1.authMiddleware)(['DOCTOR']), doctor_controller_1.searchHealthProfessionals);
+router.get('/search-patients', (0, auth_middleware_1.authMiddleware)(['DOCTOR', 'ASISTENTE']), doctor_controller_1.searchMyPatients);
+// --- Búsqueda de PROFESIONALES (doctores) para colaboración / segunda opinión (médico o paciente) ---
+router.get('/', (0, auth_middleware_1.authMiddleware)(['DOCTOR', 'PATIENT']), doctor_controller_1.searchHealthProfessionals);
 // --- RUTA PARA CREAR UN PACIENTE ---
 router.post('/patients', (0, auth_middleware_1.authMiddleware)(['DOCTOR', 'ASISTENTE']), assistant_middleware_1.AssistantMiddleware.checkAssistantModulePermission('clinicalHistory'), doctor_controller_1.createPatient);
 router.put('/patients/:patientId', (0, auth_middleware_1.authMiddleware)(['DOCTOR', 'ASISTENTE']), assistant_middleware_1.AssistantMiddleware.checkAssistantModulePermission('clinicalHistory'), upload_middleware_1.upload.fields([
@@ -64,6 +64,7 @@ router.post('/invoices', (0, auth_middleware_1.authMiddleware)(['DOCTOR', 'ASIST
 ]), invoice_controller_1.uploadInvoice);
 // Obtener facturas (doctor ve todas, paciente solo las suyas)
 router.get('/invoices', (0, auth_middleware_1.authMiddleware)(['DOCTOR', 'ASISTENTE', 'PATIENT']), assistantBillingOnly, invoice_controller_1.getInvoices);
+router.get('/invoices/:id/file/:type', (0, auth_middleware_1.authMiddleware)(['DOCTOR', 'ASISTENTE', 'PATIENT']), assistantBillingOnly, invoice_controller_1.downloadInvoiceFile);
 // Eliminar factura (solo doctor dueño)
 router.delete('/invoices/:id', (0, auth_middleware_1.authMiddleware)(['DOCTOR', 'ASISTENTE']), assistantBillingOnly, invoice_controller_1.deleteInvoice);
 // Enviar factura por email al paciente

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Consentimiento colaboración — Qlinexa360</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 10.5pt; color: #333; line-height: 1.32; margin: 0; }
+    .container { padding: 16px; }
+    h1 { color: #2563eb; font-size: 15pt; margin: 0 0 8px; border-bottom: 2px solid #2563eb; padding-bottom: 6px; }
+    h2 { color: #374151; font-size: 12pt; margin: 10px 0 6px; }
+    .box { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; margin: 7px 0; }
+    .field { margin: 0 0 4px; font-size: 10.5pt; }
+    .field strong { display: inline-block; width: 180px; }
+    .privacy-notice { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; margin: 8px 0; font-size: 9.5pt; line-height: 1.35; text-align: justify; }
+    .timestamp { font-size: 9pt; color: #6b7280; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Consentimiento informado — Colaboración en caso clínico</h1>
+    <p class="field"><strong>Plataforma:</strong> Qlinexa360 (herramienta tecnológica de gestión clínica)</p>
+
+    <div class="box">
+      <p class="field"><strong>Paciente (titular del consentimiento):</strong> {{patientName}}</p>
+      <p class="field"><strong>Correo:</strong> {{patientEmail}}</p>
+      <p class="field"><strong>Caso clínico:</strong> {{caseLabel}}</p>
+      <p class="field"><strong>Profesional titular:</strong> {{ownerDoctorName}}</p>
+      <p class="field"><strong>Profesional invitado a colaborar:</strong> {{invitedDoctorName}}</p>
+    </div>
+
+    <h2>Aviso de privacidad</h2>
+    <div class="privacy-notice">
+      <p style="margin: 0 0 6px;"><strong>Aviso legal (documento firmado):</strong> Qlinexa360 facilita la gestión administrativa y documental de colaboración entre profesionales, pero no presta servicios médicos ni garantiza por sí misma la suficiencia clínica de la atención. La procedencia de la colaboración, el diagnóstico, tratamiento y la eventual necesidad de atención presencial son responsabilidad exclusiva del profesional de la salud.</p>
+      <p style="margin: 0 0 6px;">Al firmar este documento, el/la paciente acepta que el profesional invitado pueda <strong>acceder y colaborar únicamente en el caso clínico indicado</strong>.</p>
+      <p style="margin: 0;">Los datos personales serán tratados conforme al Aviso de Privacidad de Qlinexa360 (LFPDPPP). Contacto y sitio oficial: <strong>www.qlinexa360.com</strong> | <strong>legal@qlinexa360.com</strong></p>
+    </div>
+
+    <h2>Firma digital</h2>
+    <div class="box">
+      <p class="field"><strong>Firma (texto):</strong> {{signature}}</p>
+      <p class="field"><strong>Nombre completo:</strong> {{signature}}</p>
+      <p class="field"><strong>Correo electrónico:</strong> {{patientEmail}}</p>
+      <p class="field"><strong>Fecha y hora de firma:</strong> {{signedAt}}</p>
+      <p class="field"><strong>Time stamp:</strong> {{signedAtIso}}</p>
+      <p class="field"><strong>Dirección IP:</strong> {{signedIp}}</p>
+      <p class="field"><strong>Registro de integridad (SHA-256 del documento):</strong> disponible en el sistema Qlinexa360.</p>
+    </div>
+
+    <div class="timestamp">Documento generado el {{signedAtIso}}</div>
+  </div>
+</body>
+</html>

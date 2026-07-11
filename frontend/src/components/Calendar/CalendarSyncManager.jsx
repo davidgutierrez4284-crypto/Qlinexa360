@@ -15,8 +15,7 @@ const CalendarSyncManager = () => {
   const [syncStatus, setSyncStatus] = useState({
     google: { connected: false, lastSync: null, error: null },
     outlook: { connected: false, lastSync: null, error: null },
-    apple: { connected: false, lastSync: null, error: null },
-    notion: { connected: false, lastSync: null, error: null }
+    apple: { connected: false, lastSync: null, error: null }
   });
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState({});
@@ -37,8 +36,7 @@ const CalendarSyncManager = () => {
         setSyncStatus({
           google: data.google || { connected: false, lastSync: null, error: null },
           outlook: data.outlook || { connected: false, lastSync: null, error: null },
-          apple: data.apple || { connected: false, lastSync: null, error: null },
-          notion: data.notion || { connected: false, lastSync: null, error: null }
+          apple: data.apple || { connected: false, lastSync: null, error: null }
         });
       }
     } catch (error) {
@@ -158,8 +156,11 @@ const CalendarSyncManager = () => {
         {isConnected && (
           <div className="mb-4 space-y-2">
             <div className="text-sm text-gray-600">
-              <span className="font-medium">Última sincronización:</span>{' '}
+              <span className="font-medium">Última actividad con Google:</span>{' '}
               {formatLastSync(status?.lastSync)}
+              <span className="block text-xs text-gray-500 mt-0.5">
+                Incluye citas enviadas al calendario, no solo importación masiva
+              </span>
             </div>
             {status?.error && (
               <div className="text-sm text-red-600">
@@ -225,7 +226,6 @@ const CalendarSyncManager = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {renderProviderCard('google')}
         {renderProviderCard('outlook')}
-        {renderProviderCard('notion')}
       </div>
     </div>
   );

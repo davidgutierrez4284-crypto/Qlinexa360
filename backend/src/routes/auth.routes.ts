@@ -15,8 +15,9 @@ router.post('/2fa/setup', setupTwoFactor);
 router.post('/2fa/verify', verifyTwoFactor);
 router.post('/2fa/recovery-email', sendTwoFactorRecoveryEmail);
 router.post('/2fa/recovery-verify', verifyTwoFactorRecovery);
-// Endpoint para obtener datos del usuario actual (requiere autenticación)
-router.get('/me', authMiddleware(['DOCTOR', 'PATIENT', 'ASISTENTE', 'ADMIN']), getCurrentUser);
+// Endpoint para obtener datos del usuario actual (requiere autenticación).
+// AFFILIATE incluido para que el panel de afiliado pueda refrescar su sesión.
+router.get('/me', authMiddleware(['DOCTOR', 'PATIENT', 'ASISTENTE', 'ADMIN', 'AFFILIATE']), getCurrentUser);
 // Endpoint para actualizar foto de perfil (requiere autenticación)
 router.put('/profile-picture', 
   authMiddleware(['DOCTOR', 'PATIENT', 'ASISTENTE', 'ADMIN']), 

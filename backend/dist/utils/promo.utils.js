@@ -6,13 +6,19 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getPromoDurationDays = exports.getPromoSuccessMessage = exports.getPromoCodeOrThrow = exports.normalizePromoCode = void 0;
 const database_1 = __importDefault(require("../config/database"));
 const error_utils_1 = require("./error.utils");
-const normalizePromoCode = (code) => code.trim().toUpperCase();
+const normalizePromoCode = (code) => code.trim().toUpperCase().replace(/\s+/g, '');
 exports.normalizePromoCode = normalizePromoCode;
 const getPromoCodeOrThrow = async (rawCode) => {
     const code = (0, exports.normalizePromoCode)(rawCode);
+    if (!code) {
+        throw new error_utils_1.AppError('Código promocional requerido', 400);
+    }
     const promo = await database_1.default.promoCode.findUnique({ where: { code } });
-    if (!promo || !promo.isActive) {
-        throw new error_utils_1.AppError('Código promocional inválido', 400);
+    if (!promo) {
+        throw new error_utils_1.AppError('Código promocional no registrado en el sistema. Verifica que esté escrito exactamente como te lo entregaron (ej. QLX-3M-XXXX).', 400);
+    }
+    if (!promo.isActive) {
+        throw new error_utils_1.AppError('Código promocional desactivado', 400);
     }
     const now = new Date();
     if (promo.validUntil && promo.validUntil < now) {

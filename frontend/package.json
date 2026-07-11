@@ -6,9 +6,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/strip-pwa-from-legal-pages.mjs",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "validate:legal": "node scripts/validate-legal-static-urls.mjs",
+    "validate:legal:preview": "node scripts/validate-legal-static-urls.mjs --preview"
   },
   "dependencies": {
     "@emotion/react": "^11.11.3",

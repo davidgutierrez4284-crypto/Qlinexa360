@@ -1529,20 +1529,10 @@ export class CalendarSyncController {
           await reconcileCalendarEventWithAppointment(doctorId, existing);
           const refreshed = await prisma.internalCalendarEvent.findUnique({ where: { id: existing.id } });
           if (refreshed?.appointmentId) {
-            // Vínculo duro: resincronizar exactamente la cita de este evento
-            void AppointmentConfirmationController.syncAppointmentCalendars(refreshed.appointmentId);
+            // Solo alinear evento interno; no re-sincronizar calendario externo en cada import (evita bucles).
+            await reconcileCalendarEventWithAppointment(doctorId, refreshed);
           } else if (refreshed?.patientId) {
-            const appt = await prisma.appointment.findFirst({
-              where: {
-                doctorId,
-                patientId: refreshed.patientId,
-                status: { in: ['SCHEDULED', 'CONFIRMED'] }
-              },
-              orderBy: { date: 'desc' }
-            });
-            if (appt) {
-              void AppointmentConfirmationController.syncAppointmentCalendars(appt.id);
-            }
+            await reconcileCalendarEventWithAppointment(doctorId, refreshed);
           }
           eventId = existing.id;
           updated += 0;

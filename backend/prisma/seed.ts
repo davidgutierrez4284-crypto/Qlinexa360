@@ -1,4 +1,5 @@
 import { PrismaClient, FieldType, UserRole } from '@prisma/client';
+import { seedLabAnalyteCatalog } from './seeds/labAnalyteCatalog.seed';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -372,6 +373,7 @@ async function main() {
         }
     }
 
+    await seedLabAnalyteCatalog(prisma);
     console.log('Seeding finished.');
 }
 

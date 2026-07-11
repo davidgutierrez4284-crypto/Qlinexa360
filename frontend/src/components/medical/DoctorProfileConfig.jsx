@@ -4,11 +4,11 @@ import { getApiUrl, getApiHeaders } from '../../utils/api';
 import { 
   UserIcon, 
   BuildingOfficeIcon, 
-  PhoneIcon, 
   AcademicCapIcon,
   PhotoIcon,
   TrashIcon,
-  EyeIcon
+  EyeIcon,
+  ShareIcon
 } from '@heroicons/react/24/outline';
 import PhoneInput from '../common/PhoneInput';
 
@@ -28,8 +28,13 @@ const DoctorProfileConfig = () => {
     certificadoProfesional: '',
     certificadoEspecialidad: '',
     certificadoMaestria: '',
+    universidad: '',
     primaryColor: '#ffffff',
-    secondaryColor: '#ffffff'
+    secondaryColor: '#ffffff',
+    socialMediaFacebook: '',
+    socialMediaInstagram: '',
+    socialMediaX: '',
+    socialMediaOther: ''
   });
   const [logoFile, setLogoFile] = useState(null);
   const [currentLogo, setCurrentLogo] = useState(null);
@@ -56,8 +61,13 @@ const DoctorProfileConfig = () => {
             certificadoProfesional: data.data.certificadoProfesional || '',
             certificadoEspecialidad: data.data.certificadoEspecialidad || '',
             certificadoMaestria: data.data.certificadoMaestria || '',
+            universidad: data.data.universidad || '',
             primaryColor: data.data.primaryColor || '#ffffff',
-            secondaryColor: data.data.secondaryColor || '#ffffff'
+            secondaryColor: data.data.secondaryColor || '#ffffff',
+            socialMediaFacebook: data.data.socialMediaFacebook || '',
+            socialMediaInstagram: data.data.socialMediaInstagram || '',
+            socialMediaX: data.data.socialMediaX || '',
+            socialMediaOther: data.data.socialMediaOther || ''
           });
           setCurrentLogo(resolveLogoUrl(data.data.logoUrl, getApiUrl));
         }
@@ -342,6 +352,80 @@ const DoctorProfileConfig = () => {
                   placeholder="MAE-67890"
                 />
               </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Universidad
+                </label>
+                <input
+                  type="text"
+                  value={profileData.universidad}
+                  onChange={(e) => handleInputChange('universidad', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ej: UNAM, IPN, UAM"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Redes Sociales */}
+          <div className="border-b border-gray-200 pb-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <ShareIcon className="h-5 w-5 text-blue-600 mr-2" />
+              Redes Sociales
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Opcional. Aparecerán en el pie de página de tus recetas.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Facebook
+                </label>
+                <input
+                  type="url"
+                  value={profileData.socialMediaFacebook}
+                  onChange={(e) => handleInputChange('socialMediaFacebook', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="https://facebook.com/tu-perfil"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Instagram
+                </label>
+                <input
+                  type="url"
+                  value={profileData.socialMediaInstagram}
+                  onChange={(e) => handleInputChange('socialMediaInstagram', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="https://instagram.com/tu-perfil"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  X (Twitter)
+                </label>
+                <input
+                  type="url"
+                  value={profileData.socialMediaX}
+                  onChange={(e) => handleInputChange('socialMediaX', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="https://x.com/tu-perfil"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Otra (Web, LinkedIn, etc.)
+                </label>
+                <input
+                  type="url"
+                  value={profileData.socialMediaOther}
+                  onChange={(e) => handleInputChange('socialMediaOther', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="https://..."
+                />
+              </div>
             </div>
           </div>
 
@@ -519,7 +603,7 @@ const DoctorProfileConfig = () => {
                   </p>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                   <div className="text-center p-3 bg-white rounded border">
                     <p className="text-sm font-medium text-gray-700">Cédula Profesional</p>
                     <p className="text-lg font-semibold text-blue-600">{previewData.doctor.certificadoProfesional}</p>
@@ -532,7 +616,22 @@ const DoctorProfileConfig = () => {
                     <p className="text-sm font-medium text-gray-700">Maestría</p>
                     <p className="text-lg font-semibold text-blue-600">{previewData.doctor.certificadoMaestria}</p>
                   </div>
+                  <div className="text-center p-3 bg-white rounded border">
+                    <p className="text-sm font-medium text-gray-700">Universidad</p>
+                    <p className="text-lg font-semibold text-blue-600">{previewData.doctor.universidad || '—'}</p>
+                  </div>
                 </div>
+                {(previewData.doctor.socialMediaFacebook || previewData.doctor.socialMediaInstagram || previewData.doctor.socialMediaX || previewData.doctor.socialMediaOther) && (
+                  <div className="mb-4 p-3 bg-white rounded border">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Redes Sociales</p>
+                    <div className="flex flex-wrap gap-2">
+                      {previewData.doctor.socialMediaFacebook && <a href={previewData.doctor.socialMediaFacebook} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm underline">Facebook</a>}
+                      {previewData.doctor.socialMediaInstagram && <a href={previewData.doctor.socialMediaInstagram} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm underline">Instagram</a>}
+                      {previewData.doctor.socialMediaX && <a href={previewData.doctor.socialMediaX} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm underline">X</a>}
+                      {previewData.doctor.socialMediaOther && <a href={previewData.doctor.socialMediaOther} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm underline">Web</a>}
+                    </div>
+                  </div>
+                )}
                 
                 <div className="text-center">
                   <p className="text-sm text-gray-500">

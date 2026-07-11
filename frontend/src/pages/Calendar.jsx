@@ -41,8 +41,7 @@ const Calendar = () => {
   const [providerStatus, setProviderStatus] = useState({
     google: false,
     outlook: false,
-    apple: false,
-    notion: false
+    apple: false
   });
   const [scheduleConfig, setScheduleConfig] = useState(null);
   const [doctorName, setDoctorName] = useState('');
@@ -81,17 +80,21 @@ const Calendar = () => {
         });
         
         clearTimeout(timeoutId);
-        
-        // Asegurarse de que los pacientes tengan la estructura correcta
-        const formattedPatients = Array.isArray(response.data) 
-          ? response.data.map(patient => ({
-              id: patient.id,
-              firstName: patient.firstName || patient.user?.firstName || '',
-              lastName: patient.lastName || patient.user?.lastName || '',
-              email: patient.email || patient.user?.email || '',
-              phone: patient.phone || patient.user?.phone || ''
-            }))
-          : [];
+
+        // my-patients devuelve una fila por caso clínico: unificar por paciente (mismo criterio que Dashboard / Billing)
+        const raw = Array.isArray(response.data) ? response.data : [];
+        const uniqueRaw = raw.reduce((acc, p) => {
+          if (!acc.some(x => x.id === p.id)) acc.push(p);
+          return acc;
+        }, []);
+
+        const formattedPatients = uniqueRaw.map(patient => ({
+          id: patient.id,
+          firstName: patient.firstName || patient.user?.firstName || '',
+          lastName: patient.lastName || patient.user?.lastName || '',
+          email: patient.email || patient.user?.email || '',
+          phone: patient.phone || patient.user?.phone || ''
+        }));
         setPatients(formattedPatients);
       } catch (error) {
         if (error.name === 'AbortError' || error.code === 'ECONNABORTED') {
@@ -119,15 +122,13 @@ const Calendar = () => {
         const nextStatus = {
           google: !!data.google?.connected,
           outlook: !!data.outlook?.connected,
-          apple: !!data.apple?.connected,
-          notion: !!data.notion?.connected
+          apple: !!data.apple?.connected
         };
         setProviderStatus(prev => {
           const unchanged =
             prev.google === nextStatus.google &&
             prev.outlook === nextStatus.outlook &&
-            prev.apple === nextStatus.apple &&
-            prev.notion === nextStatus.notion;
+            prev.apple === nextStatus.apple;
           return unchanged ? prev : nextStatus;
         });
       }
@@ -255,23 +256,22 @@ const Calendar = () => {
 
   // Función para obtener color según si tiene paciente y estado de confirmación
   // Todos los eventos provienen de calendarios externos (Google, Outlook, Apple)
-  const getEventColor = (hasPatient, confirmationStatus = null) => {
-    // Si NO tiene paciente asociado = evento externo (no es cita médica)
+  const getEventColor = (hasPatient, confirmationStatus = null, calendarHighlight = 'normal') => {
     if (!hasPatient) {
-      return '#9CA3AF'; // Gris - eventos externos sin paciente
+      return '#9CA3AF';
     }
-    
-    // Si tiene paciente = es una cita médica
-    // Verificar estado de confirmación
+    if (
+      confirmationStatus === 'CANCELLED' ||
+      calendarHighlight === 'cancelled' ||
+      calendarHighlight === 'refund_pending' ||
+      calendarHighlight === 'refunded'
+    ) {
+      return '#DC2626';
+    }
     if (confirmationStatus === 'CONFIRMED') {
-      return '#22C55E'; // Verde - citas confirmadas por el paciente
-    } else if (confirmationStatus === 'CANCELLED') {
-      // Cita cancelada/rechazada por el paciente (puede haber sido aceptada antes)
-      return '#DC2626'; // Rojo oscuro - citas rechazadas por el paciente
-    } else {
-      // PENDING, sin status, o cualquier otro estado = pendiente de confirmación
-      return '#FCA5A5'; // Rojo claro - citas pendientes de confirmación
+      return '#22C55E';
     }
+    return '#FCA5A5';
   };
 
   // Cargar eventos del calendario
@@ -311,15 +311,13 @@ const Calendar = () => {
       // Agregar timestamp para evitar caché y obtener datos actualizados
       params.append('_t', Date.now().toString());
       
+      // No enviar Cache-Control/Pragma: en cross-origin (www → api) obligan un preflight
+      // que fallaba si el backend no listaba esas cabeceras en CORS. El query _t evita caché.
       const response = await axios.get(`/api/calendar/events?${params}`, {
-        headers: { 
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
         },
-        timeout: 8000, // Timeout de 8 segundos (reducido de 10)
-        // Forzar que no use caché
-        cache: false
+        timeout: 8000
       });
 
       // Verificar que response.data sea un array
@@ -332,12 +330,17 @@ const Calendar = () => {
       const calendarEvents = response.data.map(event => {
         // Verificar si el evento tiene un paciente asociado
         const hasPatient = !!(event.patientId || event.patient);
-        const color = getEventColor(hasPatient, event.confirmationStatus);
+        const color = getEventColor(hasPatient, event.confirmationStatus, event.calendarHighlight);
         
-        // Si la cita está cancelada/rechazada, modificar el título
         let eventTitle = event.titulo;
         if (hasPatient && event.confirmationStatus === 'CANCELLED') {
-          eventTitle = `❌ Cita rechazada: ${event.titulo}`;
+          eventTitle = `❌ Cita cancelada: ${event.titulo}`;
+        } else if (hasPatient && event.calendarHighlight === 'refund_pending') {
+          eventTitle = `🔴 Reembolso solicitado: ${event.titulo}`;
+        } else if (hasPatient && event.calendarHighlight === 'refunded') {
+          eventTitle = `↩ Reembolsado: ${event.titulo}`;
+        } else if (hasPatient && event.paymentLabel) {
+          eventTitle = `${event.titulo} · ${event.paymentLabel}`;
         }
         
         return {
@@ -349,14 +352,21 @@ const Calendar = () => {
             titulo: event.titulo, // Guardar el título original sin el prefijo del estatus
             descripcion: event.descripcion,
             origenEvento: event.origenEvento,
+            appointmentType: event.appointmentType || null,
+            teleconsultationAmount: event.teleconsultationAmount ?? null,
             linkMeeting: event.linkMeeting,
+            meetingUrl: event.meetingUrl ?? null,
             patient: event.patient,
             doctor: event.doctor,
             externalProvider: event.externalProvider,
             externalEventId: event.externalEventId,
             externalUpdatedAt: event.externalUpdatedAt,
             confirmationStatus: event.confirmationStatus,
-            appointmentId: event.appointmentId || null
+            appointmentId: event.appointmentId || null,
+            mpPaymentStatus: event.mpPaymentStatus || null,
+            refundRequestStatus: event.refundRequestStatus || null,
+            paymentLabel: event.paymentLabel || null,
+            calendarHighlight: event.calendarHighlight || 'normal',
           },
           backgroundColor: color, // Usar siempre el color basado en confirmationStatus
           borderColor: color,
@@ -496,10 +506,13 @@ const Calendar = () => {
   // Crear nuevo evento
   const handleCreateEvent = async (eventData) => {
     try {
-      await axios.post('/api/calendar/events', eventData, {
+      const response = await axios.post('/api/calendar/events', eventData, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       toast.success('Evento creado correctamente');
+      if (response.data?.calendarSyncWarning) {
+        toast.warn(response.data.calendarSyncWarning, { autoClose: 10000 });
+      }
       setShowCreateModal(false);
       // Recargar eventos del calendario
       if (calendarRef.current) {
@@ -518,10 +531,13 @@ const Calendar = () => {
   // Actualizar evento
   const handleUpdateEvent = async (eventId, eventData) => {
     try {
-      await axios.put(`/api/calendar/events/${eventId}`, eventData, {
+      const response = await axios.put(`/api/calendar/events/${eventId}`, eventData, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
       toast.success('Evento actualizado correctamente');
+      if (response.data?.calendarSyncWarning) {
+        toast.warn(response.data.calendarSyncWarning, { autoClose: 10000 });
+      }
       setShowEventModal(false);
       // Recargar eventos del calendario
       if (calendarRef.current) {
@@ -728,7 +744,6 @@ const Calendar = () => {
                       <option value="">Todos los orígenes</option>
                       <option value="google">Google Calendar</option>
                       <option value="outlook">Outlook</option>
-                      <option value="notion">Notion</option>
                     </select>
                   </div>
 
@@ -825,7 +840,7 @@ const Calendar = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 rounded" style={{ backgroundColor: '#DC2626' }}></div>
-                      <span className="text-gray-600">Citas rechazadas por los pacientes</span>
+                      <span className="text-gray-600">Cancelada / reembolso solicitado</span>
                     </div>
                   </div>
                 </div>
@@ -957,7 +972,6 @@ const Calendar = () => {
                       <option value="">Todos los orígenes</option>
                       <option value="google">Google Calendar</option>
                       <option value="outlook">Outlook</option>
-                      <option value="notion">Notion</option>
                     </select>
                   </div>
 
@@ -1027,7 +1041,6 @@ const Calendar = () => {
                       <option value="">Todos los orígenes</option>
                       <option value="google">Google Calendar</option>
                       <option value="outlook">Outlook</option>
-                      <option value="notion">Notion</option>
                     </select>
                   </div>
 

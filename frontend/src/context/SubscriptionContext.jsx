@@ -22,7 +22,21 @@ export const SubscriptionProvider = ({ children }) => {
       setLoading(false);
       return;
     }
-    
+    // Paciente / asistente: sin plan de pago; el backend devuelve ACTIVE, pero evitamos llamada
+    // y estados "EXPIRED" raros mientras /auth/me aún no hidrata el rol en contexto
+    try {
+      const raw = localStorage.getItem('user');
+      if (raw) {
+        const u = JSON.parse(raw);
+        if (u?.role === 'PATIENT' || u?.role === 'ASISTENTE') {
+          setSubscriptionStatus('ACTIVE');
+          setLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // ignore
+    }
     try {
       const response = await axios.get('/api/subscriptions/status', {
         headers: { Authorization: `Bearer ${token}` }

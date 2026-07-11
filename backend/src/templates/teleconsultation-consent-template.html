@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consentimiento Informado para Teleconsulta</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; line-height: 1.35; color: #333; background: white; }
+        .container { max-width: 800px; margin: 0 auto; padding: 18px; }
+        h1 { font-size: 18px; color: #1e40af; margin-bottom: 12px; border-bottom: 2px solid #2563eb; padding-bottom: 6px; }
+        h2 { font-size: 13px; color: #374151; margin: 10px 0 6px; }
+        .section { margin-bottom: 10px; }
+        .field { margin-bottom: 4px; font-size: 11px; }
+        .field strong { display: inline-block; width: 140px; }
+        .privacy-notice { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin: 8px 0; font-size: 10px; line-height: 1.35; }
+        .signature-block { margin-top: 10px; padding-top: 8px; border-top: 2px solid #e5e7eb; }
+        .signature-block .field { margin-bottom: 5px; }
+        .timestamp { font-size: 10px; color: #6b7280; margin-top: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Consentimiento Informado para Teleconsulta</h1>
+        <p style="font-size: 12px; margin-bottom: 16px;">Qlinexa360 - Plataforma de gestión médica</p>
+
+        <div class="section">
+            <h2>Datos del paciente</h2>
+            <div class="field"><strong>Nombre completo:</strong> {{patientFullName}}</div>
+            <div class="field"><strong>Correo electrónico:</strong> {{patientEmail}}</div>
+            <div class="field"><strong>Teléfono:</strong> {{patientPhone}}</div>
+        </div>
+
+        <div class="section">
+            <h2>Datos del profesional de salud</h2>
+            <div class="field"><strong>Nombre:</strong> {{doctorFullName}}</div>
+            <div class="field"><strong>Título profesional:</strong> {{doctorTitle}}</div>
+        </div>
+
+        <div class="section">
+            <h2>Fecha y hora de la teleconsulta</h2>
+            <div class="field"><strong>Fecha:</strong> {{appointmentDate}}</div>
+            <div class="field"><strong>Hora:</strong> {{appointmentTime}}</div>
+        </div>
+
+        <div class="section">
+            <h2>Aviso de privacidad</h2>
+            <div class="privacy-notice">
+                <p style="margin-bottom: 10px;"><strong>Aviso legal (documento firmado):</strong> Qlinexa360 facilita la gestión administrativa y documental de teleconsultas, pero no presta servicios médicos ni garantiza por sí misma la suficiencia clínica de la atención a distancia. La procedencia de la teleconsulta, el diagnóstico, tratamiento y la eventual necesidad de atención presencial son responsabilidad exclusiva del profesional de la salud.</p>
+                <p>Al firmar este documento, el paciente consiente la realización de una consulta médica a distancia mediante videollamada.</p>
+                <p style="margin-top: 8px;">Los datos personales serán tratados conforme al Aviso de Privacidad de Qlinexa360 (LFPDPPP). La teleconsulta no sustituye la valoración presencial cuando sea necesaria. No se realizará grabación de video ni audio de la sesión.</p>
+                <p style="margin-top: 8px; font-size: 9.5px;"><strong>Contacto y sitio oficial:</strong> www.qlinexa360.com | legal@qlinexa360.com</p>
+            </div>
+        </div>
+
+        <div class="signature-block">
+            <h2>Firma digital</h2>
+            <div class="field"><strong>Firma (nombre completo):</strong> {{signature}}</div>
+            <div class="field"><strong>Nombre completo:</strong> {{signature}}</div>
+            <div class="field"><strong>Correo electrónico:</strong> {{patientEmail}}</div>
+            <div class="field"><strong>Fecha y hora de firma:</strong> {{signedAt}}</div>
+            <div class="field"><strong>Time stamp:</strong> {{signedAtIso}}</div>
+            <div class="field"><strong>Dirección IP (trazabilidad):</strong> {{consentIp}}</div>
+        </div>
+
+        <div class="timestamp">Documento generado el {{generatedAt}}</div>
+    </div>
+</body>
+</html>

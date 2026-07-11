@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
+import prisma from '../config/database';
 
 // 1. Definir y exportar el tipo del payload del usuario
 export interface UserPayload {
@@ -16,32 +17,18 @@ export interface AuthRequest extends Request {
 
 // 3. Middleware de autenticación principal
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
-  console.log('=== authenticateToken DEBUG ===');
-  console.log('Headers:', req.headers);
-  
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  
-  console.log('Auth header:', authHeader);
-  console.log('Token extraído:', token ? 'Presente' : 'Ausente');
 
   if (token == null) {
-    console.log('ERROR: No se proporcionó token de autenticación');
     return res.status(401).json({ message: 'No se proporcionó token de autenticación.' });
   }
 
   jwt.verify(token, env.JWT_SECRET, (err: any, user: any) => {
     if (err) {
-      console.log('ERROR: Token inválido o expirado:', err.message);
       return res.status(403).json({ message: 'Token inválido o expirado.' });
     }
-    
-    console.log('Token verificado correctamente');
-    console.log('Usuario decodificado:', user);
-    
-    req.user = user as UserPayload; // 4. Castear el usuario al tipo definido
-    console.log('Usuario asignado a req.user:', req.user);
-    
+    req.user = user as UserPayload;
     next();
   });
 };
@@ -60,26 +47,49 @@ export const optionalAuthenticate = (req: AuthRequest, res: Response, next: Next
 // 5. Middleware de autorización por rol
 export const authMiddleware = (allowedRoles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
-    console.log('=== authMiddleware DEBUG ===');
-    console.log('Roles permitidos:', allowedRoles);
-    console.log('req.user antes de authenticateToken:', req.user);
-    
     authenticateToken(req, res, () => {
-      console.log('=== Después de authenticateToken ===');
-      console.log('req.user después de authenticateToken:', req.user);
-      console.log('req.user?.role:', req.user?.role);
-      console.log('¿Está permitido?:', req.user && allowedRoles.includes(req.user.role));
-      
       if (req.user && allowedRoles.includes(req.user.role)) {
-        console.log('✅ Usuario autorizado, continuando...');
-        next(); // El usuario tiene el rol permitido
+        next();
       } else {
-        console.log('❌ Usuario NO autorizado');
-        console.log('Usuario:', req.user);
-        console.log('Rol del usuario:', req.user?.role);
-        console.log('Roles permitidos:', allowedRoles);
         res.status(403).json({ message: 'No tienes permiso para acceder a este recurso.' });
       }
     });
   };
+};
+
+/** Para redirecciones del navegador (OAuth MP): acepta JWT en ?token= si no hay Authorization header. */
+export function attachAuthTokenFromQuery(req: AuthRequest, _res: Response, next: NextFunction) {
+  if (!req.headers.authorization && typeof req.query.token === 'string' && req.query.token) {
+    req.headers.authorization = `Bearer ${req.query.token}`;
+  }
+  next();
+}
+
+/**
+ * Autoriza el acceso al módulo de afiliado tratándolo como una CAPACIDAD y no como un rol:
+ * pasa si el usuario tiene rol AFFILIATE (afiliado "puro") o si tiene un AffiliateProfile
+ * vinculado (p. ej. un paciente que además es afiliado).
+ */
+export const requireAffiliateAccess = (req: AuthRequest, res: Response, next: NextFunction) => {
+  authenticateToken(req, res, async () => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'No autenticado.' });
+    }
+    if (req.user.role === 'AFFILIATE') {
+      return next();
+    }
+    try {
+      const profile = await prisma.affiliateProfile.findUnique({
+        where: { userId: req.user.userId },
+        select: { id: true }
+      });
+      if (profile) {
+        return next();
+      }
+    } catch (error) {
+      console.error('Error verificando capacidad de afiliado:', error);
+      return res.status(500).json({ message: 'Error verificando permisos.' });
+    }
+    return res.status(403).json({ message: 'No tienes permiso para acceder a este recurso.' });
+  });
 }; 

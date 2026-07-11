@@ -32,7 +32,7 @@ const DashboardLayout = () => {
           <Link to="/dashboard/benefits" className="flex items-center space-x-2">
             <img
               src="/logo.svg"
-              alt="Qlinexa360 Logo"
+              alt="Qlinexa360"
               className="h-8 w-8"
             />
             <span className="text-white text-xl font-semibold">Qlinexa360</span>

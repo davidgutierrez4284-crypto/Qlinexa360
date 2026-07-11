@@ -104,7 +104,9 @@ class OutlookCalendarSyncService {
     }
     static buildEventBody(payload) {
         var _a;
-        const wantsTeams = payload.teamsEnabled || payload.conferenceType === 'teams';
+        // Si se pide deshabilitar explícitamente, nunca habilitar Teams (presencial)
+        const wantsTeams = !payload.disableConference &&
+            (payload.teamsEnabled || payload.conferenceType === 'teams');
         // Si hay attendees (pacientes), agregar emoji de Qlinexa360 y "consulta" al título para que se destaque en el calendario del paciente
         // Primero limpiar TODOS los emojis 🏥 y la palabra "consulta" que puedan existir
         let cleanTitle = payload.title.replace(/🏥\s*/g, '').trim();
@@ -119,7 +121,11 @@ class OutlookCalendarSyncService {
                 content: payload.description || ''
             },
             location: {
-                displayName: payload.location || ''
+                // La reunión de Teams vive en onlineMeeting; nunca en "location".
+                // Limpiamos location para evitar que el invitado vea una liga vieja además de la actual.
+                displayName: /meet\.google\.com|teams\.microsoft\.com|zoom\.us/i.test(payload.location || '')
+                    ? ''
+                    : (payload.location || '')
             },
             start: {
                 dateTime: payload.start.toISOString(),

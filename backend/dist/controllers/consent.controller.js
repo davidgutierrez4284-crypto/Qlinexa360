@@ -37,7 +37,7 @@ const submitConsentAfterPatientSetup = async (req, res) => {
         if (elapsed > CONSENT_WINDOW_MS) {
             return res.status(400).json({ error: 'El tiempo para firmar los consentimientos ha expirado. Inicie sesión y contacte a soporte.' });
         }
-        await createConsentRecords(resetToken.user, signature.trim());
+        await createConsentRecords(resetToken.user, signature.trim(), req.ip || req.socket.remoteAddress || 'IP no disponible');
         res.json({ message: 'Consentimientos registrados exitosamente' });
     }
     catch (error) {
@@ -68,7 +68,7 @@ const submitConsentAssistant = async (req, res) => {
         if (user.role !== 'ASISTENTE') {
             return res.status(400).json({ error: 'Token inválido' });
         }
-        await createConsentRecords(user, signature.trim());
+        await createConsentRecords(user, signature.trim(), req.ip || req.socket.remoteAddress || 'IP no disponible');
         res.json({ message: 'Consentimientos registrados exitosamente' });
     }
     catch (error) {
@@ -77,14 +77,17 @@ const submitConsentAssistant = async (req, res) => {
     }
 };
 exports.submitConsentAssistant = submitConsentAssistant;
-async function createConsentRecords(user, signature) {
+async function createConsentRecords(user, signature, ipAddress) {
     const fullName = `${user.firstName} ${user.lastName}`.trim();
     const consentDate = new Date();
     const pdfResults = await consentPdf_service_1.ConsentPdfService.generateConsentPdfs({
         userId: user.id,
         email: user.email,
         fullName,
-        signature
+        signature,
+        role: user.role,
+        ipAddress,
+        signedAt: consentDate
     });
     await prisma.consentHistory.createMany({
         data: [
@@ -121,9 +124,9 @@ async function createConsentRecords(user, signature) {
             }
         ]
     });
-    // Enviar notificación a legal@qlinexa360.com con datos del usuario y PDFs
+    // Enviar documentos firmados en mails independientes al usuario y a legal
     try {
-        await notification_service_1.NotificationService.sendNewUserConsentToLegal({
+        const payload = {
             fullName,
             email: user.email,
             role: user.role,
@@ -132,10 +135,14 @@ async function createConsentRecords(user, signature) {
                 terminos: pdfResults.TERMS_OF_SERVICE.buffer,
                 contrato: pdfResults.PLATFORM_CONTRACT.buffer
             }
-        });
+        };
+        await Promise.all([
+            notification_service_1.NotificationService.sendNewUserConsentToUser(payload),
+            notification_service_1.NotificationService.sendNewUserConsentToLegal(payload)
+        ]);
     }
     catch (emailError) {
-        console.error('Error enviando notificación a legal@qlinexa360.com:', emailError);
+        console.error('Error enviando consentimientos por email:', emailError);
         // No fallar el registro si el email falla
     }
 }

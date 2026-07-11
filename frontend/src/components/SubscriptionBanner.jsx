@@ -1,15 +1,34 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useAuth } from '../context/AuthContext';
 
 const SubscriptionBanner = () => {
   const navigate = useNavigate();
+  const { pathname = '' } = useLocation();
   const { isExpired, isCancelled, isReadOnly, loading } = useSubscription();
   const { user } = useAuth();
 
-  // Solo mostrar para doctores
-  if (!user || user.role !== 'DOCTOR' || loading) return null;
+  // Primer: rutas de firma pública (paciente) — nunca mezclar con suscripción (solo paga el DOCTOR)
+  if (
+    pathname.startsWith('/compartir-caso-clinico') ||
+    pathname.startsWith('/teleconsulta/') ||
+    pathname.startsWith('/teleconsulta') ||
+    pathname.startsWith('/confirm-appointment/') ||
+    pathname.startsWith('/confirm-appointment') ||
+    pathname.startsWith('/pre-consulta/') ||
+    pathname.startsWith('/pre-consulta')
+  ) {
+    return null;
+  }
+  // Pacientes: sin costo, sin avisos de renovación
+  if (user?.role === 'PATIENT') {
+    return null;
+  }
+  // Solo cuentas de profesional (doctor) tienen plan de pago; asistentes no ven este banner
+  if (!user || user.role !== 'DOCTOR' || loading) {
+    return null;
+  }
 
   if (isCancelled) {
     return (
@@ -36,7 +55,7 @@ const SubscriptionBanner = () => {
 
   if (isExpired) {
     const handleRenewSubscription = () => {
-      navigate('/pago');
+      navigate('/dashboard/resume-subscription');
     };
 
     return (

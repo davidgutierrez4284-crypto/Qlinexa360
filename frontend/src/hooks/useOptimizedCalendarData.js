@@ -127,8 +127,14 @@ export const useOptimizedCalendarData = () => {
 
       if (!response.ok) throw new Error('Error al cargar pacientes');
       
-      const patients = await response.json();
-      
+      const raw = await response.json();
+      const patients = Array.isArray(raw)
+        ? raw.reduce((acc, p) => {
+            if (!acc.some(x => x.id === p.id)) acc.push(p);
+            return acc;
+          }, [])
+        : [];
+
       setData(prev => ({ ...prev, patients }));
       setCache(cacheKey, patients);
       setError(null);

@@ -5,16 +5,84 @@ import { generateToken, generateTwoFactorToken, verifyToken, generateTrustedDevi
 import { env } from '../config/env';
 import { validateRegister, validateLogin } from '../utils/validation.utils';
 import { AppError } from '../utils/error.utils';
+import { patientHasClinicalHistoryPortalAccess } from '../utils/patientPortal.utils';
 import { NotificationService } from '../services/notification.service';
 import { ConsentPdfService } from '../services/consentPdf.service';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { uploadToS3 } from '../utils/file.utils';
 import { getPromoCodeOrThrow, getPromoDurationDays, normalizePromoCode } from '../utils/promo.utils';
+import { generateUniqueReferralCode, normalizeReferralCode } from '../utils/referral.utils';
+import { computePayPalFirstCycleDays } from '../utils/referralRegistration.utils';
+import { applyReferralRewardIfEligible } from '../services/referral.service';
+import { DEFAULT_AFFILIATE_TRIAL_DAYS as AFFILIATE_DEFAULT_TRIAL_DAYS } from '../constants/affiliate.constants';
 import speakeasy from 'speakeasy';
 import qrcode from 'qrcode';
 import crypto from 'crypto';
+import { recordSecurityLoginAudit } from '../services/securityLoginAudit.service';
 
 const TWO_FACTOR_TOKEN_EXPIRY = '10m';
+const MAX_PROFILE_PHOTO_BYTES = 5 * 1024 * 1024;
+
+/** Data URL desde el registro (jpg/png/webp). null si no hay foto o formato inválido. */
+function parseDoctorRegistrationProfilePictureDataUrl(raw: unknown): { buffer: Buffer; mimetype: string; ext: string } | null {
+  if (raw == null || typeof raw !== 'string') return null;
+  const s = raw.trim();
+  if (!s) return null;
+  const m = /^data:image\/(jpeg|jpg|png|webp);base64,([\s\S]+)$/i.exec(s);
+  if (!m) return null;
+  const kind = m[1].toLowerCase();
+  const mimetype =
+    kind === 'png' ? 'image/png' : kind === 'webp' ? 'image/webp' : 'image/jpeg';
+  const ext = kind === 'png' ? 'png' : kind === 'webp' ? 'webp' : 'jpg';
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(m[2].replace(/\s/g, ''), 'base64');
+  } catch {
+    return null;
+  }
+  if (!buffer.length) return null;
+  if (buffer.length > MAX_PROFILE_PHOTO_BYTES) {
+    throw new AppError('La foto de perfil supera 5MB', 400);
+  }
+  return { buffer, mimetype, ext };
+}
+
+async function uploadDoctorRegistrationProfilePicture(userId: string, raw: unknown): Promise<string | null> {
+  try {
+    const parsed = parseDoctorRegistrationProfilePictureDataUrl(raw);
+    if (!parsed) return null;
+    const { buffer, mimetype, ext } = parsed;
+    const fakeFile = {
+      fieldname: 'profilePicture',
+      originalname: `profile.${ext}`,
+      encoding: '7bit' as const,
+      mimetype,
+      buffer,
+      size: buffer.length,
+      destination: '',
+      filename: '',
+      path: '',
+      stream: null as any,
+    } as Express.Multer.File;
+    const { url } = await uploadToS3(fakeFile, 'doctor-profile-photos', userId);
+    return url;
+  } catch (e) {
+    if (e instanceof AppError) throw e;
+    console.error('Registro doctor: no se pudo subir la foto de perfil a S3:', e);
+    return null;
+  }
+}
+
+function clientIp(req: Request): string | undefined {
+  const x = req.headers['x-forwarded-for'];
+  if (typeof x === 'string') return x.split(',')[0]?.trim();
+  return req.socket.remoteAddress || undefined;
+}
+
+function clientUa(req: Request): string | undefined {
+  const ua = req.headers['user-agent'];
+  return typeof ua === 'string' ? ua : undefined;
+}
 const TWO_FACTOR_RECOVERY_EXPIRY_MS = 10 * 60 * 1000;
 
 const buildAuthResponse = async (user: any) => {
@@ -49,6 +117,24 @@ const buildAuthResponse = async (user: any) => {
     profilePictureUrl = user.profilePictureUrl || null;
   }
 
+  // Capacidad "afiliado": cualquier usuario (paciente/doctor/etc.) puede además tener
+  // un perfil de afiliado. No depende del rol, sino de la existencia del perfil.
+  let affiliateProfileId: string | null = null;
+  try {
+    const affiliateProfile = await prisma.affiliateProfile.findUnique({
+      where: { userId: user.id },
+      select: { id: true }
+    });
+    if (affiliateProfile) affiliateProfileId = affiliateProfile.id;
+  } catch (affiliateError: any) {
+    console.error('Error al buscar perfil de afiliado:', affiliateError);
+  }
+
+  let clinicalHistoryPortalEnabled: boolean | undefined;
+  if (user.role === 'PATIENT' && patientId) {
+    clinicalHistoryPortalEnabled = await patientHasClinicalHistoryPortalAccess(patientId);
+  }
+
   const tokenPayload: any = { userId: user.id, role: user.role };
   if (doctorId) tokenPayload.doctorId = doctorId;
   if (patientId) tokenPayload.patientId = patientId;
@@ -64,7 +150,10 @@ const buildAuthResponse = async (user: any) => {
       role: user.role,
       doctorId,
       patientId,
-      profilePictureUrl
+      profilePictureUrl,
+      hasAffiliateProfile: !!affiliateProfileId,
+      affiliateProfileId,
+      ...(clinicalHistoryPortalEnabled !== undefined && { clinicalHistoryPortalEnabled }),
     }
   };
 };
@@ -130,6 +219,64 @@ export const register = async (req: Request, res: Response) => {
 
     // Si el rol es DOCTOR, crear el perfil Doctor y la suscripción asociada
     if (role === 'DOCTOR') {
+      let registrationProfilePictureUrl = '';
+      try {
+        const uploadedUrl = await uploadDoctorRegistrationProfilePicture(user.id, req.body.profilePictureBase64);
+        if (uploadedUrl) registrationProfilePictureUrl = uploadedUrl;
+      } catch (e) {
+        if (e instanceof AppError) throw e;
+        console.error('Registro doctor: error inesperado con foto de perfil', e);
+      }
+
+      let referrerDoctorId: string | undefined;
+      const rawRef = req.body?.referrerInviteCode ?? req.body?.ref;
+      const normalizedRef = normalizeReferralCode(typeof rawRef === 'string' ? rawRef : '');
+      if (normalizedRef) {
+        const referrer = await prisma.doctor.findFirst({
+          where: { referralCode: normalizedRef },
+          select: { id: true, userId: true },
+        });
+        if (referrer && referrer.userId !== user.id) {
+          referrerDoctorId = referrer.id;
+        }
+      }
+
+      // Código de afiliado comercial (comisionista). Mutuamente excluyente con referido-doctor.
+      const rawAffiliateCode = req.body?.affiliateCode ?? req.body?.aff;
+      const normalizedAffiliateCode =
+        typeof rawAffiliateCode === 'string' ? rawAffiliateCode.trim().toUpperCase() : '';
+      let affiliateForReferral: { id: string; affiliateCode: string } | null = null;
+      if (normalizedAffiliateCode) {
+        if (referrerDoctorId) {
+          throw new AppError(
+            'No puedes usar un código de afiliado y un código de referido al mismo tiempo.',
+            400
+          );
+        }
+        const affiliate = await prisma.affiliateProfile.findUnique({
+          where: { affiliateCode: normalizedAffiliateCode },
+          select: {
+            id: true,
+            affiliateCode: true,
+            status: true,
+            userId: true,
+            user: { select: { email: true } }
+          }
+        });
+        if (!affiliate || affiliate.status !== 'ACTIVE') {
+          throw new AppError('El código de afiliado no es válido o está inactivo.', 400);
+        }
+        if (
+          affiliate.userId === user.id ||
+          (affiliate.user?.email || '').toLowerCase() === String(email).toLowerCase()
+        ) {
+          throw new AppError('Un afiliado no puede referirse a sí mismo.', 400);
+        }
+        affiliateForReferral = { id: affiliate.id, affiliateCode: affiliate.affiliateCode };
+      }
+
+      const ownReferralCode = await generateUniqueReferralCode(prisma);
+
       // Crear perfil Doctor (rellenar campos con datos reales si están en el formulario)
       const doctorProfile = await prisma.doctor.create({
         data: {
@@ -142,6 +289,8 @@ export const register = async (req: Request, res: Response) => {
           taxId: req.body.taxId || '',
           taxName: req.body.taxName || '',
           taxAddress: req.body.taxStreet || '',
+          taxPostalCode: req.body.taxZip || null,
+          taxRegime: req.body.taxRegime || null,
           taxCertificateUrl: '', // Puedes agregar lógica de subida de archivo si aplica
           dataConsent: !!req.body.acceptPrivacy,
           termsAccepted: !!req.body.acceptTerms,
@@ -151,19 +300,43 @@ export const register = async (req: Request, res: Response) => {
           trialEnd: promo && promo.type !== 'LIFETIME'
             ? new Date(Date.now() + getPromoDurationDays(promo.type) * 24 * 60 * 60 * 1000)
             : null,
-          profilePictureUrl: '' // Puedes agregar lógica de subida de imagen si aplica
+          profilePictureUrl: registrationProfilePictureUrl,
+          referralCode: ownReferralCode,
+          referrerDoctorId: referrerDoctorId ?? undefined,
         }
       });
       const doctorId = doctorProfile.id;
+
+      // Registrar la relación afiliado→doctor (si vino un código de afiliado válido).
+      // La comisión solo se generará cuando PayPal confirme el primer pago (vía webhook).
+      if (affiliateForReferral) {
+        try {
+          await prisma.affiliateReferral.create({
+            data: {
+              affiliateId: affiliateForReferral.id,
+              doctorUserId: user.id,
+              doctorEmail: email,
+              doctorName: `${firstName} ${lastName}`.trim() || null,
+              affiliateCodeUsed: affiliateForReferral.affiliateCode,
+              trialDaysGranted: AFFILIATE_DEFAULT_TRIAL_DAYS,
+              status: 'REGISTERED'
+            }
+          });
+        } catch (affErr) {
+          // No romper el registro del doctor si la vinculación con el afiliado falla.
+          console.error('Error registrando AffiliateReferral:', affErr);
+        }
+      }
+
       const { paypalSubscriptionId, paypalPlanId } = req.body;
       const now = new Date();
 
       if (paypalSubscriptionId) {
-        // Con PayPal: pago directo o promo con trial (1M/3M) + PayPal
-        const isTrialPromo = promo && promo.type !== 'LIFETIME';
-        const endDate = isTrialPromo
-          ? new Date(Date.now() + getPromoDurationDays(promo!.type) * 24 * 60 * 60 * 1000)
-          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 días si pago directo
+        // Con PayPal: primer ciclo = días promo/referido + 15 días de uso gratuito plataforma (cobro desde día 16), salvo LIFETIME. Ver computePayPalFirstCycleDays.
+        const { totalDays } = computePayPalFirstCycleDays(promo, referrerDoctorId, {
+          affiliateGrantsFreeMonth: !!affiliateForReferral
+        });
+        const endDate = new Date(Date.now() + totalDays * 24 * 60 * 60 * 1000);
 
         const tx: Promise<unknown>[] = [];
         if (promo) {
@@ -192,6 +365,7 @@ export const register = async (req: Request, res: Response) => {
           })
         );
         await prisma.$transaction(tx as any);
+        await applyReferralRewardIfEligible(doctorId);
       } else if (promo && promo.type === 'LIFETIME') {
         // Solo LIFETIME sin PayPal
         const endDate = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000);
@@ -216,6 +390,7 @@ export const register = async (req: Request, res: Response) => {
             }
           })
         ]);
+        await applyReferralRewardIfEligible(doctorId);
       } else if (promo) {
         // Código de trial (1M/3M) sin PayPal: rechazar (deberían haber registrado PayPal)
         throw new AppError(
@@ -233,30 +408,38 @@ export const register = async (req: Request, res: Response) => {
       if (signature && req.body.acceptPrivacy && req.body.acceptTerms && req.body.acceptContract) {
         try {
           const fullName = `${user.firstName} ${user.lastName}`.trim();
+          const consentDate = new Date();
           const pdfResults = await ConsentPdfService.generateConsentPdfs({
             userId: user.id,
             email: user.email,
             fullName,
-            signature
+            signature,
+            role: user.role,
+            ipAddress: req.ip || req.socket.remoteAddress || 'IP no disponible',
+            signedAt: consentDate
           });
           await prisma.consentHistory.createMany({
             data: [
-              { userId: user.id, type: 'PRIVACY_POLICY', version: '1.0', content: 'Aviso de Privacidad de Qlinexa360', pdfUrl: pdfResults.PRIVACY_POLICY.url },
-              { userId: user.id, type: 'TERMS_OF_SERVICE', version: '1.0', content: 'Términos de Uso de Qlinexa360', pdfUrl: pdfResults.TERMS_OF_SERVICE.url },
-              { userId: user.id, type: 'PLATFORM_CONTRACT', version: '1.0', content: 'Contrato de Uso de Plataforma de Qlinexa360', pdfUrl: pdfResults.PLATFORM_CONTRACT.url },
-              { userId: user.id, type: 'DIGITAL_SIGNATURE', version: '1.0', content: `Firma digital: ${signature}` }
+              { userId: user.id, type: 'PRIVACY_POLICY', version: '1.0', content: 'Aviso de Privacidad de Qlinexa360', acceptedAt: consentDate, pdfUrl: pdfResults.PRIVACY_POLICY.url },
+              { userId: user.id, type: 'TERMS_OF_SERVICE', version: '1.0', content: 'Términos de Uso de Qlinexa360', acceptedAt: consentDate, pdfUrl: pdfResults.TERMS_OF_SERVICE.url },
+              { userId: user.id, type: 'PLATFORM_CONTRACT', version: '1.0', content: 'Contrato de Uso de Plataforma de Qlinexa360', acceptedAt: consentDate, pdfUrl: pdfResults.PLATFORM_CONTRACT.url },
+              { userId: user.id, type: 'DIGITAL_SIGNATURE', version: '1.0', content: `Firma digital: ${signature}`, acceptedAt: consentDate }
             ]
           });
-          await NotificationService.sendNewUserConsentToLegal({
+          const consentEmailPayload = {
             fullName,
             email: user.email,
-            role: 'DOCTOR',
+            role: user.role,
             pdfBuffers: {
               aviso: pdfResults.PRIVACY_POLICY.buffer,
               terminos: pdfResults.TERMS_OF_SERVICE.buffer,
               contrato: pdfResults.PLATFORM_CONTRACT.buffer
             }
-          });
+          };
+          await Promise.all([
+            NotificationService.sendNewUserConsentToUser(consentEmailPayload),
+            NotificationService.sendNewUserConsentToLegal(consentEmailPayload)
+          ]);
         } catch (consentError) {
           console.error('Error generando consentimientos o enviando a legal:', consentError);
           // No fallar el registro si falla
@@ -308,6 +491,9 @@ export const register = async (req: Request, res: Response) => {
       });
     }
   } catch (error: any) {
+    if (!(error instanceof AppError)) {
+      console.error('Error inesperado en register:', error);
+    }
     const handled = error instanceof AppError ? error : new AppError('Error al registrar usuario', 500);
     res.status(handled.statusCode).json({ message: handled.message });
   }
@@ -326,6 +512,12 @@ export const login = async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       console.log('Usuario no encontrado');
+      void recordSecurityLoginAudit({
+        email,
+        success: false,
+        ip: clientIp(req),
+        userAgent: clientUa(req),
+      });
       throw new AppError('Credenciales inválidas', 401);
     }
 
@@ -342,9 +534,23 @@ export const login = async (req: Request, res: Response) => {
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       console.log('Contraseña inválida');
+      void recordSecurityLoginAudit({
+        userId: user.id,
+        email,
+        success: false,
+        ip: clientIp(req),
+        userAgent: clientUa(req),
+      });
       throw new AppError('Credenciales inválidas', 401);
     }
     console.log('Contraseña válida');
+    void recordSecurityLoginAudit({
+      userId: user.id,
+      email,
+      success: true,
+      ip: clientIp(req),
+      userAgent: clientUa(req),
+    });
 
     // Bypass 2FA solo en desarrollo cuando DISABLE_2FA_DEV=true (usuarios con email inexistente)
     const isDevBypass = env.NODE_ENV === 'development' && env.DISABLE_2FA_DEV;
@@ -478,6 +684,13 @@ export const verifyTwoFactor = async (req: Request, res: Response) => {
     if (rememberDevice) {
       response.trustedDeviceToken = generateTrustedDeviceToken(user.id);
     }
+    void recordSecurityLoginAudit({
+      userId: user.id,
+      email: user.email,
+      success: true,
+      ip: clientIp(req),
+      userAgent: clientUa(req),
+    });
     res.json(response);
   } catch (error: any) {
     const handled = error instanceof AppError ? error : new AppError('Error al verificar 2FA', 500);
@@ -767,6 +980,23 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
       profilePictureUrl = user.profilePictureUrl || null;
     }
 
+    let clinicalHistoryPortalEnabled: boolean | undefined;
+    if (user.role === 'PATIENT' && patientId) {
+      clinicalHistoryPortalEnabled = await patientHasClinicalHistoryPortalAccess(patientId);
+    }
+
+    // Capacidad "afiliado" (independiente del rol): existe perfil de afiliado.
+    let affiliateProfileId: string | null = null;
+    try {
+      const affiliateProfile = await prisma.affiliateProfile.findUnique({
+        where: { userId: user.id },
+        select: { id: true }
+      });
+      if (affiliateProfile) affiliateProfileId = affiliateProfile.id;
+    } catch (affiliateError: any) {
+      console.error('Error al buscar perfil de afiliado:', affiliateError);
+    }
+
     res.json({
       user: {
         id: user.id,
@@ -777,7 +1007,10 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
         phone: user.phone,
         doctorId,
         patientId,
-        profilePictureUrl
+        profilePictureUrl,
+        hasAffiliateProfile: !!affiliateProfileId,
+        affiliateProfileId,
+        ...(clinicalHistoryPortalEnabled !== undefined && { clinicalHistoryPortalEnabled }),
       }
     });
   } catch (error: any) {

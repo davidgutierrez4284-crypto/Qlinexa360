@@ -1,9 +1,8 @@
 import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { securityLogger } from '../utils/logger.utils';
-import { NotificationService } from '../services/notification.service';
 import { AuthRequest } from '../middlewares/auth.middleware';
-import { fetchBufferFromUrl } from '../utils/file.utils';
+import { createCaseShareInvite } from '../services/caseShareInvite.service';
 
 const prisma = new PrismaClient();
 
@@ -59,76 +58,29 @@ export class CollaborativeWorkController {
         include: { user: true }
       });
 
-      // Crear la colaboración
-      const colaboracion = await prisma.padecimientoDoctorColaborador.create({
-        data: {
-          patientId,
-          padecimientoId,
-          doctorId,
-          rol: rol || 'colaborador'
-        }
+      // Invitación con consentimiento del paciente (no se crea el vínculo colaborador hasta la firma)
+      const { expiresAt } = await createCaseShareInvite({
+        ownerDoctorId: currentDoctor.id,
+        patientId,
+        clinicalCaseId: padecimientoId,
+        invitedDoctorId: doctorId
       });
 
-      // Crear notificación para el doctor colaborador (campanita)
-      if (patient && requestingDoctor && doctor.userId) {
-        const notification = await prisma.notification.create({
-          data: {
-            userId: doctor.userId, // Usar el userId del doctor colaborador
-            type: 'COLLABORATION_REQUEST',
-            title: 'Solicitud de colaboración',
-            message: `El Dr. ${requestingDoctor.user.firstName} ${requestingDoctor.user.lastName} te ha invitado a colaborar en el caso clínico "${clinicalCase.padecimiento}" del paciente ${patient.user.firstName} ${patient.user.lastName}`,
-            data: {
-              patientId,
-              clinicalCaseId: padecimientoId,
-              requestingDoctorId: userId,
-              requestingDoctorName: `${requestingDoctor.user.firstName} ${requestingDoctor.user.lastName}`
-            }
-          }
-        });
-        securityLogger.info(`Notificación de colaboración creada: ${notification.id} para userId: ${doctor.userId}`);
-
-        // Enviar email al doctor que recibe la invitación (incl. Aviso de Privacidad firmado por el paciente)
-        const inviterName = `${requestingDoctor.user.firstName} ${requestingDoctor.user.lastName}`;
-        const patientName = `${patient.user.firstName} ${patient.user.lastName}`;
-        const recipientEmail = doctor.user?.email;
-        let avisoPdfBuffer: Buffer | undefined;
-        try {
-          const consentAviso = await prisma.consentHistory.findFirst({
-            where: { userId: patient.userId, type: 'PRIVACY_POLICY', pdfUrl: { not: null } },
-            orderBy: { acceptedAt: 'desc' }
-          });
-          if (consentAviso?.pdfUrl) {
-            const { buffer } = await fetchBufferFromUrl(consentAviso.pdfUrl);
-            avisoPdfBuffer = buffer;
-          }
-        } catch {
-          // Continuar sin PDF
-        }
-        if (recipientEmail) {
-          const { emailSent } = await NotificationService.getInstance().sendInternalCollaborationInvite({
-            email: recipientEmail,
-            inviterName,
-            patientName,
-            padecimiento: clinicalCase.padecimiento,
-            avisoPdfBuffer
-          });
-          if (emailSent) {
-            securityLogger.info(`Email de colaboración enviado a ${recipientEmail}`);
-          } else {
-            securityLogger.warn(`No se pudo enviar email de colaboración a ${recipientEmail}`);
-          }
-        }
-      }
-
-      securityLogger.info(`Colaborador agregado: ${doctorId} al padecimiento ${padecimientoId}`);
+      securityLogger.info(`Invitación de colaboración creada (pendiente consentimiento paciente): caso ${padecimientoId} → doctor ${doctorId}`);
       res.status(201).json({
-        ...colaboracion,
-        message: 'Caso clínico compartido correctamente. El doctor recibirá un email y una notificación (campanita) para colaborar en este caso.'
+        id: padecimientoId,
+        status: 'PENDING_PATIENT_CONSENT',
+        expiresAt: expiresAt.toISOString(),
+        message:
+          'Se envió al paciente (y a los profesionales) un enlace para que el paciente firme el consentimiento. El colaborador no tendrá acceso hasta entonces. Si el paciente no tiene correo, comparte con él el enlace desde su cuenta o contacto.'
       });
     } catch (error: any) {
       securityLogger.error('Error al agregar colaborador:', error);
       if (error?.code === 'P2002') {
         return res.status(409).json({ error: 'Este doctor ya es colaborador de este caso clínico' });
+      }
+      if (error instanceof Error && error.message && !(error as { code?: string }).code) {
+        return res.status(400).json({ error: error.message });
       }
       res.status(500).json({ error: 'Error interno del servidor' });
     }

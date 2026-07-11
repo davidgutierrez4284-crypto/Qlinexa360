@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { getApiUrl } from '../utils/api';
 import PhoneInput from '../components/common/PhoneInput';
 
 const AgendarCita = () => {
   const { doctorUsername } = useParams();
+  const [searchParams] = useSearchParams();
+  const clinicalIntakeToken = searchParams.get('clinicalIntake');
+  const [fromClinicalIntake, setFromClinicalIntake] = useState(false);
+  const [motivoLockedFromIntake, setMotivoLockedFromIntake] = useState(false);
+  const [intakePrefillLoading, setIntakePrefillLoading] = useState(!!clinicalIntakeToken);
   const [doctorInfo, setDoctorInfo] = useState(null);
   const [availableSlots, setAvailableSlots] = useState([]);
   const [selectedDate, setSelectedDate] = useState('');
@@ -17,10 +22,49 @@ const AgendarCita = () => {
   const [loadError, setLoadError] = useState(null);
   const [profileImageError, setProfileImageError] = useState(false);
   const [appointmentSuccess, setAppointmentSuccess] = useState(false);
+  const [autoCloseIn, setAutoCloseIn] = useState(null);
 
   useEffect(() => {
     if (doctorUsername) fetchDoctorInfo();
   }, [doctorUsername]);
+
+  useEffect(() => {
+    if (!clinicalIntakeToken) {
+      setIntakePrefillLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(
+          getApiUrl(`/api/clinical-intakes/public/${clinicalIntakeToken}`)
+        );
+        const data = await response.json();
+        if (cancelled || !data?.success) return;
+        const patient = data.data?.formData?.patient || {};
+        const health = data.data?.formData?.health || {};
+        const patientName = [patient.firstName, patient.lastName].filter(Boolean).join(' ').trim();
+        const motivoConsulta = String(health.motivoConsulta || '').trim();
+        setFormData((prev) => ({
+          ...prev,
+          patientName,
+          patientEmail: String(patient.email || '').trim(),
+          patientPhone: String(patient.phone || '').trim(),
+          motivoConsulta
+        }));
+        const hasCoreContact = !!(patientName && String(patient.email || '').trim());
+        setFromClinicalIntake(hasCoreContact);
+        setMotivoLockedFromIntake(!!motivoConsulta);
+      } catch (error) {
+        console.warn('No se pudo cargar pre-consulta para prellenar agenda:', error);
+      } finally {
+        if (!cancelled) setIntakePrefillLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [clinicalIntakeToken]);
 
   useEffect(() => {
     if (selectedDate) {
@@ -34,6 +78,29 @@ const AgendarCita = () => {
       setSelectedSlot(null);
     }
   }, [selectedDate]);
+
+  // Tras agendar desde una pre-consulta, autocerrar esta pestaña para que el paciente
+  // regrese a terminar su pre-consulta (aceptar avisos + enviar) en la pestaña original.
+  useEffect(() => {
+    if (!appointmentSuccess || !clinicalIntakeToken) return;
+    setAutoCloseIn(6);
+    const interval = setInterval(() => {
+      setAutoCloseIn((n) => {
+        if (n === null) return null;
+        if (n <= 1) {
+          clearInterval(interval);
+          try {
+            window.close();
+          } catch {
+            /* el navegador puede bloquear el cierre; el botón manual cubre el caso */
+          }
+          return 0;
+        }
+        return n - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [appointmentSuccess, clinicalIntakeToken]);
 
   const fetchDoctorInfo = async () => {
     setLoadError(null);
@@ -108,7 +175,8 @@ const AgendarCita = () => {
           patientName: formData.patientName,
           patientEmail: formData.patientEmail,
           patientPhone: formData.patientPhone,
-          motivoConsulta: formData.motivoConsulta
+          motivoConsulta: formData.motivoConsulta,
+          ...(clinicalIntakeToken ? { clinicalIntakeToken } : {})
         })
       });
 
@@ -125,6 +193,17 @@ const AgendarCita = () => {
       // El backend retorna { success: true, data: {...} }
       if (data.success) {
         setAppointmentSuccess(true);
+        // Avisar a la pestaña de la pre-consulta (mismo origen) que la cita ya se agendó,
+        // para que resalte el último paso (aceptar avisos + enviar).
+        if (clinicalIntakeToken && typeof window !== 'undefined' && typeof window.BroadcastChannel !== 'undefined') {
+          try {
+            const ch = new BroadcastChannel('qlinexa-preconsulta-agenda');
+            ch.postMessage({ type: 'appointment-booked', clinicalIntake: clinicalIntakeToken });
+            ch.close();
+          } catch {
+            /* canal no disponible; el mensaje en pantalla cubre el caso */
+          }
+        }
       } else {
         // Si hay error, puede estar en data.error o data.data?.error
         const errorMessage = data.error || data.data?.error || 'Error al agendar cita';
@@ -191,13 +270,44 @@ const AgendarCita = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Se agendó tu cita</h2>
-          <p className="text-gray-600 mb-6">
-            Tu cita ha sido confirmada. Recibirás un recordatorio por correo.
-          </p>
-          <p className="text-sm text-gray-500 font-medium">
-            Puedes cerrar esta ventana.
-          </p>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Cita agendada!</h2>
+          {clinicalIntakeToken ? (
+            <>
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-left mb-5">
+                <p className="text-sm font-semibold text-amber-900">Te falta 1 paso para terminar</p>
+                <p className="mt-1 text-sm text-amber-800">
+                  Tu cita quedó agendada, pero aún <span className="font-semibold">no has enviado tu
+                  pre-consulta</span>. Vuelve a la pestaña anterior para <span className="font-semibold">aceptar
+                  el aviso de privacidad y enviarla</span>.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    window.close();
+                  } catch {
+                    /* el navegador puede bloquear el cierre */
+                  }
+                }}
+                className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700"
+              >
+                Volver a mi pre-consulta para terminar
+              </button>
+              <p className="mt-3 text-xs text-gray-500">
+                {autoCloseIn !== null && autoCloseIn > 0
+                  ? `Esta ventana se cerrará en ${autoCloseIn}s para que regreses a terminar…`
+                  : 'Si esta ventana no se cierra sola, ciérrala y regresa a la pestaña anterior.'}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-gray-600 mb-6">
+                Tu cita ha sido confirmada. Recibirás un recordatorio por correo.
+              </p>
+              <p className="text-sm text-gray-500 font-medium">Puedes cerrar esta ventana.</p>
+            </>
+          )}
         </div>
       </div>
     );
@@ -275,53 +385,107 @@ const AgendarCita = () => {
 
           {/* Formulario */}
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold mb-4">Datos de contacto</h2>
-            
+            <h2 className="text-xl font-semibold mb-4">
+              {fromClinicalIntake ? 'Confirma tu cita' : 'Datos de contacto'}
+            </h2>
+
+            {intakePrefillLoading && (
+              <p className="text-sm text-gray-500 mb-4">Cargando tus datos de la pre-consulta…</p>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.patientName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, patientName: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              {fromClinicalIntake ? (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-gray-800 space-y-2">
+                  <p className="font-medium text-blue-900">
+                    Usaremos los datos que ya capturaste en tu pre-consulta
+                  </p>
+                  <p>
+                    <span className="text-gray-500">Nombre:</span>{' '}
+                    {formData.patientName || '—'}
+                  </p>
+                  <p>
+                    <span className="text-gray-500">Email:</span>{' '}
+                    {formData.patientEmail || '—'}
+                  </p>
+                  <p>
+                    <span className="text-gray-500">Teléfono:</span>{' '}
+                    {formData.patientPhone || '—'}
+                  </p>
+                  {motivoLockedFromIntake ? (
+                    <p>
+                      <span className="text-gray-500">Motivo:</span>{' '}
+                      {formData.motivoConsulta}
+                    </p>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Motivo de consulta *
+                      </label>
+                      <textarea
+                        required
+                        value={formData.motivoConsulta}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, motivoConsulta: e.target.value }))
+                        }
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Describe brevemente el motivo de tu consulta..."
+                      />
+                    </div>
+                  )}
+                  <p className="text-xs text-blue-800 pt-1">
+                    Solo elige fecha y horario. Si necesitas corregir algo, regresa al formulario de
+                    pre-consulta antes de enviar.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.patientName}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, patientName: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                <input
-                  type="email"
-                  required
-                  value={formData.patientEmail}
-                  onChange={(e) => setFormData(prev => ({ ...prev, patientEmail: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                    <input
+                      type="email"
+                      required
+                      value={formData.patientEmail}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, patientEmail: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
 
-              <div>
-                <PhoneInput
-                  name="patientPhone"
-                  label="Teléfono *"
-                  value={formData.patientPhone}
-                  onChange={(e) => setFormData(prev => ({ ...prev, patientPhone: e.target.value }))}
-                  required
-                  placeholder="Ej: 55 1234 5678"
-                />
-              </div>
+                  <div>
+                    <PhoneInput
+                      name="patientPhone"
+                      label="Teléfono *"
+                      value={formData.patientPhone}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, patientPhone: e.target.value }))}
+                      required
+                      placeholder="Ej: 55 1234 5678"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Motivo de consulta *</label>
-                <textarea
-                  required
-                  value={formData.motivoConsulta}
-                  onChange={(e) => setFormData(prev => ({ ...prev, motivoConsulta: e.target.value }))}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Describe brevemente el motivo de tu consulta..."
-                />
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Motivo de consulta *</label>
+                    <textarea
+                      required
+                      value={formData.motivoConsulta}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, motivoConsulta: e.target.value }))}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Describe brevemente el motivo de tu consulta..."
+                    />
+                  </div>
+                </>
+              )}
 
               {selectedSlot && (
                 <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
@@ -366,7 +530,7 @@ const AgendarCita = () => {
         <div className="max-w-4xl mx-auto px-4 flex items-center justify-center space-x-3">
           <img
             src="/logo.svg"
-            alt="Qlinexa360 Logo"
+            alt="Qlinexa360"
             className="h-6 w-6"
           />
           <span className="text-lg font-semibold">Qlinexa360</span>

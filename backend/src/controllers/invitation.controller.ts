@@ -1,12 +1,10 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import prisma from '../config/database';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { AppError } from '../utils/error.utils';
 import { securityLogger } from '../utils/logger.utils';
 import { NotificationService } from '../services/notification.service';
-
-const prisma = new PrismaClient();
 
 // Generar token único para invitación
 const generateInvitationToken = () => {

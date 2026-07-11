@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../context/AuthContext';
 
@@ -7,6 +7,10 @@ const azul = '#2563eb'; // igual que la cenefa superior
 const grisClaro = '#f3f4f6';
 
 const TOOLTIP_2FA_TEXT = 'Paso 1: Abre tu app de autenticación (Google Authenticator o Microsoft Authenticator son las más usadas). Paso 2: Copia el código de 6 dígitos vigente. Paso 3: Pégalo aquí y presiona "Verificar 2FA". Si no tienes acceso, usa "Enviar código por email". La autenticación en dos pasos es la mejor protección contra hackeo de cuentas y protege tus datos clínicos.';
+
+/** Mensaje legible del API; axios solo pone "Request failed with status code 400" en err.message */
+const axiosErrorMessage = (err, fallback) =>
+  err?.response?.data?.message || err?.message || fallback;
 
 const LoginForm = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -26,6 +30,7 @@ const LoginForm = () => {
   const [copiedKey, setCopiedKey] = useState(false);
   const tooltip2FARef = useRef(null);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -63,12 +68,22 @@ const LoginForm = () => {
   };
 
   const navigateByRole = (user) => {
+    const returnUrl = searchParams.get('returnUrl');
+    if (returnUrl && user.role === 'PATIENT' && returnUrl.startsWith('/') && !returnUrl.startsWith('//')) {
+      navigate(returnUrl, { replace: true });
+      return;
+    }
     if (user.role === 'DOCTOR' || user.role === 'ASISTENTE') {
       navigate('/dashboard/dashboard', { replace: true });
     } else if (user.role === 'PATIENT') {
-      navigate('/dashboard/medical-records', { replace: true });
+      navigate(
+        user.clinicalHistoryPortalEnabled === false ? '/dashboard/dashboard' : '/dashboard/medical-records',
+        { replace: true }
+      );
     } else if (user.role === 'ADMIN') {
       navigate('/dashboard/dashboard', { replace: true });
+    } else if (user.role === 'AFFILIATE') {
+      navigate('/dashboard/affiliate', { replace: true });
     } else {
       navigate('/dashboard/dashboard', { replace: true });
     }
@@ -115,7 +130,7 @@ const LoginForm = () => {
         navigateByRole(data.user);
       }
     } catch (err) {
-      setError(err.message || 'Error al iniciar sesión. Verifique sus credenciales.');
+      setError(axiosErrorMessage(err, 'Error al iniciar sesión. Verifique sus credenciales.'));
     } finally {
       setIsLoading(false);
     }
@@ -132,7 +147,7 @@ const LoginForm = () => {
         navigateByRole(data.user);
       }
     } catch (err) {
-      setError(err.message || 'Código 2FA inválido.');
+      setError(axiosErrorMessage(err, 'Código 2FA inválido.'));
     } finally {
       setIsLoading(false);
     }
@@ -147,7 +162,7 @@ const LoginForm = () => {
       setTwoFactorStep('recovery');
       setInfo('Te enviamos un código de recuperación por email.');
     } catch (err) {
-      setError(err.message || 'No se pudo enviar el correo de recuperación.');
+      setError(axiosErrorMessage(err, 'No se pudo enviar el correo de recuperación.'));
     } finally {
       setIsLoading(false);
     }
@@ -167,7 +182,7 @@ const LoginForm = () => {
         return;
       }
     } catch (err) {
-      setError(err.message || 'Código de recuperación inválido.');
+      setError(axiosErrorMessage(err, 'Código de recuperación inválido.'));
     } finally {
       setIsLoading(false);
     }
@@ -200,6 +215,19 @@ const LoginForm = () => {
         }}>
           Iniciar Sesión
         </h2>
+        <p
+          style={{
+            textAlign: 'center',
+            marginTop: -4,
+            marginBottom: 10,
+            fontWeight: 600,
+            fontSize: 17,
+            color: '#1d4ed8',
+            letterSpacing: '0.02em',
+          }}
+        >
+          Qlinexa360
+        </p>
         {error && <div style={{ color: 'red', textAlign: 'center' }}>{error}</div>}
         {info && <div style={{ color: '#2563eb', textAlign: 'center' }}>{info}</div>}
         {twoFactorStep === 'none' ? (

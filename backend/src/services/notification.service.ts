@@ -1,6 +1,11 @@
 import { securityLogger } from '../utils/logger.utils';
-import { sendEmailHtml, sendEmailHtmlWithTextFallback, fromAddresses } from '../utils/email.utils';
+import { sendEmailHtml, sendEmailHtmlWithTextFallback, fromAddresses, brandedEmailLayout, emailButton, emailInfoCard, emailLinkButtons, escapeHtmlAttr, escapeHtmlText, NO_REPLY_FOOTER } from '../utils/email.utils';
 import { formatAppointmentTime, formatAppointmentTimeWithAmPm, formatAppointmentDate, formatAppointmentDateShort } from '../utils/date.utils';
+import {
+  markPatientCalendarEmailSent,
+  shouldSendPatientCalendarEmail,
+  stripManageLinkBlocksFromDescription,
+} from '../utils/appointmentConfirmation.utils';
 
 // TODO: Implementar con credenciales reales de WhatsApp Business API
 export class WhatsAppService {
@@ -220,6 +225,8 @@ Equipo Qlinexa360`;
 // Email via Zoho SMTP (nodemailer)
 export class EmailService {
   private static instance: EmailService;
+  /** Dedup en memoria por cita (evita bucles de correo en presencial/teleconsulta). */
+  private static calendarEmailDedup = new Map<string, number>();
 
   private constructor() {}
 
@@ -285,60 +292,94 @@ export class EmailService {
   }
 
   /**
-   * Envía a legal@qlinexa360.com notificación de nuevo usuario con consentimientos firmados.
-   * Para DOCTOR, PACIENTE, ASISTENTE. Incluye: nombre y apellido, email, rol y los 3 PDFs.
+   * Envía en mails independientes los 3 consentimientos al destinatario.
    */
+  private async sendConsentDocumentsToRecipient(params: {
+    recipientEmail: string;
+    fullName: string;
+    email: string;
+    role: string;
+    pdfBuffers: { aviso: Buffer; terminos: Buffer; contrato: Buffer };
+  }): Promise<boolean> {
+    const roleDisplay = params.role === 'PATIENT' ? 'PACIENTE' : params.role === 'ASISTENTE' ? 'ASISTENTE' : 'DOCTOR';
+    try {
+      const docs = [
+        { key: 'aviso', title: 'Aviso de Privacidad', filename: 'Aviso_Privacidad.pdf', content: params.pdfBuffers.aviso },
+        { key: 'terminos', title: 'Términos de Uso', filename: 'Terminos_Uso.pdf', content: params.pdfBuffers.terminos },
+        { key: 'contrato', title: 'Contrato de Uso de Plataforma', filename: 'Contrato_Uso_Plataforma.pdf', content: params.pdfBuffers.contrato }
+      ];
+
+      let allSent = true;
+      for (const doc of docs) {
+        const subject = `[Qlinexa360] ${doc.title} firmado - ${params.fullName} (${roleDisplay})`;
+        const htmlContent = `
+          <!DOCTYPE html>
+          <html>
+          <head><meta charset="utf-8"><title>${doc.title} firmado</title></head>
+          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #2563eb;">
+                <h1 style="color: #2563eb;">Qlinexa360</h1>
+                <p style="color: #6b7280; font-size: 14px;">Documento legal firmado</p>
+              </div>
+              <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                <h2 style="color: #1e40af; margin-top: 0;">${doc.title}</h2>
+                <p><strong>Nombre y apellido:</strong> ${params.fullName}</p>
+                <p><strong>Mail del usuario:</strong> ${params.email}</p>
+                <p><strong>Rol:</strong> ${roleDisplay}</p>
+              </div>
+              <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                <p style="color: #6b7280; font-size: 14px;">Saludos,<br>Sistema Qlinexa360</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `;
+        const ok = await sendEmailHtml(
+          params.recipientEmail,
+          subject,
+          htmlContent,
+          fromAddresses.noReply,
+          [{ filename: doc.filename, content: doc.content, contentType: 'application/pdf' as const }]
+        );
+        if (!ok) {
+          allSent = false;
+          securityLogger.error(`Failed to send ${doc.key} consent email to ${params.recipientEmail} for ${params.email}`);
+        }
+      }
+
+      if (allSent) {
+        securityLogger.info(`All consent documents sent to ${params.recipientEmail} for ${params.email}`);
+      }
+      return allSent;
+    } catch (error) {
+      securityLogger.error(`Error sending consent documents to ${params.recipientEmail}:`, error);
+      return false;
+    }
+  }
+
   async sendNewUserConsentToLegal(params: {
     fullName: string;
     email: string;
     role: string;
     pdfBuffers: { aviso: Buffer; terminos: Buffer; contrato: Buffer };
   }): Promise<boolean> {
-    const LEGAL_EMAIL = 'legal@qlinexa360.com';
-    const roleDisplay = params.role === 'PATIENT' ? 'PACIENTE' : params.role === 'ASISTENTE' ? 'ASISTENTE' : 'DOCTOR';
-    try {
-      const subject = `[Qlinexa360] Nuevo registro - ${params.fullName} (${roleDisplay})`;
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"><title>Nuevo registro Qlinexa360</title></head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-          <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #2563eb;">
-              <h1 style="color: #2563eb;">Qlinexa360</h1>
-              <p style="color: #6b7280; font-size: 14px;">Notificación de nuevo registro</p>
-            </div>
-            <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-              <h2 style="color: #1e40af; margin-top: 0;">Nuevo usuario registrado</h2>
-              <p><strong>Nombre y apellido:</strong> ${params.fullName}</p>
-              <p><strong>Mail del usuario:</strong> ${params.email}</p>
-              <p><strong>Rol:</strong> ${roleDisplay}</p>
-            </div>
-            <div style="background-color: #dbeafe; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-              <p style="margin: 0; font-size: 14px;">
-                Se adjuntan los documentos legales firmados: Aviso de Privacidad, Términos de Uso y Contrato de Uso de Plataforma.
-              </p>
-            </div>
-            <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-              <p style="color: #6b7280; font-size: 14px;">Saludos,<br>Sistema Qlinexa360</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `;
-      const attachments = [
-        { filename: 'Aviso_Privacidad.pdf', content: params.pdfBuffers.aviso, contentType: 'application/pdf' as const },
-        { filename: 'Terminos_Uso.pdf', content: params.pdfBuffers.terminos, contentType: 'application/pdf' as const },
-        { filename: 'Contrato_Uso_Plataforma.pdf', content: params.pdfBuffers.contrato, contentType: 'application/pdf' as const }
-      ];
-      const ok = await sendEmailHtml(LEGAL_EMAIL, subject, htmlContent, fromAddresses.noReply, attachments);
-      if (ok) securityLogger.info(`New user consent notification sent to legal@qlinexa360.com for ${params.email}`);
-      else securityLogger.error(`Failed to send legal notification for ${params.email}`);
-      return ok;
-    } catch (error) {
-      securityLogger.error(`Error sending new user consent to legal:`, error);
-      return false;
-    }
+    return this.sendConsentDocumentsToRecipient({
+      recipientEmail: 'legal@qlinexa360.com',
+      ...params
+    });
+  }
+
+  async sendNewUserConsentToUser(params: {
+    fullName: string;
+    email: string;
+    role: string;
+    pdfBuffers: { aviso: Buffer; terminos: Buffer; contrato: Buffer };
+  }): Promise<boolean> {
+    return this.sendConsentDocumentsToRecipient({
+      recipientEmail: params.email,
+      ...params
+    });
   }
 
   /**
@@ -619,28 +660,19 @@ export class EmailService {
 
       if (inviterEmail) {
         const copySubject = 'Copia: Invitación de colaboración enviada';
-        const copyHtmlContent = `
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <title>Copia de invitación - Qlinexa360</title>
-          </head>
-          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-              <div style="text-align: center; margin-bottom: 30px;">
-                <h1 style="color: #2563eb;">Qlinexa360</h1>
-              </div>
-              <p>Has enviado una invitación de colaboración a <strong>${email}</strong> para el caso clínico del paciente <strong>${patientName}</strong> con el padecimiento <strong>${padecimiento}</strong>.</p>
-              <p>El contenido del mensaje enviado fue:</p>
-              <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 15px 0;">
-                <p>Se te invita a colaborar en este caso clínico del paciente <strong>${patientName}</strong> con el padecimiento <strong>${padecimiento}</strong> por parte de <strong>${inviterName}</strong>.</p>
-                <p>Para colaborar te debes de registrar en la plataforma <a href="${websiteUrl}" style="color: #2563eb;">www.qlinexa360.com</a> como "Profesional de la Salud".</p>
-              </div>
-            </div>
-          </body>
-          </html>
-        `;
+        const copyHtmlContent = brandedEmailLayout({
+          subtitle: 'Copia de invitación de colaboración',
+          bodyHtml: `
+            <h2 style="color:#0f172a; margin-top:0; font-size:20px;">Invitación enviada</h2>
+            <p style="font-size:16px; color:#334155;">Has enviado una invitación de colaboración a <strong>${email}</strong> para el caso clínico del paciente <strong>${patientName}</strong> con el padecimiento <strong>${padecimiento}</strong>.</p>
+            <p style="font-size:14px; color:#64748b; margin-bottom:6px;">El contenido del mensaje enviado fue:</p>
+            ${emailInfoCard(`
+              <p style="margin:0 0 10px 0; color:#334155; font-size:14px;">Se te invita a colaborar en este caso clínico del paciente <strong>${patientName}</strong> con el padecimiento <strong>${padecimiento}</strong> por parte de <strong>${inviterName}</strong>.</p>
+              <p style="margin:0; color:#334155; font-size:14px;">Para colaborar te debes de registrar en la plataforma <a href="${websiteUrl}" style="color:#2563eb; font-weight:600;">www.qlinexa360.com</a> como "Profesional de la Salud".</p>
+            `, '#2563eb', '#f8fafc')}
+          `,
+          footerNote: NO_REPLY_FOOTER
+        });
 
         const copyOk = await sendEmailHtml(inviterEmail, copySubject, copyHtmlContent, fromAddresses.noReply);
         if (copyOk) {
@@ -738,6 +770,136 @@ export class EmailService {
       return false;
     } catch (error) {
       securityLogger.error(`Error sending appointment confirmation email to ${email}:`, error);
+      return false;
+    }
+  }
+
+  /** Invitación programa de referidos: HTML tipo recordatorio de cita (cabecera con gradiente, tarjetas, CTA). */
+  async sendReferralInvitationEmail(
+    toEmail: string,
+    params: { inviterDisplayName: string; registerUrl: string; referralCode: string }
+  ): Promise<boolean> {
+    const esc = (s: string) =>
+      String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    const name = esc(params.inviterDisplayName);
+    const href = esc(params.registerUrl);
+    const code = esc(params.referralCode);
+    const subject = 'Te invitan a Qlinexa360 — programa de referidos';
+    const textBody = `Hola,
+
+${params.inviterDisplayName} te invita a unirte a Qlinexa360, la plataforma para profesionales de la salud.
+
+Si te registras con su invitación y activas tu suscripción:
+• Tú: 1 mes adicional gratuito + los días de bienvenida de la plataforma (y se acumula con un código promocional válido, si aplica).
+• Tu colega: créditos Qlinexa360 del 20% por cada referido con pago activo; al juntar 100% recibe 1 mes gratis automático en PayPal (cada 5 referidos).
+
+Código de invitación: ${params.referralCode}
+
+Enlace para registrarte:
+${params.registerUrl}
+
+Aplican las condiciones vigentes de Qlinexa360.
+— Equipo Qlinexa360`;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invitación Qlinexa360</title>
+</head>
+<body style="margin:0;padding:0;background-color:#eef2f7;font-family:Arial,Helvetica,sans-serif;color:#1f2937;line-height:1.55;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#eef2f7;padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 10px 40px rgba(15,23,42,0.12);">
+          <tr>
+            <td style="background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 45%,#1e3a8a 100%);padding:28px 24px;text-align:center;">
+              <p style="margin:0 0 6px 0;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.88);">Invitación profesional</p>
+              <h1 style="margin:0;font-size:26px;font-weight:700;color:#ffffff;">Qlinexa360</h1>
+              <p style="margin:10px 0 0 0;font-size:15px;color:rgba(255,255,255,0.95);">Plataforma para profesionales de la salud</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 24px 8px 24px;">
+              <p style="margin:0 0 16px 0;font-size:16px;color:#374151;">Hola,</p>
+              <p style="margin:0 0 20px 0;font-size:16px;color:#374151;">
+                <strong style="color:#1d4ed8;">${name}</strong> te invita a conocer <strong>Qlinexa360</strong> y sumarte con su código de referido.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 24px 16px 24px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0 12px;">
+                <tr>
+                  <td style="background:#f0fdf4;border-radius:10px;padding:16px 18px;border-left:4px solid #22c55e;">
+                    <p style="margin:0 0 6px 0;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#15803d;">Para ti (nuevo usuario)</p>
+                    <p style="margin:0;font-size:15px;color:#166534;">
+                      Al registrarte con esta invitación y <strong>activar tu suscripción</strong>, obtienes <strong>1 mes adicional gratuito</strong> más los <strong>días de bienvenida</strong> de la plataforma; si además aplicas un código promocional válido, los beneficios son acumulables según reglas vigentes.
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="background:#eff6ff;border-radius:10px;padding:16px 18px;border-left:4px solid #2563eb;">
+                    <p style="margin:0 0 6px 0;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#1d4ed8;">Para quien te invita</p>
+                    <p style="margin:0;font-size:15px;color:#1e3a8a;">
+                      Por cada colega con suscripción de pago activa suma <strong>20% de crédito Qlinexa360</strong> hacia un mes sin cargo. Al llegar a <strong>100%</strong> (5 referidos) se aplica <strong>1 mes gratis automático</strong> en PayPal; el saldo sobrante sigue acumulando para el siguiente mes.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 24px 20px 24px;">
+              <div style="background:#f8fafc;border-radius:10px;padding:16px 18px;border:1px solid #e2e8f0;">
+                <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;">Tu código de invitación</p>
+                <p style="margin:0;font-size:22px;font-weight:700;letter-spacing:0.18em;font-family:Consolas,Monaco,monospace;color:#0f172a;">${code}</p>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 24px 28px 24px;text-align:center;">
+              <a href="${href}" style="display:inline-block;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#ffffff !important;text-decoration:none;font-weight:700;font-size:16px;padding:14px 32px;border-radius:8px;box-shadow:0 4px 14px rgba(37,99,235,0.35);">
+                Registrarme en Qlinexa360
+              </a>
+              <p style="margin:18px 0 0 0;font-size:12px;color:#64748b;word-break:break-all;">
+                Si el botón no funciona, copia y pega este enlace en tu navegador:<br>
+                <a href="${href}" style="color:#2563eb;">${href}</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#0f172a;padding:20px 24px;text-align:center;">
+              <p style="margin:0;font-size:13px;color:#94a3b8;">Aplican las condiciones vigentes de Qlinexa360.</p>
+              <p style="margin:10px 0 0 0;font-size:13px;color:#cbd5e1;">© Qlinexa360 · Plataforma de salud digital</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    try {
+      const ok = await sendEmailHtmlWithTextFallback(
+        toEmail,
+        subject,
+        htmlContent,
+        textBody,
+        fromAddresses.noReply
+      );
+      if (ok) securityLogger.info(`Referral invitation HTML email sent to ${toEmail}`);
+      else securityLogger.error(`Failed to send referral invitation email to ${toEmail}`);
+      return ok;
+    } catch (error) {
+      securityLogger.error(`Error sending referral invitation email to ${toEmail}:`, error);
       return false;
     }
   }
@@ -861,7 +1023,7 @@ export class EmailService {
             
             <div style="background: #343a40; padding: 20px; text-align: center; color: white; border-radius: 8px; margin-top: 20px;">
               <p style="margin: 0; font-size: 14px;">
-                © 2024 Qlinexa360. Plataforma médica mexicana.
+                © 2024 Qlinexa360. Plataforma médica para Latinoamérica.
               </p>
             </div>
           </div>
@@ -902,8 +1064,7 @@ export class EmailService {
     }
   }
 
-  // Enviar email de evento de calendario al paciente
-  // icsContent: contenido .ics para adjuntar y que el paciente agregue el evento a su calendario
+  // Enviar email de evento de calendario al paciente (agenda vía invitación Google/Outlook/Apple, no adjunto .ics)
   async sendCalendarEventEmail(
     patientEmail: string,
     data: {
@@ -917,17 +1078,49 @@ export class EmailService {
       tipoCita?: 'presencial' | 'remota';
       preConsultationLink?: string;
       manageLink?: string;
+      /** Enlace para firmar consentimiento de teleconsulta (NO enviar linkMeeting si es teleconsulta) */
+      teleconsultaLink?: string;
+      /** Cobro MP obligatorio antes del enlace Meet/Teams */
+      teleconsultationPaymentAmount?: number;
+      teleconsultationPaymentCurrency?: string;
+      teleconsultationPaymentApproved?: boolean;
+      teleconsultationPaymentStatus?: 'not_required' | 'pending' | 'approved' | 'rejected' | 'refunded';
+      teleconsultationCheckoutUrl?: string;
+      teleconsultationConsentSigned?: boolean;
+      /** Cobro opcional MP consulta presencial */
+      inPersonPaymentAmount?: number;
+      inPersonPaymentCurrency?: string;
+      inPersonCheckoutUrl?: string;
       timezone?: string | null;
-      icsContent?: string;
+      /** Si true, indica que la invitación al calendario externo se envió por separado */
+      calendarInviteExpected?: boolean;
+      /** Id de cita para deduplicar envíos en ráfaga */
+      appointmentId?: string;
+      skipEmailDedup?: boolean;
     }
   ): Promise<boolean> {
     try {
+      if (
+        data.appointmentId &&
+        !data.skipEmailDedup &&
+        !shouldSendPatientCalendarEmail(
+          data.appointmentId,
+          EmailService.calendarEmailDedup.get(data.appointmentId)
+        )
+      ) {
+        console.log(`⏭️ Correo calendario omitido (duplicado reciente) cita ${data.appointmentId}`);
+        return true;
+      }
+
       console.log('📧 sendCalendarEventEmail - preConsultationLink recibido:', data.preConsultationLink ? `SÍ (${data.preConsultationLink})` : 'NO');
       const subject = `Cita médica: ${data.eventTitle} - Qlinexa360`;
       const tz = data.timezone;
       const fechaFormateada = formatAppointmentDate(data.eventDate, tz);
       const horaInicio = formatAppointmentTime(data.eventDate, tz);
       const horaFin = formatAppointmentTime(data.eventEndDate, tz);
+      const cleanDescription = data.description
+        ? stripManageLinkBlocksFromDescription(data.description)
+        : '';
 
       // Log para debugging
       console.log('📧 sendCalendarEventEmail - preConsultationLink recibido:', data.preConsultationLink ? `SÍ (${data.preConsultationLink})` : 'NO');
@@ -971,7 +1164,25 @@ export class EmailService {
               </p>
               ` : ''}
               
-              ${data.linkMeeting ? `
+              ${data.linkMeeting && data.tipoCita === 'remota' && data.teleconsultationConsentSigned === true ? `
+              <div style="background: #ecfdf5; border: 2px solid #10b981; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                <h3 style="color: #065f46; margin: 0 0 12px 0; font-size: 18px;">
+                  🎥 Acceso a la videollamada
+                </h3>
+                <p style="color: #047857; font-size: 15px; margin-bottom: 12px; line-height: 1.6;">
+                  Tu consulta remota está lista. Este enlace permanece vigente para unirte el día de tu cita:
+                </p>
+                <div style="text-align: center; margin: 16px 0;">
+                  <a href="${data.linkMeeting}"
+                     style="background-color: #059669; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 16px;">
+                    Unirse a la videollamada
+                  </a>
+                </div>
+                <p style="color: #047857; font-size: 13px; margin: 0; word-break: break-all;">
+                  ${data.linkMeeting}
+                </p>
+              </div>
+              ` : data.linkMeeting && data.tipoCita !== 'remota' ? `
               <p style="color: #555; margin: 10px 0; font-size: 16px;">
                 <strong style="color: #333;">🔗 Link de reunión:</strong><br>
                 <a href="${data.linkMeeting}" style="color: #667eea; text-decoration: none; word-break: break-all;">
@@ -980,31 +1191,90 @@ export class EmailService {
               </p>
               ` : ''}
               
-              ${data.description ? `
+              ${data.teleconsultaLink ? `
+            <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 10px; padding: 20px; margin: 20px 0;">
+              <h3 style="color: #92400e; margin: 0 0 12px 0; font-size: 18px;">
+                📋 Firma de consentimiento (teleconsulta)
+              </h3>
+              <p style="color: #92400e; font-size: 16px; margin-bottom: 15px; line-height: 1.6;">
+                Esta es una consulta por videollamada. Para acceder al enlace de la videollamada, debes firmar primero el consentimiento informado y aviso de privacidad.
+              </p>
+              ${data.teleconsultationPaymentAmount && data.teleconsultationPaymentAmount > 0 && data.teleconsultationPaymentApproved !== true ? `
+              <p style="color: #92400e; font-size: 15px; margin-bottom: 12px; line-height: 1.6;">
+                <strong>Costo de la teleconsulta:</strong>
+                $${Number(data.teleconsultationPaymentAmount).toFixed(2)} ${data.teleconsultationPaymentCurrency || 'MXN'}.
+                Tras firmar el consentimiento podrás pagar con Mercado Pago; el enlace de videollamada se agregará a tu calendario cuando se confirme el pago.
+              </p>
+              ` : ''}
+              <div style="text-align: center; margin: 16px 0;">
+                <a href="${data.teleconsultaLink}"
+                   style="background-color: #f59e0b; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 16px;">
+                  Firmar consentimiento informado
+                </a>
+              </div>
+              <p style="color: #92400e; font-size: 13px; margin: 0; line-height: 1.5;">
+                Paso 1: firma el aviso de privacidad. Paso 2: si aplica, paga con Mercado Pago desde la misma página.
+              </p>
+            </div>
+              ` : ''}
+
+              ${data.teleconsultationCheckoutUrl && data.teleconsultationPaymentApproved !== true ? `
+            <div style="background: #eff6ff; border: 2px solid #0ea5e9; border-radius: 10px; padding: 20px; margin: 20px 0;">
+              <h3 style="color: #0c4a6e; margin: 0 0 12px 0; font-size: 18px;">
+                💳 Pago de teleconsulta
+              </h3>
+              <p style="color: #0369a1; font-size: 15px; margin-bottom: 12px; line-height: 1.6;">
+                ${data.teleconsultationPaymentAmount && data.teleconsultationPaymentAmount > 0
+                  ? `Monto: <strong>$${Number(data.teleconsultationPaymentAmount).toFixed(2)} ${data.teleconsultationPaymentCurrency || 'MXN'}</strong>. `
+                  : ''}
+                Completa el pago para recibir el enlace de videollamada en tu calendario.
+              </p>
+              <div style="text-align: center; margin: 16px 0;">
+                <a href="${data.teleconsultationCheckoutUrl}"
+                   style="background-color: #0284c7; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 16px;">
+                  Pagar con Mercado Pago
+                </a>
+              </div>
+            </div>
+              ` : ''}
+
+              ${data.inPersonCheckoutUrl && data.inPersonPaymentAmount && data.inPersonPaymentAmount > 0 ? `
+            <div style="background: #eff6ff; border: 2px solid #3b82f6; border-radius: 10px; padding: 20px; margin: 20px 0;">
+              <h3 style="color: #1e40af; margin: 0 0 12px 0; font-size: 18px;">
+                💳 Pago opcional (consulta presencial)
+              </h3>
+              <p style="color: #1e40af; font-size: 15px; margin-bottom: 12px; line-height: 1.6;">
+                Si lo deseas, puedes pagar esta consulta presencial con Mercado Pago por
+                <strong>$${Number(data.inPersonPaymentAmount).toFixed(2)} ${data.inPersonPaymentCurrency || 'MXN'}</strong>.
+                También puedes pagar en efectivo o directamente en el consultorio.
+              </p>
+              <div style="text-align: center; margin: 16px 0;">
+                <a href="${data.inPersonCheckoutUrl}"
+                   style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 16px;">
+                  Pagar con Mercado Pago (opcional)
+                </a>
+              </div>
+            </div>
+              ` : ''}
+              
+              ${cleanDescription ? `
               <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e9ecef;">
                 <p style="color: #555; margin: 5px 0; font-size: 14px;">
                   <strong style="color: #333;">📝 Notas:</strong><br>
-                  ${data.description}
+                  ${escapeHtmlText(cleanDescription)}
                 </p>
               </div>
               ` : ''}
             </div>
             
-            ${data.icsContent ? `
-            <div style="background: #ecfdf5; border: 2px solid #059669; border-radius: 10px; padding: 24px; margin: 24px 0;">
-              <h3 style="margin: 0 0 12px 0; font-size: 20px; color: #065f46;">
-                📅 Añade esta cita a tu calendario
+            ${data.calendarInviteExpected !== false ? `
+            <div style="background: #ecfdf5; border: 2px solid #059669; border-radius: 10px; padding: 20px; margin: 24px 0;">
+              <h3 style="margin: 0 0 10px 0; font-size: 18px; color: #065f46;">
+                📅 Tu calendario
               </h3>
-              <p style="margin: 0 0 16px 0; font-size: 16px; line-height: 1.6; color: #374151;">
-                Este correo incluye el archivo <strong style="color: #1f2937;">Cita_medica_Qlinexa360.ics</strong>. Con un solo clic lo agregas a tu calendario:
-              </p>
-              <ul style="margin: 0 0 16px 0; padding-left: 20px; font-size: 15px; line-height: 1.8; color: #374151;">
-                <li><strong style="color: #1f2937;">En Gmail/Outlook:</strong> Haz clic en el archivo adjunto</li>
-                <li><strong style="color: #1f2937;">En móvil:</strong> Toca el adjunto y elige "Añadir al calendario"</li>
-                <li><strong style="color: #1f2937;">En computadora:</strong> Abre el archivo y se agregará a tu calendario predeterminado</li>
-              </ul>
-              <p style="margin: 0; font-size: 14px; color: #4b5563;">
-                ✓ Funciona con Google Calendar, Outlook, Apple Calendar y la mayoría de aplicaciones de calendario
+              <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #374151;">
+                La cita se refleja en tu agenda cuando aceptas la <strong>invitación de calendario</strong> que recibes por correo
+                (Google Calendar, Outlook o Apple). Revisa tu bandeja por un mensaje de invitación aparte de este aviso de Qlinexa360.
               </p>
             </div>
             ` : ''}
@@ -1012,15 +1282,16 @@ export class EmailService {
             ${data.manageLink ? `
             <div style="background: #ecfeff; border: 2px solid #06b6d4; border-radius: 10px; padding: 20px; margin: 20px 0;">
               <h3 style="color: #0e7490; margin: 0 0 12px 0; font-size: 18px;">
-                ✅ Confirmar o Reprogramar
+                ✅ Gestionar tu cita
               </h3>
               <p style="color: #0e7490; font-size: 16px; margin-bottom: 15px; line-height: 1.6;">
-                Para confirmar tu asistencia o solicitar un cambio de horario, usa el siguiente enlace:
+                Puedes confirmar, reprogramar o cancelar tu cita desde el siguiente enlace.
+                ${data.tipoCita === 'remota' ? ' Si ya pagaste con Mercado Pago, también podrás solicitar reembolso al cancelar.' : ''}
               </p>
               <div style="text-align: center; margin: 16px 0;">
                 <a href="${data.manageLink}"
                    style="background-color: #0891b2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 16px;">
-                  Confirmar o Reprogramar
+                  Confirmar, reprogramar o cancelar
                 </a>
               </div>
             </div>
@@ -1043,6 +1314,14 @@ export class EmailService {
               </div>
               <p style="color: #1e40af; font-size: 14px; margin-top: 15px; margin-bottom: 0;">
                 <strong>💡 Importante:</strong> Puedes guardar tu progreso y continuar más tarde si es necesario.
+              </p>
+            </div>
+            ` : ''}
+            
+            ${data.teleconsultaLink || data.tipoCita === 'remota' ? `
+            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; margin: 24px 0;">
+              <p style="margin: 0; font-size: 12px; line-height: 1.55; color: #374151; text-align: justify;">
+                <strong>Aviso legal:</strong> Qlinexa360 facilita la gestión administrativa y documental de teleconsultas, pero no presta servicios médicos ni garantiza por sí misma la suficiencia clínica de la atención a distancia. La procedencia de la teleconsulta, el diagnóstico, tratamiento y la eventual necesidad de atención presencial son responsabilidad exclusiva del profesional de la salud.
               </p>
             </div>
             ` : ''}
@@ -1079,24 +1358,17 @@ export class EmailService {
         console.warn('   ⚠️  preConsultationLink es undefined o null, no se incluirá en el email');
       }
 
-      const attachments: Array<{ filename: string; content: string; contentType: string }> = [];
-      if (data.icsContent) {
-        attachments.push({
-          filename: 'Cita_medica_Qlinexa360.ics',
-          content: data.icsContent,
-          contentType: 'text/calendar; method=PUBLISH'
-        });
-      }
-
       const ok = await sendEmailHtml(
         patientEmail,
         subject,
         htmlContent,
-        fromAddresses.noReply,
-        attachments.length > 0 ? attachments : undefined
+        fromAddresses.noReply
       );
       if (ok) {
-        console.log(`✅ Email enviado exitosamente a ${patientEmail}${data.icsContent ? ' con adjunto .ics para calendario' : ''}`);
+        if (data.appointmentId && !data.skipEmailDedup) {
+          markPatientCalendarEmailSent(EmailService.calendarEmailDedup, data.appointmentId);
+        }
+        console.log(`✅ Email enviado exitosamente a ${patientEmail}`);
         return true;
       }
       securityLogger.error(`Failed to send calendar event email to ${patientEmail}`);
@@ -1131,8 +1403,8 @@ export class EmailService {
             
             <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
               <p style="margin-bottom: 15px;">Estamos seguros que la plataforma y soluciones de Qlinexa360 te servirán mucho.</p>
-              <p style="margin-bottom: 15px;">Nuestra misión es convertir a Qlinexa360 en la <strong>plataforma médica mexicana más confiable y accesible</strong> para la gestión integral de pacientes y servicios de salud.</p>
-              <p style="margin-bottom: 15px;">Desarrollada con orgullo en México y diseñada específicamente para las necesidades del sector sanitario latinoamericano, Qlinexa360 combina innovación tecnológica con un profundo entendimiento de los retos que enfrentan los profesionales médicos en nuestra región.</p>
+              <p style="margin-bottom: 15px;">Nuestra misión es convertir a Qlinexa360 en la <strong>plataforma médica más confiable y accesible de Latinoamérica</strong> para la gestión integral de pacientes y servicios de salud.</p>
+              <p style="margin-bottom: 15px;">Diseñada específicamente para las necesidades del sector sanitario de Latinoamérica y los países de habla hispana, Qlinexa360 combina innovación tecnológica con un profundo entendimiento de los retos que enfrentan los profesionales médicos en nuestra región.</p>
               <p>Nuestro compromiso es crecer contigo, adaptando constantemente nuestras soluciones para responder a un entorno médico en evolución y expandirnos regionalmente para apoyar a más profesionales de la salud.</p>
             </div>
             
@@ -1200,8 +1472,8 @@ export class EmailService {
             
             <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
               <p style="margin-bottom: 15px;">Como asistente, tendrás acceso a las secciones que el profesional de la salud te habilite para apoyar en las tareas administrativas y de gestión de pacientes.</p>
-              <p style="margin-bottom: 15px;">Qlinexa360 es la <strong>plataforma médica mexicana más confiable y accesible</strong> para la gestión integral de pacientes y servicios de salud.</p>
-              <p>Desarrollada con orgullo en México y diseñada específicamente para las necesidades del sector sanitario latinoamericano.</p>
+              <p style="margin-bottom: 15px;">Qlinexa360 es la <strong>plataforma médica más confiable y accesible de Latinoamérica</strong> para la gestión integral de pacientes y servicios de salud.</p>
+              <p>Diseñada específicamente para las necesidades del sector sanitario de Latinoamérica y los países de habla hispana.</p>
             </div>
             
             <div style="background-color: #dbeafe; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
@@ -1267,9 +1539,9 @@ export class EmailService {
             </div>
             
             <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
-              <p style="margin-bottom: 15px;">Qlinexa360 es la <strong>plataforma médica mexicana más confiable y accesible</strong> para la gestión integral de tu salud.</p>
+              <p style="margin-bottom: 15px;">Qlinexa360 es la <strong>plataforma médica más confiable y accesible de Latinoamérica</strong> para la gestión integral de tu salud.</p>
               <p style="margin-bottom: 15px;">Desde aquí podrás acceder a tu historial médico, recetas, citas y toda la información relacionada con tu atención médica de manera segura y organizada.</p>
-              <p>Desarrollada con orgullo en México y diseñada específicamente para las necesidades del sector sanitario latinoamericano.</p>
+              <p>Diseñada específicamente para las necesidades del sector sanitario de Latinoamérica y los países de habla hispana.</p>
             </div>
             
             <div style="background-color: #dbeafe; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
@@ -1659,20 +1931,33 @@ export class NotificationService {
   }): Promise<boolean> {
     try {
       const subject = 'Tu receta médica - Qlinexa360';
-      const html = `
-        <html><body style="font-family: Arial, sans-serif; color: #333;">
-          <h2 style="color:#2563eb;">Receta médica</h2>
-          <p>Hola ${params.patientName},</p>
-          <p><strong>${params.doctorName}</strong> te ha enviado una receta.</p>
-          ${params.viewUrl ? `<p>Puedes verla y descargarla en el siguiente enlace seguro:</p>
-          <p><a href="${params.viewUrl}" style="color:#2563eb;">Ver y descargar receta</a></p>` : ''}
-          <p>Identificador de receta: <strong>${params.recipeId}</strong></p>
-          <p>Gracias por usar Qlinexa360.</p>
-        </body></html>`;
-      const ok = await sendEmailHtml(
+      const safeViewUrl = params.viewUrl ? escapeHtmlAttr(params.viewUrl) : '';
+      const linkBlock = params.viewUrl
+        ? `<p style="font-size:15px; color:#334155;">Puedes verla y descargarla en el siguiente enlace seguro:</p>
+          ${emailButton('Ver y descargar receta', params.viewUrl)}
+          <p style="font-size:13px; color:#64748b; word-break:break-all;">Si el botón no funciona, abre este enlace:<br/>
+          <a href="${safeViewUrl}" style="color:#2563eb;">${safeViewUrl}</a></p>`
+        : `<p style="font-size:15px; color:#b45309;">No se pudo generar el enlace de visualización. Contacta a tu médico.</p>`;
+      const html = brandedEmailLayout({
+        subtitle: 'Receta médica',
+        bodyHtml: `
+          <h2 style="color:#0f172a; margin-top:0; font-size:20px;">Hola ${params.patientName},</h2>
+          <p style="font-size:16px; color:#334155;"><strong style="color:#2563eb;">${params.doctorName}</strong> te ha enviado una receta médica.</p>
+          ${linkBlock}
+          ${emailInfoCard(`<p style="margin:0; color:#64748b; font-size:13px;">Identificador de receta</p>
+            <p style="margin:4px 0 0 0; color:#0f172a; font-size:15px; font-weight:600; word-break:break-all;">${params.recipeId}</p>`)}
+          <p style="font-size:15px; color:#334155;">Gracias por confiar en Qlinexa360 para el cuidado de tu salud.</p>
+        `,
+        footerNote: NO_REPLY_FOOTER
+      });
+      const textFallback = params.viewUrl
+        ? `${params.doctorName} te ha enviado una receta médica.\n\nVer receta: ${params.viewUrl}\n\nIdentificador: ${params.recipeId}`
+        : `${params.doctorName} te ha enviado una receta médica.\n\nIdentificador: ${params.recipeId}`;
+      const ok = await sendEmailHtmlWithTextFallback(
         params.toEmail,
         subject,
         html,
+        textFallback,
         fromAddresses.noReply
       );
       return ok;
@@ -1687,8 +1972,10 @@ export class NotificationService {
     patientName: string;
     doctorName: string;
     invoiceDate: string;
-    pdfPath: string;
-    xmlPath: string;
+    pdfPath?: string;
+    xmlPath?: string;
+    pdfAttachment?: { filename: string; content: Buffer };
+    xmlAttachment?: { filename: string; content: Buffer };
   }): Promise<boolean> {
     try {
       const fs = require('fs');
@@ -1697,24 +1984,42 @@ export class NotificationService {
       // Leer archivos para adjuntarlos
       const attachments: any[] = [];
       
-      // Adjuntar PDF
-      if (params.pdfPath && fs.existsSync(params.pdfPath)) {
+      if (params.pdfAttachment) {
+        attachments.push({
+          filename: params.pdfAttachment.filename.endsWith('.pdf')
+            ? params.pdfAttachment.filename
+            : `${params.pdfAttachment.filename}.pdf`,
+          content: params.pdfAttachment.content,
+          contentType: 'application/pdf',
+        });
+      } else if (params.pdfPath && fs.existsSync(params.pdfPath)) {
         const pdfFileName = path.basename(params.pdfPath);
         attachments.push({
           filename: pdfFileName.endsWith('.pdf') ? pdfFileName : `${pdfFileName}.pdf`,
           path: params.pdfPath,
-          contentType: 'application/pdf'
+          contentType: 'application/pdf',
         });
       }
       
-      // Adjuntar XML
-      if (params.xmlPath && fs.existsSync(params.xmlPath)) {
+      if (params.xmlAttachment) {
+        attachments.push({
+          filename: params.xmlAttachment.filename.endsWith('.xml')
+            ? params.xmlAttachment.filename
+            : `${params.xmlAttachment.filename}.xml`,
+          content: params.xmlAttachment.content,
+          contentType: 'application/xml',
+        });
+      } else if (params.xmlPath && fs.existsSync(params.xmlPath)) {
         const xmlFileName = path.basename(params.xmlPath);
         attachments.push({
           filename: xmlFileName.endsWith('.xml') ? xmlFileName : `${xmlFileName}.xml`,
           path: params.xmlPath,
-          contentType: 'application/xml'
+          contentType: 'application/xml',
         });
+      }
+
+      if (attachments.length === 0) {
+        return false;
       }
       
       const subject = 'Tu factura - Qlinexa360';
@@ -1787,6 +2092,227 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Envía al DOCTOR la factura de su suscripción a Qlinexa360 (emitida por el admin),
+   * con un correo de diseño atractivo: agradece su preferencia e invita a sugerencias.
+   */
+  async sendSubscriptionInvoiceToDoctorEmail(params: {
+    toEmail: string;
+    doctorName: string;
+    invoiceDate: string;
+    amountLabel: string;
+    pdfPath: string;
+    xmlPath?: string;
+  }): Promise<boolean> {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+
+      const attachments: any[] = [];
+      if (params.pdfPath && fs.existsSync(params.pdfPath)) {
+        const pdfFileName = path.basename(params.pdfPath);
+        attachments.push({
+          filename: pdfFileName.endsWith('.pdf') ? pdfFileName : `${pdfFileName}.pdf`,
+          path: params.pdfPath,
+          contentType: 'application/pdf'
+        });
+      }
+      if (params.xmlPath && fs.existsSync(params.xmlPath)) {
+        const xmlFileName = path.basename(params.xmlPath);
+        attachments.push({
+          filename: xmlFileName.endsWith('.xml') ? xmlFileName : `${xmlFileName}.xml`,
+          path: params.xmlPath,
+          contentType: 'application/xml'
+        });
+      }
+
+      const greetingName = params.doctorName ? `Dr(a). ${params.doctorName}` : 'Estimado(a) doctor(a)';
+      const xmlRow = params.xmlPath
+        ? `<p style="margin: 6px 0 0 0; font-size: 14px; color: #334155;">📋 <strong>Archivo XML</strong> — Comprobante fiscal digital (CFDI)</p>`
+        : '';
+      const feedbackEmail = fromAddresses.admin;
+
+      const subject = `Tu factura de Qlinexa360 — ${params.invoiceDate}`;
+      const html = `
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.6; margin: 0; padding: 0; background-color: #eef2f7;">
+          <div style="max-width: 600px; margin: 0 auto; padding: 24px;">
+            <div style="background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 6px 24px rgba(2,6,23,0.08);">
+              <div style="background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 32px 28px; text-align: center;">
+                <h1 style="color:#ffffff; margin: 0; font-size: 26px; letter-spacing: 0.5px;">Qlinexa360</h1>
+                <p style="color:#dbeafe; margin: 6px 0 0 0; font-size: 14px;">Factura de tu suscripción</p>
+              </div>
+
+              <div style="padding: 32px 28px;">
+                <h2 style="color:#0f172a; margin-top: 0; font-size: 20px;">Hola ${greetingName},</h2>
+                <p style="font-size: 16px; color: #334155;">
+                  Antes que nada, <strong>¡gracias por tu preferencia!</strong> Es un gusto acompañarte en la gestión
+                  de tu práctica médica. Adjuntamos la factura correspondiente a tu suscripción.
+                </p>
+
+                <div style="background: #f0f9ff; padding: 20px; border-radius: 12px; margin: 24px 0; border-left: 4px solid #2563eb;">
+                  <table style="width: 100%; font-size: 15px; color: #0f172a;">
+                    <tr>
+                      <td style="padding: 4px 0; color:#64748b;">Fecha de factura</td>
+                      <td style="padding: 4px 0; text-align: right; font-weight: 600;">${params.invoiceDate}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 4px 0; color:#64748b;">Importe</td>
+                      <td style="padding: 4px 0; text-align: right; font-weight: 700; color:#1e40af;">${params.amountLabel}</td>
+                    </tr>
+                  </table>
+                </div>
+
+                <div style="background: #f8fafc; padding: 16px; border-radius: 10px; margin: 20px 0;">
+                  <p style="margin: 0; font-size: 14px; color: #334155;">📄 <strong>Archivo PDF</strong> — Tu factura</p>
+                  ${xmlRow}
+                </div>
+
+                <div style="background: #ecfdf5; padding: 18px; border-radius: 12px; margin: 24px 0; border-left: 4px solid #10b981;">
+                  <p style="margin: 0; font-size: 14px; color: #065f46;">
+                    💡 <strong>Ayúdanos a mejorar.</strong> Tu opinión es muy valiosa para nosotros.
+                    ¿Qué te gustaría ver en Qlinexa360? Envíanos tus sugerencias y recomendaciones al correo
+                    <a href="mailto:${feedbackEmail}" style="color:#047857; font-weight:600;">${feedbackEmail}</a>.
+                  </p>
+                </div>
+
+                <p style="font-size: 15px; color: #334155;">
+                  Gracias por confiar en nosotros para cuidar de tus pacientes. Seguimos trabajando para que tu
+                  experiencia sea cada día mejor.
+                </p>
+
+                <div style="text-align: center; margin-top: 28px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                  <p style="color: #6b7280; font-size: 14px; margin: 0;">
+                    Con aprecio,<br>
+                    <strong style="color:#1e40af;">Administración Qlinexa360</strong>
+                  </p>
+                </div>
+              </div>
+            </div>
+            <p style="text-align:center; color:#94a3b8; font-size: 12px; margin: 16px 0 0 0;">
+              Este correo incluye tu comprobante fiscal. Consérvalo para tus trámites.<br>
+              Mensaje enviado desde una dirección de solo notificaciones; por favor no respondas a este correo.
+              Para cualquier asunto o sugerencia, escríbenos a
+              <a href="mailto:${feedbackEmail}" style="color:#64748b;">${feedbackEmail}</a>.
+            </p>
+          </div>
+        </body>
+        </html>`;
+
+      // El remitente verificado en SMTP es no-reply@; usamos admin@ como Responder-a
+      // para que las sugerencias del doctor lleguen al administrador.
+      return await sendEmailHtml(params.toEmail, subject, html, fromAddresses.noReply, attachments, fromAddresses.admin);
+    } catch (error) {
+      securityLogger.error('Error sending subscription invoice to doctor email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Correo de bienvenida al programa de afiliados (alta desde Admin).
+   * Diseño de marca Qlinexa360: agradecimiento, esquema de comisiones, acceso al portal,
+   * código compartible y recordatorio de datos bancarios.
+   */
+  async sendAffiliateWelcomeEmail(params: {
+    toEmail: string;
+    fullName: string;
+    affiliateCode: string;
+    commissionPercentage: number;
+    commissionMonths: number;
+    linkedToExisting: boolean;
+    freeMonthsForDoctor?: number;
+  }): Promise<boolean> {
+    try {
+      const portalUrl = 'https://www.qlinexa360.com';
+      const loginUrl = `${portalUrl}/login`;
+      const forgotPasswordUrl = `${portalUrl}/forgot-password`;
+      const adminEmail = fromAddresses.admin;
+      const pct = params.commissionPercentage;
+      const months = params.commissionMonths;
+      const code = params.affiliateCode;
+
+      const shareText = `¡Hola! Te invito a registrarte en Qlinexa360, plataforma para profesionales de la salud. Al registrarte usa mi código de afiliado: ${code}. Portal: ${portalUrl}`;
+      const mailtoShare = `mailto:?subject=${encodeURIComponent('Invitación a Qlinexa360')}&body=${encodeURIComponent(shareText)}`;
+      const whatsappShare = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+
+      const accessBlock = params.linkedToExisting
+        ? `${emailInfoCard(`
+            <p style="margin:0 0 8px 0; font-size:15px; color:#0f172a;"><strong>Accede con tu cuenta actual</strong></p>
+            <p style="margin:0 0 6px 0; font-size:14px; color:#334155;"><strong>Correo de acceso:</strong> ${params.toEmail}</p>
+            <p style="margin:0; font-size:14px; color:#334155;">Ya tienes usuario en Qlinexa360. Inicia sesión en <a href="${portalUrl}" style="color:#2563eb;">${portalUrl}</a> con tu contraseña habitual. Verás <strong>Programa de afiliados</strong> en tu menú.</p>
+            <p style="margin:10px 0 0 0; font-size:13px; color:#64748b;">Si olvidaste tu contraseña, usa <a href="${forgotPasswordUrl}" style="color:#2563eb;">Olvidé mi contraseña</a>.</p>
+          `)}
+          ${emailButton('Acceder al portal', loginUrl)}`
+        : `${emailInfoCard(`
+            <p style="margin:0 0 8px 0; font-size:15px; color:#0f172a;"><strong>Tus datos de acceso</strong></p>
+            <p style="margin:0 0 6px 0; font-size:14px; color:#334155;"><strong>Correo de acceso:</strong> ${params.toEmail}</p>
+            <p style="margin:0 0 6px 0; font-size:14px; color:#334155;">Portal: <a href="${portalUrl}" style="color:#2563eb; font-weight:600;">${portalUrl}</a></p>
+            <p style="margin:0; font-size:14px; color:#334155;">Para crear tu contraseña, entra a <a href="${forgotPasswordUrl}" style="color:#2563eb; font-weight:600;">Olvidé mi contraseña</a>, escribe tu correo <strong>${params.toEmail}</strong> y sigue las instrucciones que recibirás por email.</p>
+          `, '#2563eb', '#eff6ff')}
+          ${emailButton('Ir al portal Qlinexa360', loginUrl)}
+          ${emailLinkButtons([{ label: 'Olvidé mi contraseña', href: forgotPasswordUrl, color: '#64748b' }])}`;
+
+      const subject = '¡Bienvenido al programa de afiliados Qlinexa360!';
+      const html = brandedEmailLayout({
+        subtitle: 'Programa de afiliados comerciales',
+        bodyHtml: `
+          <h2 style="color:#0f172a; margin-top:0; font-size:20px;">¡Hola ${params.fullName}!</h2>
+          <p style="font-size:16px; color:#334155;">
+            <strong>¡Gracias por unirte al programa de afiliados de Qlinexa360!</strong>
+            Nos alegra contar contigo para acercar nuestra plataforma a más profesionales de la salud en Latinoamérica.
+          </p>
+
+          <div style="background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%);padding:22px 20px;border-radius:14px;margin:22px 0;text-align:center;border:2px solid #93c5fd;">
+            <p style="margin:0 0 8px 0;color:#1e3a8a;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Tu código de afiliado</p>
+            <p style="margin:0;color:#1e40af;font-size:28px;font-weight:800;letter-spacing:2px;font-family:Consolas,Monaco,monospace;user-select:all;-webkit-user-select:all;">${code}</p>
+            <p style="margin:10px 0 0 0;font-size:12px;color:#475569;">Selecciona el código para copiarlo, o compártelo directamente:</p>
+            ${emailLinkButtons([
+              { label: '📧 Enviar por correo', href: mailtoShare, color: '#2563eb' },
+              { label: '💬 Enviar por WhatsApp', href: whatsappShare, color: '#16a34a' }
+            ])}
+          </div>
+
+          <div style="margin:22px 0;">
+            <p style="font-size:15px; font-weight:600; color:#0f172a; margin:0 0 12px 0;">¿Cómo puedes ganar comisiones?</p>
+            <ol style="margin:0; padding-left:20px; color:#334155; font-size:14px; line-height:1.7;">
+              <li>Invita a <strong>profesionales de la salud</strong> a registrarse en <a href="${portalUrl}" style="color:#2563eb;">Qlinexa360</a> usando tu código <strong>${code}</strong>.</li>
+              <li>Cuando el profesional contrate su suscripción y realice <strong>pagos reales</strong>, tú recibes comisión.</li>
+              <li>Ganas el <strong>${pct}%</strong> sobre la base <strong>sin IVA</strong> de cada pago, durante los primeros <strong>${months} meses</strong> de suscripción de cada doctor referido.</li>
+              <li>Las comisiones se acumulan en tu panel de afiliado.</li>
+            </ol>
+          </div>
+
+          ${emailInfoCard(`
+            <p style="margin:0 0 8px 0; font-size:15px; color:#065f46; font-weight:600;">🏦 Importante: registra tus datos bancarios</p>
+            <p style="margin:0; font-size:14px; color:#334155;">
+              Entra al portal en <a href="${portalUrl}" style="color:#047857; font-weight:600;">${portalUrl}</a>, abre tu <strong>Panel de afiliado</strong> y captura tus datos de pago
+              (<strong>SPEI</strong> si estás en México, o <strong>PayPal</strong> para otros países). Sin ellos no podremos transferarte tus comisiones.
+            </p>
+          `, '#10b981', '#ecfdf5')}
+
+          ${accessBlock}
+
+          <p style="font-size:14px; color:#64748b; margin-top:20px;">
+            ¿Dudas? Escríbenos a <a href="mailto:${adminEmail}" style="color:#2563eb; font-weight:600;">${adminEmail}</a>.
+          </p>
+        `,
+        footerNote: NO_REPLY_FOOTER
+      });
+
+      const ok = await sendEmailHtml(params.toEmail, subject, html, fromAddresses.noReply, undefined, adminEmail);
+      if (ok) securityLogger.info(`Affiliate welcome email sent to ${params.toEmail}`);
+      else securityLogger.error(`Failed to send affiliate welcome email to ${params.toEmail}`);
+      return ok;
+    } catch (error) {
+      securityLogger.error('Error sending affiliate welcome email:', error);
+      return false;
+    }
+  }
+
   // Static helpers used by AgendaPacientesController
   static async sendAppointmentConfirmation(email: string, phone: string, appointmentData: { doctorName: string; patientName: string; date: Date; time: string; reason?: string }) {
     const svc = NotificationService.getInstance();
@@ -1827,6 +2353,16 @@ export class NotificationService {
   }): Promise<boolean> {
     const svc = NotificationService.getInstance();
     return svc.emailService.sendNewUserConsentToLegal(params);
+  }
+
+  static async sendNewUserConsentToUser(params: {
+    fullName: string;
+    email: string;
+    role: string;
+    pdfBuffers: { aviso: Buffer; terminos: Buffer; contrato: Buffer };
+  }): Promise<boolean> {
+    const svc = NotificationService.getInstance();
+    return svc.emailService.sendNewUserConsentToUser(params);
   }
 
   static async sendPatientAvisoPrivacidadToDoctor(params: {
@@ -1955,7 +2491,7 @@ export class NotificationService {
           
           <div style="background: #343a40; padding: 20px; text-align: center; color: white;">
             <p style="margin: 0; font-size: 14px;">
-              © 2024 Qlinexa360. Plataforma médica mexicana.
+              © 2024 Qlinexa360. Plataforma médica para Latinoamérica.
             </p>
           </div>
         </div>

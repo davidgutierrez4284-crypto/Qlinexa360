@@ -10,6 +10,26 @@ export const formatDate = (dateString) => {
   return `${day}-${month}-${year}`;
 };
 
+/** Finanzas MP: 02-Jul-2026 08:51:34 a.m. */
+export const formatFinanzasDateTime = (dateString) => {
+  if (!dateString) return '-';
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return '-';
+
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  const time = date.toLocaleTimeString('es-MX', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+
+  return `${day}-${month}-${year} ${time}`;
+};
+
 // Función para formatear fecha completa
 export const formatFullDate = (dateString) => {
   if (!dateString) return '-';

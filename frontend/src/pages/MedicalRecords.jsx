@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Navigate } from 'react-router-dom';
 import { 
   DocumentTextIcon, 
   CalendarIcon, 
@@ -16,17 +16,22 @@ import {
   InformationCircleIcon,
   UserPlusIcon,
   PencilIcon,
-  TrashIcon
+  TrashIcon,
+  PrinterIcon,
+  UserMinusIcon,
+  UsersIcon
 } from '@heroicons/react/24/outline';
 // Importar componentes del sistema de consultas divididas
 import DividedConsultationManager from '../components/medical/DividedConsultationManager';
 import { ConsultationStatusIndicator, ConsultationStats, PendingConsultationsAlert } from '../components/medical/ConsultationStatusIndicator';
+import { getConsultationAttendedByLabel, isPreConsultaConsultation } from '../utils/consultationDisplay';
 import ConsultationStatusHelp from '../components/medical/ConsultationStatusHelp';
 import ConsultationAttachmentsForm from '../components/medical/ConsultationAttachmentsForm';
 import BasicConsultationForm from '../components/medical/BasicConsultationForm';
 import useDividedConsultations from '../hooks/useDividedConsultations';
 import { toast } from 'react-toastify';
 import { searchPatients, searchHealthProfessionals, getPatientDetails, createConsultation, uploadFile, createPatient, getFormTemplates, updatePatient } from '../services/doctorService';
+import { getMyProfile, getMyCaseShareAccess, revokeMyCaseCollaborator } from '../services/patientService';
 import consultationService from '../services/consultationService';
 import { debounce } from 'lodash';
 import NewPatientModal from '../components/medical/NewPatientModal';
@@ -39,14 +44,19 @@ import useClinicalCases from '../hooks/useClinicalCases';
 import usePatientClinicalCases from '../hooks/usePatientClinicalCases';
 import usePatientMedicalRecords from '../hooks/usePatientMedicalRecords';
 import NewClinicalCaseModal from '../components/medical/NewClinicalCaseModal';
+import PatientSecondOpinionInvite from '../components/medical/PatientSecondOpinionInvite';
 import DoctorFormTemplateManager from '../components/medical/DoctorFormTemplateManager';
 import Loader from '../components/common/Loader';
 import PhoneInput from '../components/common/PhoneInput';
 import axios from 'axios';
+import { buildPrintDocumentHtml, openClinicalHistoryPrintWindow } from '../utils/clinicalHistoryPrint';
 import FileHistoryViewer from '../components/medical/FileHistoryViewer';
 import { useAuth } from '../context/AuthContext';
+import { useClinicalHistoryPortalAccess } from '../hooks/useClinicalHistoryPortalAccess';
 import { getApiUrl } from '../utils/api';
-import { formatAgeForDisplay, formatAgeFieldValue } from '../utils/ageUtils';
+import { isSmartLabEnabled } from '../config/featureFlags';
+import LabPatientDashboard from './smartLab/LabPatientDashboard';
+import { formatAgeForDisplay, formatAgeFieldValue, formatDateOfBirthDisplay } from '../utils/ageUtils';
 
 
 
@@ -191,10 +201,13 @@ const SearchBar = ({ onSelectPatient, newlyCreatedPatient }) => {
   );
 };
 
-const PatientHeader = ({ patient, onOpenAdditional }) => {
+const PatientHeader = ({ patient, onOpenAdditional, showAccessControlHint = false }) => {
   const [signedProfileUrl, setSignedProfileUrl] = useState('');
+  const firstName = patient.firstName || patient.user?.firstName || '';
+  const lastName = patient.lastName || patient.user?.lastName || '';
   const rawEmail = patient.email || patient.user?.email || '';
   const displayEmail = (rawEmail && !String(rawEmail).startsWith('patient-no-email@')) ? rawEmail : '';
+  const displayPhone = patient.phone || patient.user?.phone || '';
 
   useEffect(() => {
     async function fetchSignedUrl() {
@@ -227,22 +240,41 @@ const PatientHeader = ({ patient, onOpenAdditional }) => {
           />
         ) : (
           <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-full bg-teal-600 flex items-center justify-center text-white text-lg sm:text-2xl font-bold flex-shrink-0">
-            {patient.firstName?.[0]}{patient.lastName?.[0]}
+            {firstName?.[0]}
+            {lastName?.[0]}
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="text-lg sm:text-2xl font-bold text-gray-800 truncate">{patient.firstName} {patient.lastName}</div>
+          <div className="text-lg sm:text-2xl font-bold text-gray-800 truncate">
+            {firstName} {lastName}
+          </div>
           <div className="text-gray-600 text-xs sm:text-sm truncate">Email: {displayEmail || 'Sin correo (agregar en Datos adicionales)'}</div>
-          <div className="text-gray-600 text-xs sm:text-sm">Fecha de nacimiento: {patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString('es-ES') : (patient.dob || '')} {formatAgeForDisplay(patient.dateOfBirth || patient.dob)}</div>
-          <div className="text-gray-600 text-xs sm:text-sm">Teléfono: {patient.phone}</div>
+          <div className="text-gray-600 text-xs sm:text-sm">Fecha de nacimiento: {patient.dateOfBirth ? formatDateOfBirthDisplay(patient.dateOfBirth) : (patient.dob || '—')} {formatAgeForDisplay(patient.dateOfBirth || patient.dob)}</div>
+          <div className="text-gray-600 text-xs sm:text-sm">Teléfono: {displayPhone || '—'}</div>
         </div>
       </div>
-      <button
-        onClick={onOpenAdditional}
-        className="mt-3 md:mt-0 px-3 py-2 sm:px-4 bg-white border border-gray-300 rounded-md shadow text-gray-800 hover:bg-gray-100 text-sm flex-shrink-0"
-      >
-        Datos adicionales
-      </button>
+      {showAccessControlHint ? (
+        <Tooltip
+          placement="bottom"
+          text="Desde aquí puedes actualizar los datos del paciente. Si eres el profesional de la salud titular vinculado a su expediente, también puedes activar o desactivar su acceso al historial clínico en el portal del paciente."
+        >
+          <button
+            type="button"
+            onClick={onOpenAdditional}
+            className="mt-3 md:mt-0 px-3 py-2 sm:px-4 bg-white border border-gray-300 rounded-md shadow text-gray-800 hover:bg-gray-100 text-sm flex-shrink-0"
+          >
+            Datos adicionales
+          </button>
+        </Tooltip>
+      ) : (
+        <button
+          type="button"
+          onClick={onOpenAdditional}
+          className="mt-3 md:mt-0 px-3 py-2 sm:px-4 bg-white border border-gray-300 rounded-md shadow text-gray-800 hover:bg-gray-100 text-sm flex-shrink-0"
+        >
+          Datos adicionales
+        </button>
+      )}
     </div>
   );
 };
@@ -355,11 +387,16 @@ const MedicalRecordsConsultationList = ({ consultations, onNewConsultation, onSe
                     {CLINICAL_EVOLUTION_LABELS[consultation.clinicalEvolution] || consultation.clinicalEvolution || 'Sin evolución'}
                   </span>
                   <p className="text-sm text-gray-600">Fecha: {formatDate(consultation.date || consultation.createdAt)}</p>
-                  {consultation.user && (
-                    <p className="text-sm text-gray-500 break-words">
-                      Atendido por: {consultation.user.firstName} {consultation.user.lastName}
-                    </p>
-                  )}
+                  <p className="text-sm text-gray-500 break-words">
+                    {isPreConsultaConsultation(consultation) ? 'Registrada por:' : 'Atendido por:'}{' '}
+                    <span
+                      className={
+                        isPreConsultaConsultation(consultation) ? 'font-medium text-violet-700' : ''
+                      }
+                    >
+                      {getConsultationAttendedByLabel(consultation)}
+                    </span>
+                  </p>
                 </div>
                 {/* Archivos y links - en su propia fila en móvil */}
                 <div className="flex items-center gap-3 flex-shrink-0">
@@ -986,19 +1023,9 @@ const ConsultationDetailView = ({ consultation, onBack, fieldLabels, formTemplat
   );
 };
 
-// Modal para datos adicionales
-const AdditionalDataModal = ({ isOpen, onClose, patient, lastDiagnosis, onSave }) => {
-  useEffect(() => {
-    if (isOpen) {
-      console.log('emergencyContacts al abrir modal:', patient.emergencyContacts);
-      if (patient.emergencyContacts && patient.emergencyContacts.length > 0) {
-        console.log('Primer contacto de emergencia:', patient.emergencyContacts[0]);
-      } else {
-        console.log('No hay contacto de emergencia registrado');
-      }
-    }
-  }, [isOpen, patient]);
-
+// Modal para datos adicionales (readOnly: vista paciente; solo el profesional edita)
+const AdditionalDataModal = ({ isOpen, onClose, patient, lastDiagnosis, onSave, readOnly = false }) => {
+  const canManageClinicalHistoryAccess = !!patient?.canManageClinicalHistoryAccess;
   // Ajuste: siempre tomar el primer contacto de emergencia si existe
   const emergencyContact = patient.emergencyContacts && patient.emergencyContacts.length > 0 ? patient.emergencyContacts[0] : {};
   const getDisplayEmail = () => {
@@ -1012,6 +1039,8 @@ const AdditionalDataModal = ({ isOpen, onClose, patient, lastDiagnosis, onSave }
     taxName: patient.taxName || '',
     taxId: patient.taxId || '',
     taxAddress: patient.taxAddress || '',
+    taxPostalCode: patient.taxPostalCode || '',
+    taxRegime: patient.taxRegime || '',
     gender: patient.gender || '',
     birthDate: patient.birthDate || patient.dateOfBirth ? (patient.birthDate || patient.dateOfBirth).slice(0,10) : '',
     bloodType: patient.bloodType || '',
@@ -1024,6 +1053,7 @@ const AdditionalDataModal = ({ isOpen, onClose, patient, lastDiagnosis, onSave }
     emergencyContactEmail: emergencyContact.email || '',
     emergencyContactPhone: emergencyContact.phone || '',
     emergencyContactRelationship: emergencyContact.relationship || '',
+    clinicalHistoryVisibleToPatient: patient.clinicalHistoryVisibleToPatient !== false,
   });
 
   useEffect(() => {
@@ -1037,6 +1067,8 @@ const AdditionalDataModal = ({ isOpen, onClose, patient, lastDiagnosis, onSave }
         taxName: patient.taxName || '',
         taxId: patient.taxId || '',
         taxAddress: patient.taxAddress || '',
+        taxPostalCode: patient.taxPostalCode || '',
+        taxRegime: patient.taxRegime || '',
         gender: patient.gender || '',
         birthDate: patient.birthDate || patient.dateOfBirth ? (patient.birthDate || patient.dateOfBirth).slice(0,10) : '',
         bloodType: patient.bloodType || '',
@@ -1049,11 +1081,17 @@ const AdditionalDataModal = ({ isOpen, onClose, patient, lastDiagnosis, onSave }
         emergencyContactEmail: emergencyContact.email || '',
         emergencyContactPhone: emergencyContact.phone || '',
         emergencyContactRelationship: emergencyContact.relationship || '',
+        clinicalHistoryVisibleToPatient: patient.clinicalHistoryVisibleToPatient !== false,
       });
     }
-  }, [isOpen, patient.id, patient.emergencyContacts, patient.email, patient.user?.email]);
+  }, [isOpen, patient.id, patient.emergencyContacts, patient.email, patient.user?.email, patient.clinicalHistoryVisibleToPatient, patient.canManageClinicalHistoryAccess]);
 
   const [signedTaxUrl, setSignedTaxUrl] = useState('');
+  const [showEmailHelp, setShowEmailHelp] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) setShowEmailHelp(false);
+  }, [isOpen]);
 
   useEffect(() => {
     async function fetchSignedTaxUrl() {
@@ -1076,15 +1114,18 @@ const AdditionalDataModal = ({ isOpen, onClose, patient, lastDiagnosis, onSave }
   }, [form.taxCertificateUrl]);
 
   const handleChange = (e) => {
-    const { name, value, type, files } = e.target;
+    const { name, value, type, files, checked } = e.target;
     if (type === 'file') {
       setForm({ ...form, [name]: files[0] });
+    } else if (type === 'checkbox') {
+      setForm({ ...form, [name]: checked });
     } else {
       setForm({ ...form, [name]: value });
     }
   };
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (readOnly) return;
     const { emergencyContactFirstName, emergencyContactLastName, emergencyContactEmail, emergencyContactPhone, emergencyContactRelationship, ...rest } = form;
     const emergencyContact = {
       firstName: emergencyContactFirstName,
@@ -1095,39 +1136,98 @@ const AdditionalDataModal = ({ isOpen, onClose, patient, lastDiagnosis, onSave }
     };
     onSave({ ...rest, emergencyContact });
   };
+  const roCls = readOnly ? 'bg-gray-50 text-gray-800 cursor-not-allowed' : '';
   return (
     <Modal
       isOpen={isOpen}
       onRequestClose={onClose}
       contentLabel="Datos adicionales"
-      className="bg-white rounded-xl p-6 max-w-lg mx-auto mt-24 shadow-xl border border-gray-200 outline-none"
+      className="bg-white rounded-xl p-6 w-full max-w-[550px] mx-4 sm:mx-auto mt-24 shadow-xl border border-gray-200 outline-none"
       overlayClassName="fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center"
       ariaHideApp={false}
     >
-      <h2 className="text-2xl font-bold mb-4">Datos adicionales del paciente</h2>
-      <div className="max-h-[70vh] overflow-y-auto pr-2">
+      <h2 className="text-2xl font-bold mb-1">Datos adicionales del paciente</h2>
+      {readOnly && (
+        <p className="text-sm text-slate-600 mb-4">
+          Esta información la registran y actualizan los profesionales de la salud vinculados a tu expediente. Aquí solo puedes consultarla.
+        </p>
+      )}
+      <div className="max-h-[70vh] overflow-y-auto overflow-x-hidden pr-1">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 flex items-center">
+            <label className="block text-sm font-medium text-gray-700 flex items-center flex-wrap gap-1">
               Correo electrónico del paciente
-              <div className="relative ml-1 group">
-                <InformationCircleIcon className="h-4 w-4 text-blue-500 cursor-help" />
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-80 p-2 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10 pointer-events-none">
-                  Puedes actualizar el correo de tu paciente, a este mail le llegarán las recetas, citas y eventos de calendario. Al registrar el correo el paciente recibirá una invitación para entrar a la plataforma y ver únicamente su información.
-                </div>
-              </div>
+              {!readOnly && (
+                <button
+                  type="button"
+                  className="inline-flex rounded-full p-0.5 text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  aria-label="Información sobre el correo del paciente"
+                  aria-expanded={showEmailHelp}
+                  onClick={() => setShowEmailHelp((v) => !v)}
+                >
+                  <InformationCircleIcon className="h-4 w-4" />
+                </button>
+              )}
             </label>
-            <input type="email" name="email" value={form.email} onChange={handleChange} placeholder="Agregar correo si no estaba registrado" className="form-input mt-1 w-full" />
-            {!getDisplayEmail() && (
+            {!readOnly && showEmailHelp && (
+              <p className="mt-2 mb-1 text-xs leading-relaxed text-white bg-gray-800 rounded-lg p-3 shadow-md">
+                Puedes actualizar el correo de tu paciente; a este mail le llegarán las recetas, citas y eventos de calendario. Al registrar el correo, el paciente recibirá una invitación para entrar a la plataforma y ver únicamente su información.
+              </p>
+            )}
+            <input
+              type="email"
+              name="email"
+              value={form.email}
+              onChange={handleChange}
+              readOnly={readOnly}
+              placeholder="Agregar correo si no estaba registrado"
+              className={`form-input mt-1 w-full ${roCls}`}
+            />
+            {!readOnly && !getDisplayEmail() && (
               <p className="text-xs text-amber-600 mt-1">Puedes agregar el correo aquí para vincularlo al historial sin crear un nuevo registro.</p>
             )}
           </div>
+          {canManageClinicalHistoryAccess && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="clinicalHistoryVisibleToPatient"
+                  checked={!!form.clinicalHistoryVisibleToPatient}
+                  onChange={handleChange}
+                  disabled={readOnly}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-gray-800">
+                    Permitir que el paciente vea su historial clínico en la plataforma
+                  </span>
+                  <span className="block text-xs text-gray-600 mt-1">
+                    Desactiva esta opción para pacientes sensibles (psicología, psiquiatría, etc.). El paciente podrá seguir usando citas, facturación y zona de estudio, pero no verá las consultas ni notas clínicas en su portal.
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
           <div>
-            <PhoneInput name="phone" label="Teléfono" value={form.phone} onChange={handleChange} placeholder="Ej: 55 1234 5678" />
+            <PhoneInput
+              name="phone"
+              label="Teléfono"
+              value={form.phone}
+              onChange={handleChange}
+              placeholder="Ej: 55 1234 5678"
+              disabled={readOnly}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Género</label>
-            <select name="gender" value={form.gender} onChange={handleChange} className="form-input mt-1 w-full">
+            <select
+              name="gender"
+              value={form.gender}
+              onChange={handleChange}
+              disabled={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+            >
               <option value="">Selecciona...</option>
               <option value="male">Masculino</option>
               <option value="female">Femenino</option>
@@ -1136,11 +1236,24 @@ const AdditionalDataModal = ({ isOpen, onClose, patient, lastDiagnosis, onSave }
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Fecha de nacimiento</label>
-            <input type="date" name="birthDate" value={form.birthDate} onChange={handleChange} className="form-input mt-1 w-full" />
+            <input
+              type="date"
+              name="birthDate"
+              value={form.birthDate}
+              onChange={handleChange}
+              readOnly={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Tipo de sangre</label>
-            <select name="bloodType" value={form.bloodType} onChange={handleChange} className="form-input mt-1 w-full">
+            <select
+              name="bloodType"
+              value={form.bloodType}
+              onChange={handleChange}
+              disabled={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+            >
               <option value="">Selecciona...</option>
               <option value="A+">A+</option>
               <option value="A-">A-</option>
@@ -1154,57 +1267,184 @@ const AdditionalDataModal = ({ isOpen, onClose, patient, lastDiagnosis, onSave }
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Alergias</label>
-            <textarea name="allergies" value={form.allergies} onChange={handleChange} className="form-input mt-1 w-full" rows="2" />
+            <textarea
+              name="allergies"
+              value={form.allergies}
+              onChange={handleChange}
+              readOnly={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+              rows="2"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Enfermedades crónicas</label>
-            <textarea name="chronicDiseases" value={form.chronicDiseases} onChange={handleChange} className="form-input mt-1 w-full" rows="2" />
+            <textarea
+              name="chronicDiseases"
+              value={form.chronicDiseases}
+              onChange={handleChange}
+              readOnly={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+              rows="2"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Contacto de emergencia - Nombre</label>
-            <input type="text" name="emergencyContactFirstName" value={form.emergencyContactFirstName} onChange={handleChange} className="form-input mt-1 w-full" />
+            <input
+              type="text"
+              name="emergencyContactFirstName"
+              value={form.emergencyContactFirstName}
+              onChange={handleChange}
+              readOnly={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Contacto de emergencia - Apellido</label>
-            <input type="text" name="emergencyContactLastName" value={form.emergencyContactLastName} onChange={handleChange} className="form-input mt-1 w-full" />
+            <input
+              type="text"
+              name="emergencyContactLastName"
+              value={form.emergencyContactLastName}
+              onChange={handleChange}
+              readOnly={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Contacto de emergencia - Email</label>
-            <input type="email" name="emergencyContactEmail" value={form.emergencyContactEmail} onChange={handleChange} className="form-input mt-1 w-full" />
+            <input
+              type="email"
+              name="emergencyContactEmail"
+              value={form.emergencyContactEmail}
+              onChange={handleChange}
+              readOnly={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+            />
           </div>
           <div>
-            <PhoneInput name="emergencyContactPhone" label="Contacto de emergencia - Teléfono" value={form.emergencyContactPhone} onChange={handleChange} placeholder="Ej: 55 1234 5678" />
+            <PhoneInput
+              name="emergencyContactPhone"
+              label="Contacto de emergencia - Teléfono"
+              value={form.emergencyContactPhone}
+              onChange={handleChange}
+              placeholder="Ej: 55 1234 5678"
+              disabled={readOnly}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Contacto de emergencia - Relación</label>
-            <input type="text" name="emergencyContactRelationship" value={form.emergencyContactRelationship} onChange={handleChange} className="form-input mt-1 w-full" />
+            <input
+              type="text"
+              name="emergencyContactRelationship"
+              value={form.emergencyContactRelationship}
+              onChange={handleChange}
+              readOnly={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Razón social</label>
-            <input type="text" name="taxName" value={form.taxName} onChange={handleChange} className="form-input mt-1 w-full" />
+            <input
+              type="text"
+              name="taxName"
+              value={form.taxName}
+              onChange={handleChange}
+              readOnly={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">RFC</label>
-            <input type="text" name="taxId" value={form.taxId} onChange={handleChange} className="form-input mt-1 w-full" />
+            <input
+              type="text"
+              name="taxId"
+              value={form.taxId}
+              onChange={handleChange}
+              readOnly={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Dirección fiscal</label>
-            <input type="text" name="taxAddress" value={form.taxAddress} onChange={handleChange} className="form-input mt-1 w-full" />
+            <input
+              type="text"
+              name="taxAddress"
+              value={form.taxAddress}
+              onChange={handleChange}
+              readOnly={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Código postal fiscal <span className="text-gray-500 font-normal">(opcional, México)</span></label>
+            <input
+              type="text"
+              name="taxPostalCode"
+              value={form.taxPostalCode}
+              onChange={handleChange}
+              placeholder="Ej: 03100"
+              maxLength={10}
+              readOnly={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Régimen fiscal <span className="text-gray-500 font-normal">(opcional, México)</span></label>
+            <select
+              name="taxRegime"
+              value={form.taxRegime}
+              onChange={handleChange}
+              disabled={readOnly}
+              className={`form-input mt-1 w-full ${roCls}`}
+            >
+              <option value="">Selecciona régimen...</option>
+              <option value="601">601 - General de Ley Personas Morales</option>
+              <option value="603">603 - Personas Morales con Fines no Lucrativos</option>
+              <option value="605">605 - Sueldos y Salarios e Ingresos Asimilados</option>
+              <option value="606">606 - Arrendamiento</option>
+              <option value="607">607 - Enajenación o Adquisición de Bienes</option>
+              <option value="608">608 - Demás ingresos</option>
+              <option value="610">610 - Residentes en el Extranjero sin Establecimiento Permanente</option>
+              <option value="611">611 - Ingresos por Dividendos</option>
+              <option value="612">612 - Actividades Empresariales y Profesionales</option>
+              <option value="614">614 - Ingresos por intereses</option>
+              <option value="615">615 - Ingresos por obtención de premios</option>
+              <option value="616">616 - Sin obligaciones fiscales</option>
+              <option value="620">620 - Sociedades Cooperativas de Producción</option>
+              <option value="621">621 - Incorporación Fiscal</option>
+              <option value="622">622 - Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras</option>
+              <option value="623">623 - Opcional para Grupos de Sociedades</option>
+              <option value="624">624 - Coordinados</option>
+              <option value="625">625 - Actividades Empresariales con Plataformas Tecnológicas</option>
+              <option value="626">626 - Régimen Simplificado de Confianza (RESICO)</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Consulta el catálogo en <a href="https://www.sat.gob.mx" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">sat.gob.mx</a></p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Constancia de situación fiscal</label>
             {form.taxCertificateUrl && signedTaxUrl && (
               <a href={signedTaxUrl} target="_blank" rel="noopener noreferrer" className="block text-blue-600 underline mb-2">Ver archivo actual</a>
             )}
-            <input type="file" name="taxCertificate" accept=".pdf,.jpg,.jpeg,.png" onChange={handleChange} className="form-input mt-1 w-full" />
+            {!readOnly && (
+              <input type="file" name="taxCertificate" accept=".pdf,.jpg,.jpeg,.png" onChange={handleChange} className="form-input mt-1 w-full" />
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Foto de perfil</label>
-            <input type="file" name="profilePicture" accept="image/*" onChange={handleChange} className="form-input mt-1 w-full" />
+            {!readOnly && (
+              <input type="file" name="profilePicture" accept="image/*" onChange={handleChange} className="form-input mt-1 w-full" />
+            )}
           </div>
           <div className="flex justify-end gap-2 pt-4">
-            <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-md text-gray-700">Cancelar</button>
-            <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md">Guardar</button>
+            {readOnly ? (
+              <button type="button" onClick={onClose} className="px-4 py-2 bg-blue-600 text-white rounded-md">
+                Cerrar
+              </button>
+            ) : (
+              <>
+                <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-md text-gray-700">Cancelar</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md">Guardar</button>
+              </>
+            )}
           </div>
         </form>
       </div>
@@ -1424,6 +1664,7 @@ const MedicalRecords = () => {
   const queryPatientId = searchParams.get('patientId');
   const queryClinicalCaseId = searchParams.get('clinicalCaseId');
   const { user } = useAuth();
+  const { canAccessClinicalHistory } = useClinicalHistoryPortalAccess();
   
   // Si el usuario es PACIENTE, no usar user.id como patientId (user.id !== patient.id).
   // Para doctores/asistentes, usar el patientId proveniente de la ruta o query.
@@ -1445,6 +1686,7 @@ const MedicalRecords = () => {
   const [filteredPhotoHistory, setFilteredPhotoHistory] = useState([]);
   const [photoHistoryRefreshKey, setPhotoHistoryRefreshKey] = useState(0);
   const [isPhotoHistoryOpen, setIsPhotoHistoryOpen] = useState(false);
+  const [clinicalRecordsTab, setClinicalRecordsTab] = useState('consultas');
   const [uploadProgress, setUploadProgress] = useState({});
   const [uploadErrors, setUploadErrors] = useState({});
   const [newlyCreatedPatient, setNewlyCreatedPatient] = useState(null);
@@ -1486,6 +1728,9 @@ const MedicalRecords = () => {
   const [selectedCaseForCollab, setSelectedCaseForCollab] = useState(null);
   const [collabLoading, setCollabLoading] = useState(false);
   const [collabError, setCollabError] = useState('');
+  const [caseShare, setCaseShare] = useState(null);
+  const [caseShareLoading, setCaseShareLoading] = useState(false);
+  const [revokingDoctorId, setRevokingDoctorId] = useState(null);
 
   const handleOpenCollab = (caso) => {
     setSelectedCaseForCollab(caso);
@@ -1572,94 +1817,69 @@ const MedicalRecords = () => {
         try {
           const patientDetails = await getPatientDetails(patientId);
           setPatient(patientDetails);
-          // Fetch photo history
+        } catch (err) {
+          console.error('Error al cargar datos del paciente:', err);
+          setError('No se pudo cargar la información del paciente.');
+          setPatient(null);
+          setPhotoHistory([]);
+          setSelectedConsultation(null);
+          return;
+        }
+        // Historial fotográfico: independiente para que un fallo de red/CORS no borre al paciente ya cargado
+        try {
           const token = localStorage.getItem('token');
-          console.log('=== Cargando photoHistory ===');
-          console.log('URL:', `/api/patients/${patientId}/photo-history`);
-          console.log('Token:', token ? 'Disponible' : 'NO disponible');
-          
           const resp = await fetch(getApiUrl(`/api/patients/${patientId}/photo-history`), {
+            method: 'GET',
+            mode: 'cors',
             headers: {
               Authorization: `Bearer ${token}`,
               ...getAssistantDoctorHeader()
             }
           });
-          
-          console.log('Respuesta status:', resp.status);
-          console.log('Respuesta headers:', Object.fromEntries(resp.headers.entries()));
-          
           if (resp.status === 404) {
-            console.log('Endpoint no encontrado (404)');
             setPhotoHistory([]);
           } else if (resp.ok) {
             const photos = await resp.json();
-            console.log('Photos cargadas:', photos);
-            console.log('Photos length:', photos?.length);
-            setPhotoHistory(photos);
+            setPhotoHistory(Array.isArray(photos) ? photos : []);
           } else {
-            console.error('Error en respuesta:', resp.status, resp.statusText);
-            const errorText = await resp.text();
-            console.error('Error body:', errorText);
+            console.warn('photo-history HTTP', resp.status, await resp.text().catch(() => ''));
             setPhotoHistory([]);
           }
         } catch (err) {
-          console.error('Error al cargar photoHistory:', err);
-          setError('No se pudo cargar la información del paciente.');
-          setPatient(null);
+          console.error('Error al cargar photoHistory (no afecta datos del paciente):', err);
           setPhotoHistory([]);
         }
-      } else if (user?.role === 'PATIENT') {
-        // Vista de PACIENTE: no llamar a getPatientDetails (requiere patientId).
-        // Inicializar datos mínimos del paciente desde el usuario autenticado.
-        // Incluir profilePictureUrl para que se muestre en el círculo del Historial Clínico.
-        setPatient({
-          id: 'self',
-          profilePictureUrl: user.profilePictureUrl || null,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          phone: user.phone || '',
-          dateOfBirth: null,
-          user: {
-            id: user.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            phone: user.phone || ''
-          }
-        });
-        // Cargar su propio photoHistory
+      } else if (user?.role === 'PATIENT' && user) {
         setError('');
         try {
+          const full = await getMyProfile();
+          setPatient(full);
+        } catch (err) {
+          console.error('Error al cargar expediente del paciente:', err);
+          setError('No se pudo cargar tu información de paciente.');
+          setPatient(null);
+          setPhotoHistory([]);
+          setSelectedConsultation(null);
+          return;
+        }
+        try {
           const token = localStorage.getItem('token');
-          console.log('=== Cargando photoHistory del paciente ===');
-          console.log('URL:', `/api/patients/my/photo-history`);
-          console.log('Token:', token ? 'Disponible' : 'NO disponible');
-          
           const resp = await fetch(getApiUrl(`/api/patients/my/photo-history`), {
+            method: 'GET',
+            mode: 'cors',
             headers: { Authorization: `Bearer ${token}` }
           });
-          
-          console.log('Respuesta status:', resp.status);
-          console.log('Respuesta headers:', Object.fromEntries(resp.headers.entries()));
-          
           if (resp.status === 404) {
-            console.log('Endpoint no encontrado (404)');
             setPhotoHistory([]);
           } else if (resp.ok) {
             const photos = await resp.json();
-            console.log('Photos cargadas:', photos);
-            console.log('Photos length:', photos?.length);
-            setPhotoHistory(photos);
+            setPhotoHistory(Array.isArray(photos) ? photos : []);
           } else {
-            console.error('Error en respuesta:', resp.status, resp.statusText);
-            const errorText = await resp.text();
-            console.error('Error body:', errorText);
+            console.warn('my/photo-history HTTP', resp.status);
             setPhotoHistory([]);
           }
         } catch (err) {
           console.error('Error al cargar photoHistory del paciente:', err);
-          setError('No se pudo cargar la información del paciente.');
           setPhotoHistory([]);
         }
       } else {
@@ -1669,7 +1889,32 @@ const MedicalRecords = () => {
       setSelectedConsultation(null);
     };
     fetchPatientData();
-  }, [patientId, user?.role, photoHistoryRefreshKey]);
+  }, [patientId, user?.role, user?.id, photoHistoryRefreshKey]);
+
+  useEffect(() => {
+    if (user?.role !== 'PATIENT' || !selectedCase?.id) {
+      setCaseShare(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setCaseShareLoading(true);
+      try {
+        const data = await getMyCaseShareAccess(selectedCase.id);
+        if (!cancelled) setCaseShare(data);
+      } catch (err) {
+        if (!cancelled) {
+          setCaseShare(null);
+          console.warn('getMyCaseShareAccess', err);
+        }
+      } finally {
+        if (!cancelled) setCaseShareLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.role, selectedCase?.id]);
 
   useEffect(() => {
     getFormTemplates().then(templates => {
@@ -1688,7 +1933,10 @@ const MedicalRecords = () => {
     console.log('photoHistory.length:', photoHistory?.length);
     
     if (selectedCase && photoHistory.length > 0) {
-      const filtered = photoHistory.filter(block => block.clinicalCaseId === selectedCase.id);
+      const caseId = String(selectedCase.id);
+      const filtered = photoHistory.filter(
+        block => block.clinicalCaseId != null && String(block.clinicalCaseId) === caseId
+      );
       console.log('Filtrado por caso clínico:', selectedCase.id);
       console.log('Resultado filtrado:', filtered);
       setFilteredPhotoHistory(filtered);
@@ -1972,7 +2220,30 @@ const MedicalRecords = () => {
     }
   };
 
+  const handleRevokeCaseAccess = async (doctorId) => {
+    if (!selectedCase?.id || !doctorId) return;
+    const ok = window.confirm(
+      '¿Seguro que deseas revocar el acceso de este profesional a este caso clínico?'
+    );
+    if (!ok) return;
+    setRevokingDoctorId(doctorId);
+    try {
+      await revokeMyCaseCollaborator(selectedCase.id, doctorId);
+      toast.success('Acceso actualizado');
+      const data = await getMyCaseShareAccess(selectedCase.id);
+      setCaseShare(data);
+    } catch (e) {
+      toast.error(e.response?.data?.message || e.message || 'No se pudo revocar el acceso');
+    } finally {
+      setRevokingDoctorId(null);
+    }
+  };
+
   const handleSaveAdditionalData = async (formData) => {
+    if (user?.role === 'PATIENT') {
+      toast.error('Solo un profesional de la salud puede actualizar estos datos.');
+      return;
+    }
     try {
       let dataToSend = formData;
       const hasFiles = formData.taxCertificate || formData.profilePicture;
@@ -2062,6 +2333,10 @@ const MedicalRecords = () => {
     setConsultationToView(mappedConsultation);
   };
 
+  if (user?.role === 'PATIENT' && !canAccessClinicalHistory) {
+    return <Navigate to="/dashboard/dashboard" replace />;
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header Section - sticky en desktop, compacto en móvil para no tapar pantalla */}
@@ -2100,13 +2375,38 @@ const MedicalRecords = () => {
           
           {/* Patient Header */}
           {patient && (
-            <PatientHeader patient={patient} onOpenAdditional={() => {
+            <PatientHeader
+              patient={patient}
+              showAccessControlHint={user?.role === 'DOCTOR' || user?.role === 'ASISTENTE'}
+              onOpenAdditional={() => {
               console.log('Click en Datos adicionales');
               setIsAdditionalModalOpen(true);
-            }} />
+            }}
+            />
           )}
         </div>
       </div>
+
+      {patient && isSmartLabEnabled() && (
+        <div className="px-4 sm:px-6 lg:px-8 pb-2">
+          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setClinicalRecordsTab('consultas')}
+              className={`px-4 py-2 text-sm font-medium rounded-md ${clinicalRecordsTab === 'consultas' ? 'bg-blue-100 text-blue-800' : 'text-gray-600 hover:bg-gray-50'}`}
+            >
+              Consultas y evolución
+            </button>
+            <button
+              type="button"
+              onClick={() => setClinicalRecordsTab('laboratorio')}
+              className={`px-4 py-2 text-sm font-medium rounded-md ${clinicalRecordsTab === 'laboratorio' ? 'bg-blue-100 text-blue-800' : 'text-gray-600 hover:bg-gray-50'}`}
+            >
+              Estudios de laboratorio
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Scrollable Content Section - min-w-0 para permitir scroll correcto en móvil */}
       <div className="px-4 sm:px-6 lg:px-8 py-6 space-y-8 min-w-0">
@@ -2139,7 +2439,10 @@ const MedicalRecords = () => {
                     <span>{caso.padecimiento}</span>
                     {/* Solo mostrar botón colaborativo para doctores */}
                     {user && user.role === 'DOCTOR' && (
-                      <Tooltip placement="bottom" text="Comparte este expediente clínico en particular e historial de consultas con otro profesional de la salud. Cada uno podrá elaborar sus propias consultas y podrán colaborar en el expediente compartiendo la información.">
+                      <Tooltip
+                        placement="bottom"
+                        text="Comparte este expediente clínico en particular e historial de consultas con otro profesional de la salud. Cada uno podrá elaborar sus propias consultas y podrán colaborar en el expediente compartiendo la información. El paciente recibirá por correo la autorización y deberá firmar el aviso de privacidad de manera electrónica para que el expediente de dicho caso clínico se comparta con otro profesional de la salud de manera automática."
+                      >
                         <button
                           className="ml-2 px-2 py-1 flex items-center gap-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-xs font-semibold"
                           onClick={e => { 
@@ -2220,8 +2523,119 @@ const MedicalRecords = () => {
              <p className="text-center text-gray-500">Cargando paciente...</p>
            ) : error ? (
              <p className="text-center text-red-500">{error}</p>
+           ) : patient && isSmartLabEnabled() && clinicalRecordsTab === 'laboratorio' ? (
+            <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+              <LabPatientDashboard patientId={patient.id} showHeader={false} compact />
+            </div>
            ) : patient && selectedCase ? (
             <div className="space-y-6">
+              {user?.role === 'PATIENT' && (
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5">
+                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <UsersIcon className="h-5 w-5 text-slate-500" />
+                    Acceso de profesionales a este caso
+                  </h3>
+                  <p className="text-sm text-slate-600 mt-1 mb-3">
+                    Aquí puedes ver quién puede colaborar en este caso y revocar el acceso a profesionales
+                    invitados. No se puede revocar al médico titular de tu expediente desde aquí.
+                  </p>
+                  {caseShareLoading ? (
+                    <p className="text-sm text-slate-500">Cargando accesos…</p>
+                  ) : caseShare?.success ? (
+                    <div className="space-y-3 text-sm">
+                      {caseShare.primaryDoctor && (
+                        <div className="flex flex-wrap items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                          <span className="text-slate-600">Profesional vinculado a tu expediente:</span>
+                          <span className="font-medium text-slate-900">{caseShare.primaryDoctor.name}</span>
+                        </div>
+                      )}
+                      {Array.isArray(caseShare.collaborators) && caseShare.collaborators.length > 0 && (
+                        <ul className="divide-y divide-slate-100 border border-slate-100 rounded-lg overflow-hidden">
+                          {caseShare.collaborators.map((c) => (
+                            <li
+                              key={c.doctorId}
+                              className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 bg-white"
+                            >
+                              <div>
+                                <span className="font-medium text-slate-900">{c.name}</span>
+                                {c.rol ? (
+                                  <span className="ml-2 text-xs text-slate-500">({c.rol})</span>
+                                ) : null}
+                              </div>
+                              {c.puedesRevocar ? (
+                                <button
+                                  type="button"
+                                  disabled={revokingDoctorId === c.doctorId}
+                                  onClick={() => handleRevokeCaseAccess(c.doctorId)}
+                                  className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50"
+                                >
+                                  <UserMinusIcon className="h-4 w-4" />
+                                  {revokingDoctorId === c.doctorId ? 'Procesando…' : 'Revocar acceso'}
+                                </button>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {Array.isArray(caseShare.pendingInvites) && caseShare.pendingInvites.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-amber-900 mb-2">
+                            Invitaciones pendientes (en espera de tu autorización)
+                          </p>
+                          <ul className="space-y-2">
+                            {caseShare.pendingInvites.map((p) => (
+                              <li
+                                key={p.id}
+                                className="flex flex-wrap items-center justify-between gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg"
+                              >
+                                <div>
+                                  <span className="font-medium text-amber-950">{p.invitedDoctorName}</span>
+                                  <span className="block text-xs text-amber-800 mt-0.5">
+                                    Vence: {new Date(p.expiresAt).toLocaleString('es-MX')}
+                                  </span>
+                                </div>
+                                {p.invitedDoctorId && (
+                                  <button
+                                    type="button"
+                                    disabled={revokingDoctorId === p.invitedDoctorId}
+                                    onClick={() => handleRevokeCaseAccess(p.invitedDoctorId)}
+                                    className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border border-amber-300 text-amber-950 bg-white hover:bg-amber-100 disabled:opacity-50"
+                                  >
+                                    Cancelar invitación
+                                  </button>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {(!caseShare.collaborators || caseShare.collaborators.length === 0) &&
+                        (!caseShare.pendingInvites || caseShare.pendingInvites.length === 0) && (
+                          <p className="text-slate-500">
+                            No hay otros profesionales con acceso a este caso además de quien te atiende en
+                            tu expediente.
+                          </p>
+                        )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">No se pudo cargar el listado de accesos.</p>
+                  )}
+                </div>
+              )}
+              {user?.role === 'PATIENT' && selectedCase?.id && (
+                <PatientSecondOpinionInvite
+                  clinicalCaseId={selectedCase.id}
+                  onInvited={async () => {
+                    if (!selectedCase?.id) return;
+                    try {
+                      const data = await getMyCaseShareAccess(selectedCase.id);
+                      setCaseShare(data);
+                    } catch (e) {
+                      console.warn('getMyCaseShareAccess', e);
+                    }
+                  }}
+                />
+              )}
               {/* Cenefa de evolución clínica del paciente - compacta en móvil */}
               <div className="mb-0">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-white rounded-t-xl px-4 sm:px-6 py-3 border border-b-0 border-gray-200 shadow-sm">
@@ -2234,7 +2648,33 @@ const MedicalRecords = () => {
                       <InformationCircleIcon className="h-5 w-5 text-gray-400 ml-1 sm:ml-2 flex-shrink-0" />
                     </Tooltip>
                   </div>
-                  <Tooltip text="A través de este visor de fotografías capturadas en la consulta médica podrás observar a manera de timeline y como galería el progreso de curación de tu paciente">
+                  <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex items-center px-3 py-2 sm:px-4 border border-gray-300 rounded-md bg-white text-slate-800 hover:bg-slate-50 text-xs sm:text-sm shadow flex-shrink-0"
+                    onClick={() => {
+                      if (!selectedCase || !patient) return;
+                      const list = Array.isArray(medicalRecords) ? [...medicalRecords] : [];
+                      const html = buildPrintDocumentHtml({
+                        patient,
+                        selectedCase,
+                        consultations: list,
+                        formTemplates
+                      });
+                      const ok = openClinicalHistoryPrintWindow(html);
+                      if (!ok) toast.error('Permite ventanas emergentes para imprimir o guardar PDF');
+                    }}
+                  >
+                    <PrinterIcon className="w-4 h-4 sm:w-5 sm:h-5 mr-1 sm:mr-2 text-slate-600" />
+                    Imprimir / PDF
+                  </button>
+                  <Tooltip
+                    text={
+                      user?.role === 'PATIENT'
+                        ? 'Genera un documento de este caso que puedes guardar o imprimir para llevar a otro consultorio (segunda opinión) sin compartir acceso en la plataforma.'
+                        : 'A través de este visor de fotografías capturadas en la consulta médica podrás observar a manera de timeline y como galería el progreso de curación de tu paciente'
+                    }
+                  >
                     <button
                       className="inline-flex items-center px-3 py-2 sm:px-4 border border-gray-300 rounded-md bg-white text-blue-700 hover:bg-blue-100 text-xs sm:text-sm shadow flex-shrink-0"
                       onClick={() => setIsPhotoHistoryOpen(true)}
@@ -2243,6 +2683,7 @@ const MedicalRecords = () => {
                       Evolución visual
                     </button>
                   </Tooltip>
+                  </div>
                 </div>
                 <div className="bg-white rounded-b-xl px-6 pb-6 pt-4 border border-t-0 border-gray-200 shadow-sm">
                   <ClinicalEvolutionTracker medicalRecords={medicalRecords} />
@@ -2303,26 +2744,15 @@ const MedicalRecords = () => {
           )}
         </div>
       </div>
-      {/* Modal de datos adicionales SIEMPRE disponible si hay paciente */}
       {isAdditionalModalOpen && patient && (
-        <>
-          {console.log('Valor de patient en render modal:', patient)}
-          {patient && (
-            <>
-              {console.log('Renderizando AdditionalDataModal')}
-              <AdditionalDataModal
-                isOpen={isAdditionalModalOpen}
-                onClose={() => {
-                  console.log('Cerrando modal de datos adicionales');
-                  setIsAdditionalModalOpen(false);
-                }}
-                patient={patient}
-                lastDiagnosis={lastDiagnosis}
-                onSave={handleSaveAdditionalData}
-              />
-            </>
-          )}
-        </>
+        <AdditionalDataModal
+          isOpen={isAdditionalModalOpen}
+          onClose={() => setIsAdditionalModalOpen(false)}
+          patient={patient}
+          lastDiagnosis={lastDiagnosis}
+          onSave={handleSaveAdditionalData}
+          readOnly={user?.role === 'PATIENT'}
+        />
       )}
       {/* Modal visor fotográfico */}
       <PhotoHistoryViewer 
@@ -2342,7 +2772,7 @@ const MedicalRecords = () => {
             refreshDividedConsultations();
             setPhotoHistoryRefreshKey(k => k + 1);
           }}
-          patientName={`${patient.firstName} ${patient.lastName}`}
+          patientName={`${patient.firstName || patient.user?.firstName || ''} ${patient.lastName || patient.user?.lastName || ''}`.trim()}
           padecimiento={selectedCase.padecimiento}
           patientId={patient.id}
           clinicalCaseId={selectedCase.id}

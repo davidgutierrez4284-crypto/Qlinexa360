@@ -5,6 +5,9 @@ import { useSelectedDoctor } from '../context/SelectedDoctorContext';
 import DoctorDashboardStats from '../components/medical/DoctorDashboardStats';
 import QuickActions from '../components/medical/QuickActions';
 import PatientHealthCharts from '../components/medical/PatientHealthCharts';
+import PatientDashboardCharts from '../components/medical/PatientDashboardCharts';
+import PatientOmsDashboardCharts from '../components/medical/PatientOmsDashboardCharts';
+import PatientAppointments from './PatientAppointments';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { 
@@ -19,10 +22,10 @@ const Dashboard = () => {
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [loadingPatients, setLoadingPatients] = useState(false);
 
-  // Verificar permisos para asistentes y administradores
+  const isPatientView = user?.role === 'PATIENT';
   const canAccess = user?.role === 'DOCTOR' || user?.role === 'ADMIN' || (user?.role === 'ASISTENTE' && hasPermission('appointments'));
 
-  // Cargar pacientes al montar
+  // Cargar pacientes al montar (solo para doctores/asistentes)
   useEffect(() => {
     const fetchPatients = async () => {
       try {
@@ -34,10 +37,13 @@ const Dashboard = () => {
         };
         const response = await axios.get('/api/doctors/my-patients', { headers });
         const data = response.data;
-        setPatients(data);
-        // Seleccionar el primer paciente por defecto si existe
-        if (data.length > 0 && !selectedPatientId) {
-          setSelectedPatientId(data[0].id);
+        const uniquePatients = data.reduce((acc, p) => {
+          if (!acc.some(x => x.id === p.id)) acc.push(p);
+          return acc;
+        }, []);
+        setPatients(uniquePatients);
+        if (uniquePatients.length > 0 && !selectedPatientId) {
+          setSelectedPatientId(uniquePatients[0].id);
         }
       } catch (error) {
         console.error('Error cargando pacientes:', error);
@@ -47,11 +53,90 @@ const Dashboard = () => {
       }
     };
 
-    // Los administradores pueden ver el dashboard pero no necesitan cargar pacientes
     if (canAccess && user?.role !== 'ADMIN') {
       fetchPatients();
     }
   }, [user, selectedDoctor, canAccess, selectedPatientId, getDoctorHeader]);
+
+  // Vista exclusiva para pacientes: solo su información, sin selector ni edición
+  if (isPatientView) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">
+              Bienvenido, {user?.firstName} {user?.lastName}
+            </h1>
+            <p className="text-lg text-gray-600 mt-2">
+              Tu panel de información clínica
+            </p>
+          </div>
+
+          <div className="mb-8">
+            <PatientAppointments />
+          </div>
+
+          <div className="bg-white rounded-lg shadow mb-8">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center mb-4">
+                <ChartBarIcon className="h-6 w-6 text-indigo-600 mr-2" />
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Casos clínicos y frecuencia de consultas
+                </h2>
+              </div>
+              <p className="text-gray-600">
+                Casos clínicos por fecha y consultas por caso
+              </p>
+            </div>
+            <div className="p-6">
+              <PatientDashboardCharts isPatientView={true} />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow mb-8">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center mb-4">
+                <ChartBarIcon className="h-6 w-6 text-indigo-600 mr-2" />
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Evolución de Indicadores de Salud
+                </h2>
+              </div>
+              <p className="text-gray-600">
+                Visualiza la evolución temporal de parámetros médicos con rangos normales y alertas
+              </p>
+            </div>
+            <div className="p-6">
+              <PatientHealthCharts isPatientView={true} />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow mb-8">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center mb-4">
+                <ChartBarIcon className="h-6 w-6 text-emerald-600 mr-2" />
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Crecimiento: percentiles y rangos OMS
+                </h2>
+              </div>
+              <p className="text-gray-600">
+                Peso, talla e IMC: en menores de 19 años, bandas OMS (P3–P97); en adultos, evolución en el tiempo con rango
+                orientativo cuando aplique
+              </p>
+            </div>
+            <div className="p-6">
+              <PatientOmsDashboardCharts isPatientView={true} />
+            </div>
+          </div>
+
+          <div className="mt-12 text-center">
+            <p className="text-sm text-gray-500">
+              Qlinexa360 - Plataforma Integral para Profesionales de la Salud
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Si no es doctor, asistente ni admin, mostrar mensaje de acceso denegado
   if (user?.role !== 'DOCTOR' && user?.role !== 'ASISTENTE' && user?.role !== 'ADMIN') {
@@ -147,6 +232,48 @@ const Dashboard = () => {
           </div>
         )}
 
+        {/* Selector de paciente: aplica a todas las gráficas siguientes */}
+        {user?.role !== 'ADMIN' && patients.length > 0 && (
+          <div className="mb-6 flex items-center gap-4">
+            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+              Seleccionar paciente
+            </label>
+            <select
+              value={selectedPatientId}
+              onChange={(e) => setSelectedPatientId(e.target.value)}
+              className="flex-1 max-w-xs px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              {patients.map(patient => (
+                <option key={patient.id} value={patient.id}>
+                  {patient.firstName} {patient.lastName}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Gráficas de Casos Clínicos y Consultas */}
+        {user?.role !== 'ADMIN' && patients.length > 0 && selectedPatientId && (
+          <div className="mb-8">
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center mb-4">
+                  <ChartBarIcon className="h-6 w-6 text-indigo-600 mr-2" />
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    Casos clínicos y frecuencia de consultas
+                  </h2>
+                </div>
+                <p className="text-gray-600">
+                  Casos clínicos por fecha y consultas por caso
+                </p>
+              </div>
+              <div className="p-6">
+                <PatientDashboardCharts patientId={selectedPatientId} isPatientView={false} />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Gráficas de Evolución de Pacientes */}
         <div className="mb-8">
           <div className="bg-white rounded-lg shadow">
@@ -176,28 +303,9 @@ const Dashboard = () => {
               </div>
             ) : null}
 
-            {user?.role !== 'ADMIN' && patients.length > 0 && (
+            {user?.role !== 'ADMIN' && patients.length > 0 && selectedPatientId && (
               <div className="p-6">
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Seleccionar paciente
-                  </label>
-                  <select
-                    value={selectedPatientId}
-                    onChange={(e) => setSelectedPatientId(e.target.value)}
-                    className="w-full md:w-1/3 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {patients.map(patient => (
-                      <option key={patient.id} value={patient.id}>
-                        {patient.firstName} {patient.lastName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                {selectedPatientId && (
-                  <PatientHealthCharts patientId={selectedPatientId} />
-                )}
+                <PatientHealthCharts patientId={selectedPatientId} />
               </div>
             )}
 
@@ -208,6 +316,29 @@ const Dashboard = () => {
             )}
           </div>
         </div>
+
+        {/* Percentiles OMS (peso, talla, IMC) — adicional a la evolución por parámetro manual */}
+        {user?.role !== 'ADMIN' && patients.length > 0 && selectedPatientId && (
+          <div className="mb-8">
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center mb-4">
+                  <ChartBarIcon className="h-6 w-6 text-emerald-600 mr-2" />
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    Crecimiento: percentiles y rangos OMS
+                  </h2>
+                </div>
+                <p className="text-gray-600">
+                  Peso, talla e IMC: menores de 19 años con bandas OMS (P3–P97); adultos con tendencia y rango orientativo.
+                  Complementa la sección anterior; no sustituye al selector de parámetros.
+                </p>
+              </div>
+              <div className="p-6">
+                <PatientOmsDashboardCharts patientId={selectedPatientId} isPatientView={false} />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Footer del Dashboard */}
         <div className="mt-12 text-center">

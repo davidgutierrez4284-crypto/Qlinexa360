@@ -32,11 +32,8 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.shareCalendarEvent = exports.getCalendarEvent = exports.cancelAppointment = exports.deleteCalendarEvent = exports.updateCalendarEvent = exports.createCalendarEvent = exports.getCalendarEvents = void 0;
+exports.shareCalendarEvent = exports.resendCalendarInvite = exports.getCalendarEvent = exports.cancelAppointment = exports.deleteCalendarEvent = exports.updateCalendarEvent = exports.getRescheduleAvailableSlots = exports.createCalendarEvent = exports.getCalendarEvents = void 0;
 const client_1 = require("@prisma/client");
 const error_utils_1 = require("../utils/error.utils");
 const notification_service_1 = require("../services/notification.service");
@@ -44,7 +41,13 @@ const googleCalendarSync_service_1 = require("../services/googleCalendarSync.ser
 const outlookCalendarSync_service_1 = require("../services/outlookCalendarSync.service");
 const appleCalendarSync_service_1 = require("../services/appleCalendarSync.service");
 const notionCalendarSync_service_1 = require("../services/notionCalendarSync.service");
-const crypto_1 = __importDefault(require("crypto"));
+const calendarSync_utils_1 = require("../utils/calendarSync.utils");
+const appointmentConfirmation_controller_1 = require("./appointmentConfirmation.controller");
+const schedule_service_1 = require("../services/schedule.service");
+const mercadopago_teleconsultation_service_1 = require("../payments/mercadopago/mercadopago.teleconsultation.service");
+const mercadopago_inperson_service_1 = require("../payments/mercadopago/mercadopago.inperson.service");
+const mercadopago_appointment_display_service_1 = require("../payments/mercadopago/mercadopago.appointment-display.service");
+const appointmentConfirmation_utils_1 = require("../utils/appointmentConfirmation.utils");
 const prisma = new client_1.PrismaClient();
 const resolveDoctorId = async (req) => {
     if (!req.user) {
@@ -80,61 +83,35 @@ const resolveDoctorId = async (req) => {
     }
     throw new error_utils_1.AppError('Acceso denegado.', 403);
 };
-const getOrCreateManageLink = async (appointmentId) => {
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const existingRequest = await prisma.appointmentConfirmationRequest.findFirst({
-        where: {
-            appointmentId,
-            status: 'PENDING',
-            expiresAt: { gt: new Date() }
-        },
-        orderBy: { createdAt: 'desc' }
-    });
-    if (existingRequest) {
-        return `${baseUrl}/confirm-appointment/${existingRequest.confirmationToken}`;
-    }
-    const confirmationToken = crypto_1.default.randomBytes(32).toString('hex');
-    await prisma.appointmentConfirmationRequest.create({
-        data: {
-            appointmentId,
-            reminderType: 'FINAL_REMINDER',
-            scheduledFor: new Date(),
-            status: 'PENDING',
-            confirmationToken,
-            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-            patientResponse: 'NO_RESPONSE'
-        }
-    });
-    return `${baseUrl}/confirm-appointment/${confirmationToken}`;
-};
+const getOrCreateManageLink = appointmentConfirmation_utils_1.getOrCreateAppointmentManageLink;
 const buildDescriptionWithManageLink = async (event) => {
     var _a, _b;
     const resolvedDoctorId = event.doctorId || ((_a = event.doctor) === null || _a === void 0 ? void 0 : _a.id);
     const resolvedPatientId = event.patientId || ((_b = event.patient) === null || _b === void 0 ? void 0 : _b.id) || null;
-    if (!resolvedDoctorId || !resolvedPatientId) {
-        return event.descripcion || undefined;
+    if (!resolvedDoctorId) {
+        return (0, appointmentConfirmation_utils_1.stripManageLinkBlocksFromDescription)(event.descripcion) || undefined;
     }
-    const appointmentCandidate = await prisma.appointment.findFirst({
-        where: {
-            doctorId: resolvedDoctorId,
-            patientId: resolvedPatientId,
-            date: {
-                gte: new Date(event.fechaHoraInicio.getTime() - 30 * 60000),
-                lte: new Date(event.fechaHoraInicio.getTime() + 30 * 60000)
-            }
-        },
-        select: { id: true }
-    });
-    if (!(appointmentCandidate === null || appointmentCandidate === void 0 ? void 0 : appointmentCandidate.id)) {
-        return event.descripcion || undefined;
+    let appointmentId = event.appointmentId || null;
+    if (!appointmentId && resolvedPatientId) {
+        const appointmentCandidate = await prisma.appointment.findFirst({
+            where: {
+                doctorId: resolvedDoctorId,
+                patientId: resolvedPatientId,
+                date: {
+                    gte: new Date(event.fechaHoraInicio.getTime() - 30 * 60000),
+                    lte: new Date(event.fechaHoraInicio.getTime() + 30 * 60000),
+                },
+            },
+            select: { id: true },
+            orderBy: { date: 'desc' },
+        });
+        appointmentId = (appointmentCandidate === null || appointmentCandidate === void 0 ? void 0 : appointmentCandidate.id) || null;
     }
-    const manageLink = await getOrCreateManageLink(appointmentCandidate.id);
-    const base = (event.descripcion || '').trim();
-    if (base.includes(manageLink)) {
-        return base || undefined;
+    if (!appointmentId) {
+        return (0, appointmentConfirmation_utils_1.stripManageLinkBlocksFromDescription)(event.descripcion) || undefined;
     }
-    const manageText = `Gestiona tu cita en Qlinexa: ${manageLink}\nSi necesitas confirmar o reprogramar, usa este enlace.`;
-    return base ? `${base}\n\n${manageText}` : manageText;
+    const manageLink = await getOrCreateManageLink(appointmentId);
+    return (0, appointmentConfirmation_utils_1.buildCleanEventDescriptionForSync)(event.descripcion, manageLink) || undefined;
 };
 // Obtener todos los eventos del calendario del doctor
 const getCalendarEvents = async (req, res) => {
@@ -186,6 +163,7 @@ const getCalendarEvents = async (req, res) => {
                 origenEvento: true,
                 linkMeeting: true,
                 patientId: true,
+                appointmentId: true,
                 externalProvider: true,
                 externalEventId: true,
                 externalUpdatedAt: true,
@@ -221,77 +199,77 @@ const getCalendarEvents = async (req, res) => {
         // Para cada evento con paciente, buscar el appointment relacionado para obtener el confirmationStatus
         // Todos los eventos provienen de calendarios externos, pero si tienen paciente = son citas médicas
         const eventsWithConfirmationStatus = await Promise.all(events.map(async (event) => {
-            var _a, _b;
+            var _a, _b, _c, _d;
             let confirmationStatus = null;
             let appointmentId = null;
+            let appointmentType = null;
+            let teleconsultationAmount = null;
             // Buscar appointment para cualquier evento con paciente (cita médica)
             if (event.patientId) {
+                let appointment = null;
+                if (event.appointmentId) {
+                    appointment = await prisma.appointment.findUnique({
+                        where: { id: event.appointmentId },
+                        select: {
+                            id: true,
+                            confirmationStatus: true,
+                            status: true,
+                            date: true,
+                            appointmentType: true,
+                            teleconsultationAmount: true,
+                            teleconsultation: {
+                                select: { meetingUrl: true, consentSigned: true },
+                            },
+                        },
+                    });
+                }
                 // Buscar appointment que coincida con patientId, doctorId y fecha/hora similar
-                // Usar un rango de ±30 minutos para encontrar el appointment relacionado
                 const eventStart = new Date(event.fechaHoraInicio);
-                const searchStart = new Date(eventStart);
-                searchStart.setMinutes(searchStart.getMinutes() - 30);
-                const searchEnd = new Date(eventStart);
-                searchEnd.setMinutes(searchEnd.getMinutes() + 30);
-                // Primero intentar buscar por fecha exacta o cercana
-                let appointment = await prisma.appointment.findFirst({
-                    where: {
-                        patientId: event.patientId,
-                        doctorId,
-                        date: {
-                            gte: searchStart,
-                            lte: searchEnd
-                        }
-                    },
-                    select: {
-                        id: true,
-                        confirmationStatus: true,
-                        date: true
-                    },
-                    orderBy: {
-                        date: 'desc'
-                    }
-                });
-                // Si no se encuentra por fecha cercana, buscar el appointment más reciente del paciente con este doctor
-                // Esto es útil cuando la cita fue reagendada y la fecha cambió significativamente
-                if (!appointment) {
+                if (!appointment && event.patientId) {
+                    const searchStart = new Date(eventStart);
+                    searchStart.setMinutes(searchStart.getMinutes() - 30);
+                    const searchEnd = new Date(eventStart);
+                    searchEnd.setMinutes(searchEnd.getMinutes() + 30);
                     appointment = await prisma.appointment.findFirst({
                         where: {
                             patientId: event.patientId,
-                            doctorId
+                            doctorId,
+                            date: {
+                                gte: searchStart,
+                                lte: searchEnd
+                            }
                         },
                         select: {
                             id: true,
                             confirmationStatus: true,
-                            date: true
+                            status: true,
+                            date: true,
+                            appointmentType: true,
+                            teleconsultationAmount: true,
+                            teleconsultation: {
+                                select: { meetingUrl: true, consentSigned: true },
+                            },
                         },
                         orderBy: {
                             date: 'desc'
                         }
                     });
-                    if (appointment) {
-                        console.log(`⚠️ Appointment encontrado por paciente/doctor (no por fecha exacta) - puede ser una cita reagendada`);
-                        console.log(`   Appointment date: ${appointment.date}, Event date: ${eventStart}`);
-                        // CRÍTICO: Si la fecha del appointment está muy lejos de la fecha del evento (más de 1 día),
-                        // asumir PENDING porque es probable que sea una cita reagendada
-                        const appointmentDate = new Date(appointment.date);
-                        const dateDiff = Math.abs(appointmentDate.getTime() - eventStart.getTime());
-                        const oneDayInMs = 24 * 60 * 60 * 1000;
-                        if (dateDiff > oneDayInMs) {
-                            console.log(`   ⚠️ La fecha del appointment (${appointmentDate}) está muy lejos de la fecha del evento (${eventStart})`);
-                            console.log(`   ⚠️ Diferencia: ${Math.round(dateDiff / (60 * 60 * 1000))} horas - asumiendo PENDING`);
-                            confirmationStatus = 'PENDING';
-                            appointment = null; // No usar este appointment para evitar confusión
-                        }
-                    }
                 }
                 if (appointment) {
                     // Usar el confirmationStatus del appointment, o PENDING si es null/undefined
                     confirmationStatus = appointment.confirmationStatus || 'PENDING';
                     appointmentId = appointment.id;
+                    appointmentType = (_a = appointment.appointmentType) !== null && _a !== void 0 ? _a : null;
+                    teleconsultationAmount =
+                        appointment.teleconsultationAmount != null
+                            ? Number(appointment.teleconsultationAmount)
+                            : null;
+                    const appointmentIsCancelled = appointment.status === 'CANCELLED' || appointment.confirmationStatus === 'CANCELLED';
                     // CRÍTICO: Si el evento tiene externalEventId, verificar el estado actual de los attendees
                     // en el calendario externo (Google, Outlook, Apple) para detectar si el paciente aceptó/rechazó
-                    if (event.externalProvider && event.externalEventId) {
+                    if (!appointmentIsCancelled &&
+                        event.externalProvider &&
+                        event.externalEventId) {
                         try {
                             // Obtener el email del paciente una sola vez
                             const patient = await prisma.patient.findUnique({
@@ -305,126 +283,121 @@ const getCalendarEvents = async (req, res) => {
                                     }
                                 }
                             });
-                            const patientEmail = (patient === null || patient === void 0 ? void 0 : patient.email) || ((_a = patient === null || patient === void 0 ? void 0 : patient.user) === null || _a === void 0 ? void 0 : _a.email);
-                            if (!patientEmail) {
-                                // No hay email del paciente, no podemos verificar el estado
-                                return Object.assign(Object.assign({}, event), { confirmationStatus,
-                                    appointmentId });
-                            }
-                            let externalEvent = null;
-                            let patientAttendee = null;
-                            // Verificar según la plataforma
-                            if (event.externalProvider === 'google') {
-                                const googleConfig = await prisma.calendarSyncConfig.findFirst({
-                                    where: {
-                                        doctorId,
-                                        provider: 'google',
-                                        isConnected: true
-                                    }
-                                });
-                                if (googleConfig && googleConfig.accessToken) {
-                                    externalEvent = await googleCalendarSync_service_1.GoogleCalendarSyncService.getEvent(doctorId, event.externalEventId);
-                                    if (externalEvent === null || externalEvent === void 0 ? void 0 : externalEvent.attendees) {
-                                        // Comparar emails de forma case-insensitive y normalizada
-                                        const normalizedPatientEmail = patientEmail.toLowerCase().trim();
-                                        patientAttendee = externalEvent.attendees.find((a) => {
-                                            const attendeeEmail = (a.email || '').toLowerCase().trim();
-                                            return attendeeEmail === normalizedPatientEmail;
-                                        });
-                                        // Log para debugging
-                                        if (!patientAttendee) {
-                                            console.log(`⚠️ No se encontró attendee con email ${patientEmail} en el evento ${event.externalEventId}`);
-                                            console.log(`   Attendees disponibles:`, externalEvent.attendees.map((a) => a.email).join(', '));
+                            const patientEmail = (patient === null || patient === void 0 ? void 0 : patient.email) || ((_b = patient === null || patient === void 0 ? void 0 : patient.user) === null || _b === void 0 ? void 0 : _b.email);
+                            if (patientEmail) {
+                                let externalEvent = null;
+                                let patientAttendee = null;
+                                // Verificar según la plataforma
+                                if (event.externalProvider === 'google') {
+                                    const googleConfig = await prisma.calendarSyncConfig.findFirst({
+                                        where: {
+                                            doctorId,
+                                            provider: 'google',
+                                            isConnected: true
+                                        }
+                                    });
+                                    if (googleConfig && googleConfig.accessToken) {
+                                        externalEvent = await googleCalendarSync_service_1.GoogleCalendarSyncService.getEvent(doctorId, event.externalEventId);
+                                        if (externalEvent === null || externalEvent === void 0 ? void 0 : externalEvent.attendees) {
+                                            // Comparar emails de forma case-insensitive y normalizada
+                                            const normalizedPatientEmail = patientEmail.toLowerCase().trim();
+                                            patientAttendee = externalEvent.attendees.find((a) => {
+                                                const attendeeEmail = (a.email || '').toLowerCase().trim();
+                                                return attendeeEmail === normalizedPatientEmail;
+                                            });
+                                            // Log para debugging
+                                            if (!patientAttendee) {
+                                                console.log(`⚠️ No se encontró attendee con email ${patientEmail} en el evento ${event.externalEventId}`);
+                                                console.log(`   Attendees disponibles:`, externalEvent.attendees.map((a) => a.email).join(', '));
+                                            }
+                                        }
+                                        else {
+                                            console.log(`⚠️ El evento ${event.externalEventId} no tiene attendees`);
                                         }
                                     }
-                                    else {
-                                        console.log(`⚠️ El evento ${event.externalEventId} no tiene attendees`);
-                                    }
-                                }
-                            }
-                            else if (event.externalProvider === 'outlook') {
-                                const outlookConfig = await prisma.calendarSyncConfig.findFirst({
-                                    where: {
-                                        doctorId,
-                                        provider: 'outlook',
-                                        isConnected: true
-                                    }
-                                });
-                                if (outlookConfig && outlookConfig.accessToken) {
-                                    externalEvent = await outlookCalendarSync_service_1.OutlookCalendarSyncService.getEvent(doctorId, event.externalEventId);
-                                    if (externalEvent === null || externalEvent === void 0 ? void 0 : externalEvent.attendees) {
-                                        // En Microsoft Graph API, el campo es 'status' no 'responseStatus'
-                                        patientAttendee = externalEvent.attendees.find((a) => { var _a; return ((_a = a.emailAddress) === null || _a === void 0 ? void 0 : _a.address) === patientEmail; });
-                                    }
-                                }
-                            }
-                            else if (event.externalProvider === 'apple') {
-                                const appleConfig = await prisma.calendarSyncConfig.findFirst({
-                                    where: {
-                                        doctorId,
-                                        provider: 'apple',
-                                        isConnected: true
-                                    }
-                                });
-                                if (appleConfig && appleConfig.accessToken) {
-                                    externalEvent = await appleCalendarSync_service_1.AppleCalendarSyncService.getEvent(doctorId, event.externalEventId);
-                                    if (externalEvent === null || externalEvent === void 0 ? void 0 : externalEvent.attendees) {
-                                        patientAttendee = externalEvent.attendees.find((a) => a.email === patientEmail);
-                                    }
-                                }
-                            }
-                            // Procesar el estado de respuesta del paciente
-                            if (patientAttendee) {
-                                let responseStatus = null;
-                                // Normalizar el estado según la plataforma
-                                if (event.externalProvider === 'google') {
-                                    responseStatus = patientAttendee.responseStatus; // 'accepted', 'declined', 'tentative', 'needsAction'
                                 }
                                 else if (event.externalProvider === 'outlook') {
-                                    // Microsoft Graph API usa 'status': 'accepted', 'declined', 'tentativelyAccepted', 'none'
-                                    const status = (_b = patientAttendee.status) === null || _b === void 0 ? void 0 : _b.toLowerCase();
-                                    if (status === 'accepted') {
-                                        responseStatus = 'accepted';
-                                    }
-                                    else if (status === 'declined') {
-                                        responseStatus = 'declined';
-                                    }
-                                    else if (status === 'tentativelyaccepted') {
-                                        responseStatus = 'tentative';
+                                    const outlookConfig = await prisma.calendarSyncConfig.findFirst({
+                                        where: {
+                                            doctorId,
+                                            provider: 'outlook',
+                                            isConnected: true
+                                        }
+                                    });
+                                    if (outlookConfig && outlookConfig.accessToken) {
+                                        externalEvent = await outlookCalendarSync_service_1.OutlookCalendarSyncService.getEvent(doctorId, event.externalEventId);
+                                        if (externalEvent === null || externalEvent === void 0 ? void 0 : externalEvent.attendees) {
+                                            // En Microsoft Graph API, el campo es 'status' no 'responseStatus'
+                                            patientAttendee = externalEvent.attendees.find((a) => { var _a; return ((_a = a.emailAddress) === null || _a === void 0 ? void 0 : _a.address) === patientEmail; });
+                                        }
                                     }
                                 }
                                 else if (event.externalProvider === 'apple') {
-                                    // Apple Calendar usa responseStatus: 'accepted', 'declined', 'tentative', 'needsAction'
-                                    responseStatus = patientAttendee.responseStatus;
-                                }
-                                // Actualizar el appointment según el estado
-                                if (responseStatus === 'accepted') {
-                                    // El paciente aceptó la invitación - SIEMPRE actualizar a CONFIRMED
-                                    // Incluso si antes estaba CANCELLED (el paciente puede cambiar de opinión)
-                                    await prisma.appointment.update({
-                                        where: { id: appointment.id },
-                                        data: {
-                                            confirmationStatus: 'CONFIRMED',
-                                            confirmedAt: new Date()
+                                    const appleConfig = await prisma.calendarSyncConfig.findFirst({
+                                        where: {
+                                            doctorId,
+                                            provider: 'apple',
+                                            isConnected: true
                                         }
                                     });
-                                    confirmationStatus = 'CONFIRMED';
-                                    console.log(`✅ Appointment ${appointment.id} actualizado a CONFIRMED - paciente aceptó en ${event.externalProvider} Calendar`);
-                                }
-                                else if (responseStatus === 'declined') {
-                                    // El paciente rechazó la invitación
-                                    await prisma.appointment.update({
-                                        where: { id: appointment.id },
-                                        data: {
-                                            confirmationStatus: 'CANCELLED',
-                                            cancelledAt: new Date()
+                                    if (appleConfig && appleConfig.accessToken) {
+                                        externalEvent = await appleCalendarSync_service_1.AppleCalendarSyncService.getEvent(doctorId, event.externalEventId);
+                                        if (externalEvent === null || externalEvent === void 0 ? void 0 : externalEvent.attendees) {
+                                            patientAttendee = externalEvent.attendees.find((a) => a.email === patientEmail);
                                         }
-                                    });
-                                    confirmationStatus = 'CANCELLED';
-                                    console.log(`❌ Appointment ${appointment.id} actualizado a CANCELLED - paciente rechazó en ${event.externalProvider} Calendar`);
+                                    }
                                 }
-                                else {
-                                    console.log(`ℹ️ Appointment ${appointment.id} - paciente tiene estado: ${responseStatus} (no se actualiza)`);
+                                // Procesar el estado de respuesta del paciente
+                                if (patientAttendee) {
+                                    let responseStatus = null;
+                                    // Normalizar el estado según la plataforma
+                                    if (event.externalProvider === 'google') {
+                                        responseStatus = patientAttendee.responseStatus; // 'accepted', 'declined', 'tentative', 'needsAction'
+                                    }
+                                    else if (event.externalProvider === 'outlook') {
+                                        // Microsoft Graph API usa 'status': 'accepted', 'declined', 'tentativelyAccepted', 'none'
+                                        const status = (_c = patientAttendee.status) === null || _c === void 0 ? void 0 : _c.toLowerCase();
+                                        if (status === 'accepted') {
+                                            responseStatus = 'accepted';
+                                        }
+                                        else if (status === 'declined') {
+                                            responseStatus = 'declined';
+                                        }
+                                        else if (status === 'tentativelyaccepted') {
+                                            responseStatus = 'tentative';
+                                        }
+                                    }
+                                    else if (event.externalProvider === 'apple') {
+                                        // Apple Calendar usa responseStatus: 'accepted', 'declined', 'tentative', 'needsAction'
+                                        responseStatus = patientAttendee.responseStatus;
+                                    }
+                                    // Actualizar el appointment según el estado
+                                    if (responseStatus === 'accepted') {
+                                        await prisma.appointment.update({
+                                            where: { id: appointment.id },
+                                            data: {
+                                                confirmationStatus: 'CONFIRMED',
+                                                confirmedAt: new Date()
+                                            }
+                                        });
+                                        confirmationStatus = 'CONFIRMED';
+                                        console.log(`✅ Appointment ${appointment.id} actualizado a CONFIRMED - paciente aceptó en ${event.externalProvider} Calendar`);
+                                    }
+                                    else if (responseStatus === 'declined') {
+                                        // El paciente rechazó la invitación
+                                        await prisma.appointment.update({
+                                            where: { id: appointment.id },
+                                            data: {
+                                                confirmationStatus: 'CANCELLED',
+                                                cancelledAt: new Date()
+                                            }
+                                        });
+                                        confirmationStatus = 'CANCELLED';
+                                        console.log(`❌ Appointment ${appointment.id} actualizado a CANCELLED - paciente rechazó en ${event.externalProvider} Calendar`);
+                                    }
+                                    else {
+                                        console.log(`ℹ️ Appointment ${appointment.id} - paciente tiene estado: ${responseStatus} (no se actualiza)`);
+                                    }
                                 }
                             }
                         }
@@ -441,7 +414,54 @@ const getCalendarEvents = async (req, res) => {
                     confirmationStatus = 'PENDING';
                 }
             }
-            return Object.assign(Object.assign({}, event), { confirmationStatus: confirmationStatus || 'PENDING', appointmentId });
+            let displayStart = event.fechaHoraInicio;
+            let displayEnd = event.fechaHoraFin;
+            let displayLinkMeeting = event.linkMeeting;
+            let meetingUrl = null;
+            if (event.patientId) {
+                const reconciled = await (0, calendarSync_utils_1.reconcileCalendarEventWithAppointment)(doctorId, event);
+                if (reconciled.canonicalStart) {
+                    displayStart = reconciled.canonicalStart;
+                    displayEnd = (_d = reconciled.canonicalEnd) !== null && _d !== void 0 ? _d : displayEnd;
+                }
+                if (reconciled.appointmentType) {
+                    appointmentType = reconciled.appointmentType;
+                }
+                if (reconciled.appointmentType === 'presencial') {
+                    displayLinkMeeting = null;
+                }
+            }
+            if (appointmentType === 'teleconsulta' && appointmentId) {
+                const tcRow = await prisma.teleconsultation.findUnique({
+                    where: { appointmentId },
+                    select: { meetingUrl: true, consentSigned: true },
+                });
+                const payReq = await (0, mercadopago_teleconsultation_service_1.requiresTeleconsultationPayment)(doctorId, appointmentId);
+                const paymentApproved = payReq.required
+                    ? await (0, mercadopago_teleconsultation_service_1.isTeleconsultationPaymentApproved)(appointmentId)
+                    : true;
+                const allowVideo = (0, calendarSync_utils_1.shouldAllowVideoConferenceForAppointment)('teleconsulta', tcRow === null || tcRow === void 0 ? void 0 : tcRow.consentSigned, payReq.required, paymentApproved);
+                if (allowVideo) {
+                    meetingUrl = displayLinkMeeting || (tcRow === null || tcRow === void 0 ? void 0 : tcRow.meetingUrl) || null;
+                    displayLinkMeeting = meetingUrl;
+                }
+                else {
+                    displayLinkMeeting = null;
+                    meetingUrl = null;
+                }
+            }
+            let mpDisplay = {
+                mpPaymentStatus: 'none',
+                refundRequestStatus: null,
+                paymentLabel: null,
+                calendarHighlight: 'normal',
+            };
+            if (appointmentId && appointmentType) {
+                mpDisplay = await (0, mercadopago_appointment_display_service_1.getAppointmentMercadoPagoDisplayStatus)(doctorId, appointmentId, appointmentType, confirmationStatus);
+            }
+            return Object.assign(Object.assign({}, event), { fechaHoraInicio: displayStart, fechaHoraFin: displayEnd, linkMeeting: displayLinkMeeting, meetingUrl, confirmationStatus: confirmationStatus || 'PENDING', appointmentId,
+                appointmentType,
+                teleconsultationAmount, mpPaymentStatus: mpDisplay.mpPaymentStatus, refundRequestStatus: mpDisplay.refundRequestStatus, paymentLabel: mpDisplay.paymentLabel, calendarHighlight: mpDisplay.calendarHighlight });
         }));
         res.json(eventsWithConfirmationStatus);
     }
@@ -453,7 +473,7 @@ const getCalendarEvents = async (req, res) => {
 exports.getCalendarEvents = getCalendarEvents;
 // Crear un nuevo evento del calendario
 const createCalendarEvent = async (req, res) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t;
     try {
         console.log('=== INICIO createCalendarEvent ===');
         console.log('Request body:', JSON.stringify(req.body, null, 2));
@@ -471,7 +491,16 @@ const createCalendarEvent = async (req, res) => {
         });
         if (!doctor)
             throw new error_utils_1.AppError('Perfil de doctor no encontrado.', 404);
-        const { patientId, fechaHoraInicio, fechaHoraFin, titulo, descripcion, origenEvento = 'interno', linkMeeting, meetingPlatform = '' } = req.body;
+        const { patientId, fechaHoraInicio, fechaHoraFin, titulo, descripcion, origenEvento = 'interno', linkMeeting, meetingPlatform = '', modalidadConsulta = 'presencial', teleconsultationAmount, offerInPersonMercadoPago, inPersonPaymentAmount, } = req.body;
+        const amountValidation = await (0, mercadopago_teleconsultation_service_1.validateTeleconsultationAmountForVirtualAppointment)(doctor.id, modalidadConsulta, teleconsultationAmount, patientId);
+        if (!amountValidation.ok) {
+            throw new error_utils_1.AppError(amountValidation.message, 400);
+        }
+        const resolvedTeleconsultationAmount = amountValidation.amount;
+        const inPersonValidation = await (0, mercadopago_inperson_service_1.validateInPersonMercadoPagoForPresencialAppointment)(doctor.id, modalidadConsulta, offerInPersonMercadoPago, inPersonPaymentAmount, patientId);
+        if (!inPersonValidation.ok) {
+            throw new error_utils_1.AppError(inPersonValidation.message, 400);
+        }
         // Validaciones
         if (!fechaHoraInicio || !fechaHoraFin || !titulo) {
             throw new error_utils_1.AppError('Faltan campos obligatorios: fechaHoraInicio, fechaHoraFin, titulo', 400);
@@ -481,6 +510,20 @@ const createCalendarEvent = async (req, res) => {
         const cleanTitleForDB = titulo.replace(/^❌ Cita rechazada:\s*/i, '').trim();
         if (new Date(fechaHoraInicio) >= new Date(fechaHoraFin)) {
             throw new error_utils_1.AppError('La fecha de inicio debe ser anterior a la fecha de fin', 400);
+        }
+        // Validación: CUALQUIER cita (presencial o virtual) debe sincronizarse al calendario externo del
+        // doctor para que el paciente la reciba en el calendario de su dispositivo. La invitación al paciente
+        // se envía a través de ese calendario; sin enlazarlo, el paciente solo recibiría un correo. Para citas
+        // virtuales, además, la videollamada (Google Meet / Teams) se genera desde ese mismo calendario.
+        const requestedProvider = String(origenEvento || '').toLowerCase();
+        if (requestedProvider === 'google' || requestedProvider === 'outlook') {
+            const providerConn = await prisma.calendarSyncConfig.findFirst({
+                where: { doctorId: doctor.id, provider: requestedProvider, isConnected: true }
+            });
+            if (!providerConn) {
+                const label = requestedProvider === 'google' ? 'Google' : 'Microsoft Outlook';
+                throw new error_utils_1.AppError(`Para crear una cita debes enlazar tu calendario de ${label} en Configuración → Calendario. La invitación al calendario del paciente se envía a través de tu calendario; sin enlazarlo, el paciente solo recibiría un correo y no vería la cita en su dispositivo.`, 400);
+            }
         }
         // Verificar que el paciente existe y está asociado al doctor
         if (patientId) {
@@ -523,11 +566,9 @@ const createCalendarEvent = async (req, res) => {
                 throw new error_utils_1.AppError('Paciente no encontrado', 404);
             }
             patient = patientData;
+            const resolvedUserId = await (0, appointmentConfirmation_utils_1.resolvePatientUserIdForAppointment)(patientId);
+            patient = Object.assign(Object.assign({}, patient), { userId: resolvedUserId });
             console.log('   Patient encontrado:', patient ? `SÍ (userId: ${patient.userId})` : 'NO');
-            if (!patient.userId) {
-                console.error('   ❌ ERROR: El paciente no tiene userId asociado');
-                throw new error_utils_1.AppError('El paciente no tiene una cuenta de usuario asociada', 400);
-            }
             console.log('   ✅ Patient tiene userId, buscando/creando appointment...');
             // Buscar si ya existe un appointment para esta fecha/hora (rango acotado para evitar emparejamientos erróneos)
             appointment = await prisma.appointment.findFirst({
@@ -548,6 +589,25 @@ const createCalendarEvent = async (req, res) => {
             });
             if (appointment) {
                 console.log('   ✅ Appointment existente encontrado:', appointment.id, 'con pre-consulta:', appointment.preConsultation ? 'SÍ' : 'NO');
+                const appointmentType = modalidadConsulta === 'virtual' ? 'teleconsulta' : 'presencial';
+                appointment = await prisma.appointment.update({
+                    where: { id: appointment.id },
+                    data: {
+                        status: 'SCHEDULED',
+                        confirmationStatus: 'PENDING',
+                        date: new Date(fechaHoraInicio),
+                        appointmentType,
+                        teleconsultationAmount: modalidadConsulta === 'virtual' ? resolvedTeleconsultationAmount : null,
+                        offerInPersonMercadoPago: modalidadConsulta === 'presencial' ? inPersonValidation.offer : false,
+                        inPersonPaymentAmount: modalidadConsulta === 'presencial' ? inPersonValidation.amount : null,
+                        userId: patient.userId,
+                        cancelledAt: null,
+                        cancellationReason: null,
+                        notes: `Cita creada desde calendario - ${titulo}`
+                    },
+                    include: { preConsultation: true }
+                });
+                console.log('   ♻️ Appointment reactivado/actualizado para nueva cita del calendario');
             }
             else {
                 // Si no existe, crear uno nuevo - ESTO ES CRÍTICO
@@ -559,6 +619,7 @@ const createCalendarEvent = async (req, res) => {
                 console.log('     userId:', patient.userId);
                 console.log('     date:', new Date(fechaHoraInicio));
                 try {
+                    const appointmentType = modalidadConsulta === 'virtual' ? 'teleconsulta' : 'presencial';
                     appointment = await prisma.appointment.create({
                         data: {
                             doctorId,
@@ -568,7 +629,11 @@ const createCalendarEvent = async (req, res) => {
                             date: new Date(fechaHoraInicio),
                             status: 'SCHEDULED',
                             confirmationStatus: 'PENDING', // Explícitamente establecer como PENDING para nuevas citas
-                            notes: `Cita creada desde calendario - ${titulo}`
+                            notes: `Cita creada desde calendario - ${titulo}`,
+                            appointmentType,
+                            teleconsultationAmount: modalidadConsulta === 'virtual' ? resolvedTeleconsultationAmount : null,
+                            offerInPersonMercadoPago: modalidadConsulta === 'presencial' ? inPersonValidation.offer : false,
+                            inPersonPaymentAmount: modalidadConsulta === 'presencial' ? inPersonValidation.amount : null,
                         },
                         include: {
                             preConsultation: true
@@ -654,49 +719,79 @@ const createCalendarEvent = async (req, res) => {
                 }
             }
         }
-        let event = await prisma.internalCalendarEvent.create({
-            data: {
-                doctorId: doctor.id,
-                patientId,
-                fechaHoraInicio: new Date(fechaHoraInicio),
-                fechaHoraFin: new Date(fechaHoraFin),
-                titulo: cleanTitleForDB, // Guardar solo el título limpio (sin prefijo de estatus)
-                descripcion,
-                origenEvento,
-                linkMeeting,
-                creadoPor: doctor.id
-            },
-            include: {
-                patient: {
-                    select: {
-                        id: true,
-                        userId: true,
-                        firstName: true,
-                        lastName: true,
-                        email: true
-                    }
+        const isTeleconsulta = modalidadConsulta === 'virtual' || (appointment === null || appointment === void 0 ? void 0 : appointment.appointmentType) === 'teleconsulta';
+        if ((appointment === null || appointment === void 0 ? void 0 : appointment.appointmentType) === 'teleconsulta') {
+            try {
+                await prisma.teleconsultation.upsert({
+                    where: { appointmentId: appointment.id },
+                    create: { appointmentId: appointment.id, videoProvider: 'google_meet', consentSigned: false },
+                    update: {}
+                });
+            }
+            catch (e) {
+                console.error('Error upsert Teleconsultation al crear evento:', e);
+            }
+        }
+        const eventInclude = {
+            patient: {
+                select: {
+                    id: true,
+                    userId: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true
                 }
             }
-        });
+        };
+        // Si la cita fue reutilizada y ya tiene un evento de calendario enlazado, actualizamos ese
+        // evento en lugar de crear uno nuevo (el vínculo appointmentId es @unique).
+        const existingLinkedEvent = (appointment === null || appointment === void 0 ? void 0 : appointment.id)
+            ? await prisma.internalCalendarEvent.findUnique({ where: { appointmentId: appointment.id } })
+            : null;
+        let event = existingLinkedEvent
+            ? await prisma.internalCalendarEvent.update({
+                where: { id: existingLinkedEvent.id },
+                data: {
+                    doctorId: doctor.id,
+                    patientId,
+                    fechaHoraInicio: new Date(fechaHoraInicio),
+                    fechaHoraFin: new Date(fechaHoraFin),
+                    titulo: cleanTitleForDB,
+                    descripcion,
+                    origenEvento,
+                    linkMeeting: isTeleconsulta ? null : linkMeeting
+                },
+                include: eventInclude
+            })
+            : await prisma.internalCalendarEvent.create({
+                data: {
+                    doctorId: doctor.id,
+                    patientId,
+                    appointmentId: (_a = appointment === null || appointment === void 0 ? void 0 : appointment.id) !== null && _a !== void 0 ? _a : null, // Vínculo duro cita↔evento para evitar colisiones por heurística
+                    fechaHoraInicio: new Date(fechaHoraInicio),
+                    fechaHoraFin: new Date(fechaHoraFin),
+                    titulo: cleanTitleForDB, // Guardar solo el título limpio (sin prefijo de estatus)
+                    descripcion,
+                    origenEvento,
+                    linkMeeting: isTeleconsulta ? null : linkMeeting,
+                    creadoPor: doctor.id
+                },
+                include: eventInclude
+            });
         console.log('✅ Evento de calendario creado:', event.id);
         console.log('   Paciente asociado:', event.patient ? `${event.patient.firstName} ${event.patient.lastName}` : 'NINGUNO');
-        console.log('   Email del paciente (Patient.email):', ((_a = event.patient) === null || _a === void 0 ? void 0 : _a.email) || 'NO DISPONIBLE');
-        console.log('   Patient userId:', ((_b = event.patient) === null || _b === void 0 ? void 0 : _b.userId) || 'NO DISPONIBLE');
+        console.log('   Email del paciente (Patient.email):', ((_b = event.patient) === null || _b === void 0 ? void 0 : _b.email) || 'NO DISPONIBLE');
+        console.log('   Patient userId:', ((_c = event.patient) === null || _c === void 0 ? void 0 : _c.userId) || 'NO DISPONIBLE');
         console.log('   LinkMeeting:', event.linkMeeting || 'NO DISPONIBLE');
         console.log('   Meeting Platform:', meetingPlatform || 'NO ESPECIFICADO');
         // Verificar si el doctor tiene calendarios externos configurados
-        const hasGoogleCalendar = await prisma.calendarSyncConfig.findFirst({
-            where: {
-                doctorId: doctor.id,
-                provider: 'google',
-                isConnected: true
-            }
-        });
+        const hasGoogleCalendar = await (0, calendarSync_utils_1.isDoctorGoogleCalendarOperational)(doctor.id);
         const hasOutlookCalendar = await prisma.calendarSyncConfig.findFirst({
             where: {
                 doctorId: doctor.id,
                 provider: 'outlook',
-                isConnected: true
+                isConnected: true,
+                accessToken: { not: null }
             }
         });
         const hasAppleCalendar = await prisma.calendarSyncConfig.findFirst({
@@ -771,6 +866,7 @@ const createCalendarEvent = async (req, res) => {
         const wantsGoogleConference = meetingPlatform === 'google-meet' ||
             (!!event.linkMeeting && event.linkMeeting.includes('meet.google.com'));
         const wantsOutlookConference = meetingPlatform === 'teams';
+        let calendarSyncWarning;
         // Función auxiliar para obtener el email del paciente
         const getPatientEmail = async (patient) => {
             if (!patient)
@@ -802,7 +898,7 @@ const createCalendarEvent = async (req, res) => {
                 const cleanTitle = event.titulo.replace(/^❌ Cita rechazada:\s*/i, '').trim();
                 const syncDescription = await buildDescriptionWithManageLink({
                     doctorId: doctor.id,
-                    patientId: (_d = (_c = event.patient) === null || _c === void 0 ? void 0 : _c.id) !== null && _d !== void 0 ? _d : null,
+                    patientId: (_e = (_d = event.patient) === null || _d === void 0 ? void 0 : _d.id) !== null && _e !== void 0 ? _e : null,
                     fechaHoraInicio: event.fechaHoraInicio,
                     descripcion: event.descripcion
                 });
@@ -813,11 +909,17 @@ const createCalendarEvent = async (req, res) => {
                     start: event.fechaHoraInicio,
                     end: event.fechaHoraFin,
                     attendees,
-                    externalEventId: (_e = event.externalEventId) !== null && _e !== void 0 ? _e : undefined,
-                    location: (_f = event.linkMeeting) !== null && _f !== void 0 ? _f : undefined,
+                    externalEventId: (_f = event.externalEventId) !== null && _f !== void 0 ? _f : undefined,
+                    location: wantsGoogleConference ? ((_g = event.linkMeeting) !== null && _g !== void 0 ? _g : undefined) : undefined,
                     conferenceType: wantsGoogleConference ? 'google-meet' : null,
-                    conferenceLink: (_g = event.linkMeeting) !== null && _g !== void 0 ? _g : undefined,
-                    googleMeetEnabled: meetingPlatform === 'google-meet'
+                    conferenceLink: wantsGoogleConference ? ((_h = event.linkMeeting) !== null && _h !== void 0 ? _h : undefined) : undefined,
+                    googleMeetEnabled: wantsGoogleConference,
+                    disableConference: !wantsGoogleConference,
+                    sendUpdates: (0, calendarSync_utils_1.resolveGoogleCalendarSendUpdates)({
+                        externalEventId: event.externalEventId,
+                        attendeeCount: attendees.length,
+                        notifyAttendees: true,
+                    }),
                 });
                 if (syncResult) {
                     console.log('✅ Evento sincronizado exitosamente con Google Calendar');
@@ -829,8 +931,11 @@ const createCalendarEvent = async (req, res) => {
                         externalEventId: syncResult.externalEventId,
                         externalUpdatedAt: syncResult.externalUpdatedAt
                     };
-                    if (syncResult.conferenceLink) {
+                    if (wantsGoogleConference && syncResult.conferenceLink) {
                         updateData.linkMeeting = syncResult.conferenceLink;
+                    }
+                    if (!wantsGoogleConference) {
+                        updateData.linkMeeting = null;
                     }
                     event = await prisma.internalCalendarEvent.update({
                         where: { id: event.id },
@@ -849,23 +954,17 @@ const createCalendarEvent = async (req, res) => {
                     });
                 }
                 else {
+                    const errMsg = 'No se pudo sincronizar con Google Calendar. El paciente podría no recibir la invitación al calendario.';
+                    calendarSyncWarning = errMsg;
+                    await (0, calendarSync_utils_1.recordCalendarProviderSyncError)(doctor.id, 'google', errMsg);
                     console.warn('⚠️  No se obtuvo resultado de sincronización con Google Calendar');
-                    console.warn('   Esto puede deberse a:');
-                    console.warn('   - El doctor no tiene Google Calendar conectado');
-                    console.warn('   - Error en las credenciales de Google');
-                    console.warn('   - El paciente NO recibirá invitación al calendario');
                 }
             }
             catch (error) {
+                const errMsg = (error === null || error === void 0 ? void 0 : error.message) ||
+                    'Error al sincronizar con Google Calendar. El paciente podría no recibir la invitación.';
+                calendarSyncWarning = errMsg;
                 console.error('❌ ERROR CRÍTICO sincronizando evento con Google Calendar:', error);
-                console.error('   El evento se creó en la base de datos pero NO se sincronizó con Google');
-                console.error('   El paciente NO recibirá la invitación al calendario');
-                if (error instanceof Error) {
-                    console.error('   Mensaje:', error.message);
-                    console.error('   Stack (primeras 5 líneas):');
-                    const stackLines = ((_h = error.stack) === null || _h === void 0 ? void 0 : _h.split('\n').slice(0, 5)) || [];
-                    stackLines.forEach((line) => console.error('     ', line));
-                }
             }
         }
         if (shouldSyncWithOutlook) {
@@ -889,6 +988,7 @@ const createCalendarEvent = async (req, res) => {
                     location: (_j = event.linkMeeting) !== null && _j !== void 0 ? _j : undefined,
                     externalEventId: (_k = event.externalEventId) !== null && _k !== void 0 ? _k : undefined,
                     teamsEnabled: wantsOutlookConference,
+                    disableConference: !wantsOutlookConference,
                     conferenceLink: (_l = event.linkMeeting) !== null && _l !== void 0 ? _l : undefined
                 });
                 if (syncResult) {
@@ -897,8 +997,11 @@ const createCalendarEvent = async (req, res) => {
                         externalEventId: syncResult.externalEventId,
                         externalUpdatedAt: syncResult.externalUpdatedAt
                     };
-                    if (syncResult.conferenceLink) {
+                    if (wantsOutlookConference && syncResult.conferenceLink) {
                         updateData.linkMeeting = syncResult.conferenceLink;
+                    }
+                    if (!wantsOutlookConference) {
+                        updateData.linkMeeting = null;
                     }
                     event = await prisma.internalCalendarEvent.update({
                         where: { id: event.id },
@@ -1005,6 +1108,29 @@ const createCalendarEvent = async (req, res) => {
             }
             catch (error) {
                 console.error('Error syncing created event to Notion:', error);
+            }
+        }
+        // Teleconsultation: meetingUrl solo después de firmar consentimiento (syncAppointmentCalendars tras firma)
+        if (appointment && appointment.appointmentType === 'teleconsulta') {
+            const videoProvider = event.externalProvider === 'google' ? 'google_meet' : event.externalProvider === 'outlook' ? 'teams' : 'google_meet';
+            try {
+                await prisma.teleconsultation.upsert({
+                    where: { appointmentId: appointment.id },
+                    create: {
+                        appointmentId: appointment.id,
+                        videoProvider,
+                        externalEventId: event.externalEventId,
+                        meetingUrl: null
+                    },
+                    update: {
+                        videoProvider,
+                        externalEventId: event.externalEventId,
+                        meetingUrl: null
+                    }
+                });
+            }
+            catch (tcError) {
+                console.error('Error creando/actualizando Teleconsultation:', tcError);
             }
         }
         // CRÍTICO: Verificar si hay un paciente pero no se sincronizó con ningún calendario externo
@@ -1118,7 +1244,7 @@ const createCalendarEvent = async (req, res) => {
             // Enviar el email de forma asíncrona después de un delay para no bloquear la respuesta
             // Reducido a 3 segundos para dar tiempo a que se complete la sincronización con calendarios externos
             setTimeout(async () => {
-                var _a, _b, _c;
+                var _a, _b, _c, _d;
                 try {
                     console.log('⏳ Esperando 3 segundos antes de buscar pre-consulta y enviar email...');
                     console.log('   Event ID:', eventIdToUse);
@@ -1438,21 +1564,35 @@ const createCalendarEvent = async (req, res) => {
                     console.log('📧   LinkMeeting incluido:', updatedEvent.linkMeeting ? `SÍ (${updatedEvent.linkMeeting})` : 'NO');
                     console.log('📧 ========================================');
                     let manageLink = undefined;
-                    if (appointment === null || appointment === void 0 ? void 0 : appointment.id) {
-                        manageLink = await getOrCreateManageLink(appointment.id);
+                    if (appointmentIdToUse) {
+                        manageLink = await getOrCreateManageLink(appointmentIdToUse);
                     }
-                    const emailData = {
-                        patientName,
-                        doctorName,
-                        eventTitle: updatedEvent.titulo,
-                        eventDate: updatedEvent.fechaHoraInicio,
-                        eventEndDate: updatedEvent.fechaHoraFin,
-                        description: updatedEvent.descripcion || undefined,
-                        linkMeeting: updatedEvent.linkMeeting || undefined,
-                        tipoCita: updatedEvent.linkMeeting ? 'remota' : 'presencial',
-                        preConsultationLink: preConsultationLink || undefined,
-                        manageLink
-                    };
+                    const emailPayload = appointmentIdToUse
+                        ? await (0, appointmentConfirmation_utils_1.buildAppointmentCalendarEmailPayload)({
+                            doctorId: doctor.id,
+                            appointmentId: appointmentIdToUse,
+                            doctorTimezone: updatedDoctor.timezone,
+                            eventTitle: updatedEvent.titulo,
+                            eventDate: updatedEvent.fechaHoraInicio,
+                            eventEndDate: updatedEvent.fechaHoraFin,
+                            description: updatedEvent.descripcion,
+                            linkMeeting: updatedEvent.linkMeeting,
+                            eventId: updatedEvent.id,
+                            preConsultationLink: preConsultationLink || undefined,
+                        })
+                        : {
+                            eventTitle: updatedEvent.titulo,
+                            eventDate: updatedEvent.fechaHoraInicio,
+                            eventEndDate: updatedEvent.fechaHoraFin,
+                            description: (0, appointmentConfirmation_utils_1.stripManageLinkBlocksFromDescription)(updatedEvent.descripcion) || undefined,
+                            linkMeeting: updatedEvent.linkMeeting || undefined,
+                            tipoCita: updatedEvent.linkMeeting ? 'remota' : 'presencial',
+                            preConsultationLink: preConsultationLink || undefined,
+                            manageLink,
+                            timezone: (_d = updatedDoctor.timezone) !== null && _d !== void 0 ? _d : 'America/Mexico_City',
+                        };
+                    const emailData = Object.assign(Object.assign({ patientName,
+                        doctorName }, emailPayload), { appointmentId: appointmentIdToUse !== null && appointmentIdToUse !== void 0 ? appointmentIdToUse : undefined, calendarInviteExpected: true });
                     console.log('📧 ========================================');
                     console.log('📧 DATOS DEL EMAIL QUE SE ENVIARÁN:');
                     console.log('📧   preConsultationLink:', emailData.preConsultationLink || 'UNDEFINED');
@@ -1484,8 +1624,33 @@ const createCalendarEvent = async (req, res) => {
         else {
             console.log('⚠️  No se envía email: el evento no tiene paciente asociado');
         }
+        if ((appointment === null || appointment === void 0 ? void 0 : appointment.appointmentType) === 'teleconsulta' && appointment.id) {
+            try {
+                await appointmentConfirmation_controller_1.AppointmentConfirmationController.syncAppointmentCalendars(appointment.id, {
+                    notifyAttendees: false,
+                });
+            }
+            catch (syncErr) {
+                console.error('Error sincronizando calendarios tras crear teleconsulta:', syncErr);
+            }
+        }
+        else if ((appointment === null || appointment === void 0 ? void 0 : appointment.appointmentType) === 'presencial' && appointment.id) {
+            try {
+                // Segunda pasada: alinear vínculo interno sin duplicar invitación (ya enviada arriba).
+                await appointmentConfirmation_controller_1.AppointmentConfirmationController.syncAppointmentCalendars(appointment.id, {
+                    notifyAttendees: false,
+                });
+            }
+            catch (syncErr) {
+                console.error('Error sincronizando calendario interno tras crear cita presencial:', syncErr);
+            }
+        }
         console.log('=== FIN createCalendarEvent (éxito) ===');
-        res.status(201).json(event);
+        res.status(201).json(Object.assign(Object.assign(Object.assign({}, event), { calendarSync: {
+                googleSynced: event.externalProvider === 'google' && !!event.externalEventId,
+                externalEventId: (_s = event.externalEventId) !== null && _s !== void 0 ? _s : null,
+                externalProvider: (_t = event.externalProvider) !== null && _t !== void 0 ? _t : null,
+            } }), (calendarSyncWarning ? { calendarSyncWarning } : {})));
     }
     catch (error) {
         console.error('=== ERROR en createCalendarEvent ===');
@@ -1498,22 +1663,117 @@ const createCalendarEvent = async (req, res) => {
     }
 };
 exports.createCalendarEvent = createCalendarEvent;
+/** Notifica al paciente tras reprogramar (doctor o sistema). */
+const notifyPatientReschedule = async (appointmentId, doctorTimezone) => {
+    var _a, _b, _c, _d;
+    const refreshedAppointment = await prisma.appointment.findUnique({
+        where: { id: appointmentId },
+        include: {
+            patient: { include: { user: true } },
+            doctor: { include: { user: true } }
+        }
+    });
+    if (!refreshedAppointment)
+        return;
+    const patientEmail = refreshedAppointment.patient.email || ((_a = refreshedAppointment.patient.user) === null || _a === void 0 ? void 0 : _a.email) || '';
+    if (!patientEmail)
+        return;
+    try {
+        const emailService = notification_service_1.EmailService.getInstance();
+        const calEvent = (_b = await prisma.internalCalendarEvent.findFirst({
+            where: { appointmentId: refreshedAppointment.id },
+        })) !== null && _b !== void 0 ? _b : await prisma.internalCalendarEvent.findFirst({
+            where: {
+                doctorId: refreshedAppointment.doctorId,
+                patientId: refreshedAppointment.patientId,
+                fechaHoraInicio: {
+                    gte: new Date(refreshedAppointment.date.getTime() - 30 * 60000),
+                    lte: new Date(refreshedAppointment.date.getTime() + 30 * 60000),
+                },
+            },
+        });
+        const scheduleConfig = await schedule_service_1.ScheduleService.getScheduleConfig(refreshedAppointment.doctorId);
+        const durationMs = Math.max(15, Math.min(480, (_c = scheduleConfig === null || scheduleConfig === void 0 ? void 0 : scheduleConfig.appointmentDuration) !== null && _c !== void 0 ? _c : 30)) * 60000;
+        const eventEnd = (_d = calEvent === null || calEvent === void 0 ? void 0 : calEvent.fechaHoraFin) !== null && _d !== void 0 ? _d : new Date(refreshedAppointment.date.getTime() + durationMs);
+        const patientName = `${refreshedAppointment.patient.firstName || ''} ${refreshedAppointment.patient.lastName || ''}`.trim() ||
+            'Paciente';
+        const doctorName = refreshedAppointment.doctor.user
+            ? `${refreshedAppointment.doctor.professionalTitle || ''} ${refreshedAppointment.doctor.user.firstName} ${refreshedAppointment.doctor.user.lastName}`.trim()
+            : refreshedAppointment.doctor.professionalTitle || 'Profesional';
+        const emailPayload = await (0, appointmentConfirmation_utils_1.buildAppointmentCalendarEmailPayload)({
+            doctorId: refreshedAppointment.doctorId,
+            appointmentId: refreshedAppointment.id,
+            doctorTimezone: doctorTimezone,
+            eventTitle: (calEvent === null || calEvent === void 0 ? void 0 : calEvent.titulo) || `${patientName} consulta`,
+            eventDate: refreshedAppointment.date,
+            eventEndDate: eventEnd,
+            description: 'Tu cita fue reprogramada. La verás actualizada en Mis citas al iniciar sesión en Qlinexa360.',
+            linkMeeting: calEvent === null || calEvent === void 0 ? void 0 : calEvent.linkMeeting,
+            eventId: calEvent === null || calEvent === void 0 ? void 0 : calEvent.id,
+        });
+        await emailService.sendCalendarEventEmail(patientEmail, Object.assign(Object.assign({ patientName,
+            doctorName }, emailPayload), { appointmentId: refreshedAppointment.id, skipEmailDedup: true, calendarInviteExpected: true }));
+    }
+    catch (err) {
+        console.error('Error enviando correo de reprogramación al paciente:', err);
+    }
+};
+/** Slots de agenda compartida para reagendar (doctor/asistente). */
+const getRescheduleAvailableSlots = async (req, res) => {
+    try {
+        const doctorId = await resolveDoctorId(req);
+        const doctor = await prisma.doctor.findUnique({
+            where: { id: doctorId },
+            select: { timezone: true }
+        });
+        if (!doctor)
+            throw new error_utils_1.AppError('Perfil de doctor no encontrado.', 404);
+        const { date, excludeAppointmentId, excludeEventId } = req.query;
+        if (!date || typeof date !== 'string') {
+            throw new error_utils_1.AppError('Debes indicar una fecha (YYYY-MM-DD)', 400);
+        }
+        const doctorTimezone = doctor.timezone || 'America/Mexico_City';
+        const slots = await schedule_service_1.ScheduleService.getBookableSlotsForDate(doctorId, date, {
+            excludeAppointmentId: typeof excludeAppointmentId === 'string' ? excludeAppointmentId : undefined,
+            excludeEventId: typeof excludeEventId === 'string' ? excludeEventId : undefined,
+            timezone: doctorTimezone
+        });
+        res.json({
+            success: true,
+            data: slots,
+            message: slots.length === 0
+                ? 'No hay horarios disponibles para esta fecha en la agenda compartida'
+                : undefined
+        });
+    }
+    catch (error) {
+        const handled = error instanceof error_utils_1.AppError ? error : new error_utils_1.AppError('Error al obtener horarios disponibles.', 500);
+        res.status(handled.statusCode).json({ message: handled.message });
+    }
+};
+exports.getRescheduleAvailableSlots = getRescheduleAvailableSlots;
 // Actualizar un evento del calendario (solo si es interno)
 const updateCalendarEvent = async (req, res) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r;
     try {
         const doctorId = await resolveDoctorId(req);
         const doctor = await prisma.doctor.findUnique({ where: { id: doctorId } });
         if (!doctor)
             throw new error_utils_1.AppError('Perfil de doctor no encontrado.', 404);
         const { eventId } = req.params;
-        const { patientId, fechaHoraInicio, fechaHoraFin, titulo, descripcion, linkMeeting, meetingPlatform = '' } = req.body;
+        const { patientId, fechaHoraInicio, fechaHoraFin, titulo, descripcion, linkMeeting, meetingPlatform = '', modalidadConsulta, teleconsultationAmount, } = req.body;
         // Buscar el evento
         const existingEvent = await prisma.internalCalendarEvent.findUnique({
             where: { id: eventId }
         });
         if (!existingEvent) {
             throw new error_utils_1.AppError('Evento no encontrado', 404);
+        }
+        if (modalidadConsulta !== undefined) {
+            const amountValidation = await (0, mercadopago_teleconsultation_service_1.validateTeleconsultationAmountForVirtualAppointment)(doctor.id, modalidadConsulta, teleconsultationAmount, patientId || existingEvent.patientId);
+            if (!amountValidation.ok) {
+                throw new error_utils_1.AppError(amountValidation.message, 400);
+            }
         }
         // Verificar que el doctor es el dueño del evento
         if (existingEvent.doctorId !== doctor.id) {
@@ -1530,6 +1790,19 @@ const updateCalendarEvent = async (req, res) => {
         // Validaciones
         if (fechaHoraInicio && fechaHoraFin && new Date(fechaHoraInicio) >= new Date(fechaHoraFin)) {
             throw new error_utils_1.AppError('La fecha de inicio debe ser anterior a la fecha de fin', 400);
+        }
+        // Cualquier movimiento de calendario (editar / reprogramar) requiere que el calendario del doctor
+        // siga enlazado: el cambio se refleja en el calendario del paciente a través del calendario del doctor.
+        // Solo aplica a eventos vinculados a un proveedor externo (Google/Outlook); los internos no se bloquean.
+        const editProvider = String(existingEvent.externalProvider || existingEvent.origenEvento || '').toLowerCase();
+        if (editProvider === 'google' || editProvider === 'outlook') {
+            const editProviderConn = await prisma.calendarSyncConfig.findFirst({
+                where: { doctorId: doctor.id, provider: editProvider, isConnected: true }
+            });
+            if (!editProviderConn) {
+                const label = editProvider === 'google' ? 'Google' : 'Microsoft Outlook';
+                throw new error_utils_1.AppError(`Para modificar o reprogramar esta cita necesitas tener enlazado tu calendario de ${label} en Configuración → Calendario. El cambio se refleja en el calendario del paciente a través de tu calendario; sin enlazarlo, el paciente no vería la actualización en su dispositivo.`, 400);
+            }
         }
         // Verificar que el paciente existe y está asociado al doctor
         if (patientId) {
@@ -1549,6 +1822,30 @@ const updateCalendarEvent = async (req, res) => {
         const fechaCambio = fechaHoraInicio && existingEvent.fechaHoraInicio
             ? new Date(fechaHoraInicio).getTime() !== existingEvent.fechaHoraInicio.getTime()
             : false;
+        let linkedAppointmentForReschedule = null;
+        if (fechaCambio && existingEvent.patientId) {
+            linkedAppointmentForReschedule = await prisma.appointment.findFirst({
+                where: {
+                    doctorId: doctor.id,
+                    patientId: existingEvent.patientId,
+                    date: {
+                        gte: new Date(existingEvent.fechaHoraInicio.getTime() - 30 * 60 * 1000),
+                        lte: new Date(existingEvent.fechaHoraInicio.getTime() + 30 * 60 * 1000)
+                    }
+                },
+                orderBy: { date: 'desc' },
+                select: { id: true, date: true }
+            });
+            const doctorTimezone = doctor.timezone || 'America/Mexico_City';
+            const slotBookable = await schedule_service_1.ScheduleService.isSlotBookable(doctor.id, new Date(fechaHoraInicio), {
+                excludeAppointmentId: linkedAppointmentForReschedule === null || linkedAppointmentForReschedule === void 0 ? void 0 : linkedAppointmentForReschedule.id,
+                excludeEventId: eventId,
+                timezone: doctorTimezone
+            });
+            if (!slotBookable) {
+                throw new error_utils_1.AppError('El horario seleccionado no está disponible en la agenda compartida. Elige otro slot.', 409);
+            }
+        }
         let updatedEvent = await prisma.internalCalendarEvent.update({
             where: { id: eventId },
             data: {
@@ -1570,37 +1867,66 @@ const updateCalendarEvent = async (req, res) => {
                 }
             }
         });
+        if (updatedEvent.patientId && modalidadConsulta !== undefined) {
+            const amountValidation = await (0, mercadopago_teleconsultation_service_1.validateTeleconsultationAmountForVirtualAppointment)(doctor.id, modalidadConsulta, teleconsultationAmount, updatedEvent.patientId);
+            if (amountValidation.ok) {
+                const linkedAppointment = await prisma.appointment.findFirst({
+                    where: {
+                        doctorId: doctor.id,
+                        patientId: updatedEvent.patientId,
+                        date: {
+                            gte: new Date(updatedEvent.fechaHoraInicio.getTime() - 30 * 60 * 1000),
+                            lte: new Date(updatedEvent.fechaHoraInicio.getTime() + 30 * 60 * 1000),
+                        },
+                    },
+                    orderBy: { date: 'desc' },
+                });
+                if (linkedAppointment) {
+                    const appointmentType = modalidadConsulta === 'virtual' ? 'teleconsulta' : 'presencial';
+                    await prisma.appointment.update({
+                        where: { id: linkedAppointment.id },
+                        data: {
+                            appointmentType,
+                            teleconsultationAmount: modalidadConsulta === 'virtual' ? amountValidation.amount : null,
+                        },
+                    });
+                }
+            }
+        }
         // CRÍTICO: Si se reagendó la cita (fecha cambió) y hay un paciente, actualizar el appointment relacionado
         // y resetear el confirmationStatus para que se pueda sincronizar correctamente desde el calendario externo
         if (fechaCambio && updatedEvent.patient) {
             try {
-                // Buscar el appointment relacionado con la fecha ANTERIOR
-                const appointment = await prisma.appointment.findFirst({
-                    where: {
-                        doctorId: doctor.id,
-                        patientId: updatedEvent.patient.id,
-                        date: {
-                            gte: new Date(existingEvent.fechaHoraInicio.getTime() - 30 * 60 * 1000), // 30 minutos antes
-                            lte: new Date(existingEvent.fechaHoraInicio.getTime() + 30 * 60 * 1000) // 30 minutos después
-                        }
-                    },
-                    orderBy: {
-                        date: 'desc'
-                    }
-                });
+                const appointment = linkedAppointmentForReschedule ||
+                    (await prisma.appointment.findFirst({
+                        where: {
+                            doctorId: doctor.id,
+                            patientId: updatedEvent.patient.id,
+                            date: {
+                                gte: new Date(existingEvent.fechaHoraInicio.getTime() - 30 * 60 * 1000),
+                                lte: new Date(existingEvent.fechaHoraInicio.getTime() + 30 * 60 * 1000)
+                            }
+                        },
+                        orderBy: { date: 'desc' },
+                        select: { id: true, date: true }
+                    }));
+                let syncedAppointmentId = null;
                 if (appointment) {
-                    // Actualizar el appointment con la nueva fecha y resetear el confirmationStatus
+                    const appointmentTypeUpdate = modalidadConsulta === 'virtual'
+                        ? 'teleconsulta'
+                        : modalidadConsulta === 'presencial'
+                            ? 'presencial'
+                            : undefined;
+                    const previousDate = appointment.date;
                     await prisma.appointment.update({
                         where: { id: appointment.id },
-                        data: {
-                            date: new Date(fechaHoraInicio),
-                            confirmationStatus: 'PENDING', // Resetear a PENDING para que se sincronice correctamente desde el calendario externo
-                            confirmedAt: null,
-                            cancelledAt: null,
-                            status: 'SCHEDULED'
-                        }
+                        data: Object.assign({ date: new Date(fechaHoraInicio), confirmationStatus: 'RESCHEDULED', rescheduledFrom: previousDate, rescheduledTo: new Date(fechaHoraInicio), confirmedAt: null, cancelledAt: null, status: 'SCHEDULED' }, (appointmentTypeUpdate ? { appointmentType: appointmentTypeUpdate } : {}))
                     });
-                    console.log(`✅ Appointment ${appointment.id} actualizado con nueva fecha y confirmationStatus reseteado después de reagendar`);
+                    syncedAppointmentId = appointment.id;
+                    await appointmentConfirmation_controller_1.AppointmentConfirmationController.syncAppointmentCalendars(appointment.id, {
+                        notifyAttendees: true,
+                    });
+                    console.log(`✅ Appointment ${appointment.id} actualizado con nueva fecha después de reagendar`);
                 }
                 else {
                     // Si no se encuentra el appointment, buscar por la nueva fecha para ver si ya existe uno
@@ -1626,7 +1952,8 @@ const updateCalendarEvent = async (req, res) => {
                             }
                         });
                         if (patient && patient.doctors.length > 0) {
-                            await prisma.appointment.create({
+                            const newAppointmentType = modalidadConsulta === 'virtual' ? 'teleconsulta' : 'presencial';
+                            const createdAppt = await prisma.appointment.create({
                                 data: {
                                     doctorId: doctor.id,
                                     patientId: updatedEvent.patient.id,
@@ -1634,33 +1961,89 @@ const updateCalendarEvent = async (req, res) => {
                                     userId: patient.userId || '',
                                     date: new Date(fechaHoraInicio),
                                     status: 'SCHEDULED',
-                                    confirmationStatus: 'PENDING', // Explícitamente establecer como PENDING para citas reagendadas
+                                    appointmentType: newAppointmentType,
+                                    confirmationStatus: 'RESCHEDULED',
                                     notes: `Cita reagendada desde calendario - ${cleanTitleForUpdate || titulo}`
                                 }
                             });
-                            console.log(`✅ Nuevo appointment creado para la cita reagendada con confirmationStatus: PENDING`);
+                            await appointmentConfirmation_controller_1.AppointmentConfirmationController.syncAppointmentCalendars(createdAppt.id, {
+                                notifyAttendees: true,
+                            });
+                            syncedAppointmentId = createdAppt.id;
+                            console.log(`✅ Nuevo appointment creado para la cita reagendada`);
                         }
                     }
                     else {
-                        // Si existe un appointment en la nueva fecha, también resetearlo a PENDING
-                        // porque es una cita reagendada y el paciente debe confirmar nuevamente
+                        const previousDate = existingAppointment.date;
                         await prisma.appointment.update({
                             where: { id: existingAppointment.id },
                             data: {
-                                confirmationStatus: 'PENDING',
+                                date: new Date(fechaHoraInicio),
+                                confirmationStatus: 'RESCHEDULED',
+                                rescheduledFrom: previousDate,
+                                rescheduledTo: new Date(fechaHoraInicio),
                                 confirmedAt: null,
                                 cancelledAt: null,
                                 status: 'SCHEDULED'
                             }
                         });
-                        console.log(`✅ Appointment ${existingAppointment.id} reseteado a PENDING después de reagendar`);
+                        syncedAppointmentId = existingAppointment.id;
+                        await appointmentConfirmation_controller_1.AppointmentConfirmationController.syncAppointmentCalendars(existingAppointment.id, {
+                            notifyAttendees: true,
+                        });
+                        console.log(`✅ Appointment ${existingAppointment.id} actualizado tras reagendar`);
                     }
+                }
+                if (syncedAppointmentId) {
+                    await notifyPatientReschedule(syncedAppointmentId, doctor.timezone || 'America/Mexico_City');
                 }
             }
             catch (appointmentError) {
                 console.error('Error actualizando appointment después de reagendar:', appointmentError);
                 // No fallar la actualización del evento si hay error con el appointment
             }
+        }
+        let allowVideoForExternalSync = meetingPlatform === 'google-meet' || meetingPlatform === 'teams';
+        let teleconsultaWithConsent = false;
+        if (updatedEvent.patientId) {
+            const apptUpdate = await prisma.appointment.findFirst({
+                where: {
+                    doctorId: doctor.id,
+                    patientId: updatedEvent.patientId,
+                    date: {
+                        gte: new Date(updatedEvent.fechaHoraInicio.getTime() - 30 * 60000),
+                        lte: new Date(updatedEvent.fechaHoraInicio.getTime() + 30 * 60000)
+                    }
+                },
+                orderBy: { date: 'desc' }
+            });
+            if ((apptUpdate === null || apptUpdate === void 0 ? void 0 : apptUpdate.appointmentType) === 'teleconsulta') {
+                const tcUpdate = await prisma.teleconsultation.findUnique({
+                    where: { appointmentId: apptUpdate.id },
+                    select: { consentSigned: true }
+                });
+                teleconsultaWithConsent = (0, calendarSync_utils_1.shouldAllowVideoConferenceForAppointment)(apptUpdate.appointmentType, tcUpdate === null || tcUpdate === void 0 ? void 0 : tcUpdate.consentSigned);
+                allowVideoForExternalSync = teleconsultaWithConsent;
+            }
+            else if (apptUpdate) {
+                allowVideoForExternalSync = meetingPlatform === 'google-meet' || meetingPlatform === 'teams';
+            }
+        }
+        if (!allowVideoForExternalSync) {
+            updatedEvent = await prisma.internalCalendarEvent.update({
+                where: { id: updatedEvent.id },
+                data: { linkMeeting: null },
+                include: {
+                    patient: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            email: true
+                        }
+                    }
+                }
+            });
         }
         const shouldSyncWithGoogle = meetingPlatform === 'google-meet' ||
             updatedEvent.origenEvento === 'google' ||
@@ -1683,14 +2066,33 @@ const updateCalendarEvent = async (req, res) => {
                 updatedEvent.origenEvento === 'notion' ||
                 updatedEvent.externalProvider === 'notion' ||
                 existingEvent.externalProvider === 'notion');
-        const wantsGoogleConference = meetingPlatform === 'google-meet' ||
+        const wantsGoogleConference = teleconsultaWithConsent ||
+            meetingPlatform === 'google-meet' ||
             (!!updatedEvent.linkMeeting && updatedEvent.linkMeeting.includes('meet.google.com'));
-        const wantsOutlookConference = meetingPlatform === 'teams';
+        const wantsOutlookConference = teleconsultaWithConsent ||
+            meetingPlatform === 'teams' ||
+            (!!updatedEvent.linkMeeting && updatedEvent.linkMeeting.includes('teams.microsoft.com'));
+        let calendarSyncWarning;
         if (shouldSyncWithGoogle) {
             try {
-                const attendees = ((_a = updatedEvent.patient) === null || _a === void 0 ? void 0 : _a.email)
-                    ? [updatedEvent.patient.email]
-                    : [];
+                let patientEmailForSync = ((_a = updatedEvent.patient) === null || _a === void 0 ? void 0 : _a.email) || null;
+                if (!patientEmailForSync && updatedEvent.patientId) {
+                    const patientRow = await prisma.patient.findUnique({
+                        where: { id: updatedEvent.patientId },
+                        select: { email: true, user: { select: { email: true } } },
+                    });
+                    patientEmailForSync = (patientRow === null || patientRow === void 0 ? void 0 : patientRow.email) || ((_b = patientRow === null || patientRow === void 0 ? void 0 : patientRow.user) === null || _b === void 0 ? void 0 : _b.email) || null;
+                }
+                const attendees = patientEmailForSync ? [patientEmailForSync] : [];
+                console.log('📅 Reagendamiento → sync Google Calendar:');
+                console.log('   fechaCambio:', fechaCambio);
+                console.log('   patientEmail:', patientEmailForSync || 'NO DISPONIBLE');
+                console.log('   externalEventId:', updatedEvent.externalEventId || 'NINGUNO');
+                console.log('   sendUpdates:', (0, calendarSync_utils_1.resolveGoogleCalendarSendUpdates)({
+                    externalEventId: updatedEvent.externalEventId,
+                    attendeeCount: attendees.length,
+                    notifyAttendees: !!fechaCambio,
+                }));
                 // Limpiar el título: remover cualquier prefijo de estatus que pueda tener
                 const cleanTitle = updatedEvent.titulo.replace(/^❌ Cita rechazada:\s*/i, '').trim();
                 const syncDescription = await buildDescriptionWithManageLink(updatedEvent);
@@ -1701,11 +2103,17 @@ const updateCalendarEvent = async (req, res) => {
                     start: updatedEvent.fechaHoraInicio,
                     end: updatedEvent.fechaHoraFin,
                     attendees,
-                    externalEventId: (_b = updatedEvent.externalEventId) !== null && _b !== void 0 ? _b : undefined,
-                    location: (_c = updatedEvent.linkMeeting) !== null && _c !== void 0 ? _c : undefined,
+                    externalEventId: (_c = updatedEvent.externalEventId) !== null && _c !== void 0 ? _c : undefined,
+                    location: wantsGoogleConference ? ((_d = updatedEvent.linkMeeting) !== null && _d !== void 0 ? _d : undefined) : undefined,
                     conferenceType: wantsGoogleConference ? 'google-meet' : null,
-                    conferenceLink: (_d = updatedEvent.linkMeeting) !== null && _d !== void 0 ? _d : undefined,
-                    googleMeetEnabled: meetingPlatform === 'google-meet'
+                    conferenceLink: wantsGoogleConference ? ((_e = updatedEvent.linkMeeting) !== null && _e !== void 0 ? _e : undefined) : undefined,
+                    googleMeetEnabled: wantsGoogleConference,
+                    disableConference: !wantsGoogleConference,
+                    sendUpdates: (0, calendarSync_utils_1.resolveGoogleCalendarSendUpdates)({
+                        externalEventId: updatedEvent.externalEventId,
+                        attendeeCount: attendees.length,
+                        notifyAttendees: !!fechaCambio,
+                    }),
                 });
                 if (syncResult) {
                     const updateData = {
@@ -1713,8 +2121,11 @@ const updateCalendarEvent = async (req, res) => {
                         externalEventId: syncResult.externalEventId,
                         externalUpdatedAt: syncResult.externalUpdatedAt
                     };
-                    if (syncResult.conferenceLink) {
+                    if (wantsGoogleConference && syncResult.conferenceLink) {
                         updateData.linkMeeting = syncResult.conferenceLink;
+                    }
+                    if (!wantsGoogleConference) {
+                        updateData.linkMeeting = null;
                     }
                     updatedEvent = await prisma.internalCalendarEvent.update({
                         where: { id: updatedEvent.id },
@@ -1732,16 +2143,30 @@ const updateCalendarEvent = async (req, res) => {
                         }
                     });
                 }
+                else {
+                    const errMsg = 'No se pudo actualizar Google Calendar. El paciente podría no recibir la invitación reprogramada.';
+                    calendarSyncWarning = errMsg;
+                    await (0, calendarSync_utils_1.recordCalendarProviderSyncError)(doctor.id, 'google', errMsg);
+                }
             }
             catch (error) {
+                const errMsg = (error === null || error === void 0 ? void 0 : error.message) ||
+                    'Error al sincronizar la reprogramación con Google Calendar.';
+                calendarSyncWarning = errMsg;
                 console.error('Error syncing updated event to Google:', error);
             }
         }
         if (shouldSyncWithOutlook) {
             try {
-                const attendees = ((_e = updatedEvent.patient) === null || _e === void 0 ? void 0 : _e.email)
-                    ? [updatedEvent.patient.email]
-                    : [];
+                let patientEmailForOutlook = ((_f = updatedEvent.patient) === null || _f === void 0 ? void 0 : _f.email) || null;
+                if (!patientEmailForOutlook && updatedEvent.patientId) {
+                    const patientRow = await prisma.patient.findUnique({
+                        where: { id: updatedEvent.patientId },
+                        select: { email: true, user: { select: { email: true } } },
+                    });
+                    patientEmailForOutlook = (patientRow === null || patientRow === void 0 ? void 0 : patientRow.email) || ((_g = patientRow === null || patientRow === void 0 ? void 0 : patientRow.user) === null || _g === void 0 ? void 0 : _g.email) || null;
+                }
+                const attendees = patientEmailForOutlook ? [patientEmailForOutlook] : [];
                 // Limpiar el título: remover cualquier prefijo de estatus que pueda tener
                 const cleanTitle = updatedEvent.titulo.replace(/^❌ Cita rechazada:\s*/i, '').trim();
                 const syncDescription = await buildDescriptionWithManageLink(updatedEvent);
@@ -1752,10 +2177,11 @@ const updateCalendarEvent = async (req, res) => {
                     start: updatedEvent.fechaHoraInicio,
                     end: updatedEvent.fechaHoraFin,
                     attendees,
-                    location: (_f = updatedEvent.linkMeeting) !== null && _f !== void 0 ? _f : undefined,
-                    externalEventId: (_g = updatedEvent.externalEventId) !== null && _g !== void 0 ? _g : undefined,
+                    location: wantsOutlookConference ? ((_h = updatedEvent.linkMeeting) !== null && _h !== void 0 ? _h : undefined) : undefined,
+                    externalEventId: (_j = updatedEvent.externalEventId) !== null && _j !== void 0 ? _j : undefined,
                     teamsEnabled: wantsOutlookConference,
-                    conferenceLink: (_h = updatedEvent.linkMeeting) !== null && _h !== void 0 ? _h : undefined
+                    disableConference: !wantsOutlookConference,
+                    conferenceLink: (_k = updatedEvent.linkMeeting) !== null && _k !== void 0 ? _k : undefined
                 });
                 if (syncResult) {
                     const updateData = {
@@ -1763,8 +2189,11 @@ const updateCalendarEvent = async (req, res) => {
                         externalEventId: syncResult.externalEventId,
                         externalUpdatedAt: syncResult.externalUpdatedAt
                     };
-                    if (syncResult.conferenceLink) {
+                    if (wantsOutlookConference && syncResult.conferenceLink) {
                         updateData.linkMeeting = syncResult.conferenceLink;
+                    }
+                    if (!wantsOutlookConference) {
+                        updateData.linkMeeting = null;
                     }
                     updatedEvent = await prisma.internalCalendarEvent.update({
                         where: { id: updatedEvent.id },
@@ -1798,8 +2227,8 @@ const updateCalendarEvent = async (req, res) => {
                     description: syncDescription,
                     start: updatedEvent.fechaHoraInicio,
                     end: updatedEvent.fechaHoraFin,
-                    attendees: ((_j = updatedEvent.patient) === null || _j === void 0 ? void 0 : _j.email) ? [updatedEvent.patient.email] : [],
-                    externalEventId: (_k = updatedEvent.externalEventId) !== null && _k !== void 0 ? _k : undefined
+                    attendees: ((_l = updatedEvent.patient) === null || _l === void 0 ? void 0 : _l.email) ? [updatedEvent.patient.email] : [],
+                    externalEventId: (_m = updatedEvent.externalEventId) !== null && _m !== void 0 ? _m : undefined
                 });
                 if (syncResult) {
                     updatedEvent = await prisma.internalCalendarEvent.update({
@@ -1829,7 +2258,7 @@ const updateCalendarEvent = async (req, res) => {
         }
         if (shouldSyncWithNotion) {
             try {
-                const attendees = ((_l = updatedEvent.patient) === null || _l === void 0 ? void 0 : _l.email)
+                const attendees = ((_o = updatedEvent.patient) === null || _o === void 0 ? void 0 : _o.email)
                     ? [updatedEvent.patient.email]
                     : [];
                 const syncDescription = await buildDescriptionWithManageLink(updatedEvent);
@@ -1840,9 +2269,9 @@ const updateCalendarEvent = async (req, res) => {
                     start: updatedEvent.fechaHoraInicio,
                     end: updatedEvent.fechaHoraFin,
                     attendees,
-                    location: (_m = updatedEvent.linkMeeting) !== null && _m !== void 0 ? _m : undefined,
-                    externalEventId: (_o = updatedEvent.externalEventId) !== null && _o !== void 0 ? _o : undefined,
-                    linkMeeting: (_p = updatedEvent.linkMeeting) !== null && _p !== void 0 ? _p : undefined
+                    location: (_p = updatedEvent.linkMeeting) !== null && _p !== void 0 ? _p : undefined,
+                    externalEventId: (_q = updatedEvent.externalEventId) !== null && _q !== void 0 ? _q : undefined,
+                    linkMeeting: (_r = updatedEvent.linkMeeting) !== null && _r !== void 0 ? _r : undefined
                 });
                 if (syncResult) {
                     updatedEvent = await prisma.internalCalendarEvent.update({
@@ -1870,7 +2299,7 @@ const updateCalendarEvent = async (req, res) => {
                 console.error('Error syncing updated event to Notion:', error);
             }
         }
-        res.json(updatedEvent);
+        res.json(Object.assign(Object.assign({}, updatedEvent), (calendarSyncWarning ? { calendarSyncWarning } : {})));
     }
     catch (error) {
         const handled = error instanceof error_utils_1.AppError ? error : new error_utils_1.AppError('Error al actualizar evento del calendario.', 500);
@@ -1946,7 +2375,7 @@ const deleteCalendarEvent = async (req, res) => {
 exports.deleteCalendarEvent = deleteCalendarEvent;
 // Cancelar una cita (actualizar appointment a CANCELLED)
 const cancelAppointment = async (req, res) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c;
     try {
         const doctorId = await resolveDoctorId(req);
         const doctor = await prisma.doctor.findUnique({ where: { id: doctorId } });
@@ -1977,180 +2406,123 @@ const cancelAppointment = async (req, res) => {
         if (!event.patient) {
             throw new error_utils_1.AppError('Este evento no está asociado a un paciente', 400);
         }
-        // Buscar el appointment relacionado - usar búsqueda más robusta
+        // Resolver la cita: priorizar vínculo duro evento↔cita
         console.log('🔍 Buscando appointment para cancelar:');
         console.log('   Event ID:', eventId);
+        console.log('   Event appointmentId:', event.appointmentId);
         console.log('   Event fechaHoraInicio:', event.fechaHoraInicio);
         console.log('   Patient ID:', event.patient.id);
         console.log('   Doctor ID:', doctor.id);
-        // Primero intentar buscar por fecha exacta o cercana (±30 minutos)
-        const searchStart = new Date(event.fechaHoraInicio.getTime() - 30 * 60 * 1000);
-        const searchEnd = new Date(event.fechaHoraInicio.getTime() + 30 * 60 * 1000);
-        console.log('   Buscando appointment entre:', searchStart, 'y', searchEnd);
-        let appointment = await prisma.appointment.findFirst({
-            where: {
-                doctorId: doctor.id,
-                patientId: event.patient.id,
-                date: {
-                    gte: searchStart,
-                    lte: searchEnd
-                }
-            },
-            orderBy: {
-                date: 'desc'
-            }
-        });
-        if (appointment) {
-            console.log('   ✅ Appointment encontrado por fecha exacta:', appointment.id);
-            console.log('   Appointment date:', appointment.date);
-        }
-        // Si no se encuentra por fecha cercana, buscar el appointment más reciente del paciente con este doctor
-        // Esto es útil cuando la cita fue creada recientemente y puede haber pequeñas diferencias de tiempo
+        let appointment = event.appointmentId
+            ? await prisma.appointment.findUnique({ where: { id: event.appointmentId } })
+            : null;
         if (!appointment) {
-            console.log(`⚠️ Appointment no encontrado por fecha exacta, buscando el más reciente del paciente...`);
-            const allAppointments = await prisma.appointment.findMany({
+            const searchStart = new Date(event.fechaHoraInicio.getTime() - 30 * 60 * 1000);
+            const searchEnd = new Date(event.fechaHoraInicio.getTime() + 30 * 60 * 1000);
+            appointment = await prisma.appointment.findFirst({
                 where: {
                     doctorId: doctor.id,
-                    patientId: event.patient.id
+                    patientId: event.patient.id,
+                    date: {
+                        gte: searchStart,
+                        lte: searchEnd,
+                    },
                 },
                 orderBy: {
-                    date: 'desc'
+                    date: 'desc',
                 },
-                take: 5 // Obtener los 5 más recientes para debugging
             });
-            console.log(`   Encontrados ${allAppointments.length} appointments para este paciente y doctor`);
-            allAppointments.forEach((apt, idx) => {
-                const dateDiff = Math.abs(apt.date.getTime() - event.fechaHoraInicio.getTime());
-                console.log(`   Appointment ${idx + 1}: ID=${apt.id}, date=${apt.date}, diff=${Math.round(dateDiff / (60 * 1000))} minutos`);
-            });
-            appointment = allAppointments[0] || null;
-            if (appointment) {
-                // Verificar que la fecha del appointment esté razonablemente cerca de la fecha del evento (dentro de 24 horas)
-                const dateDiff = Math.abs(appointment.date.getTime() - event.fechaHoraInicio.getTime());
-                const oneDayInMs = 24 * 60 * 60 * 1000;
-                if (dateDiff > oneDayInMs) {
-                    console.log(`⚠️ Appointment encontrado pero la fecha está muy lejos (${Math.round(dateDiff / (60 * 60 * 1000))} horas), no se usará`);
-                    appointment = null;
-                }
-                else {
-                    console.log(`✅ Appointment encontrado por búsqueda más amplia, diferencia: ${Math.round(dateDiff / (60 * 1000))} minutos`);
-                }
-            }
         }
-        // Si aún no se encuentra el appointment, crearlo ahora (puede que no se haya creado al crear el evento)
         if (!appointment) {
-            console.log(`⚠️ Appointment no encontrado, creándolo ahora para poder cancelarlo...`);
-            // Buscar DoctorPatient
-            const doctorPatient = await prisma.doctorPatient.findFirst({
-                where: {
-                    doctorId: doctor.id,
-                    patientId: event.patient.id
-                }
-            });
-            if (!doctorPatient) {
-                throw new error_utils_1.AppError('No se encontró la relación entre el doctor y el paciente', 404);
-            }
-            // Crear el appointment ahora
-            try {
-                appointment = await prisma.appointment.create({
-                    data: {
-                        doctorId: doctor.id,
-                        patientId: event.patient.id,
-                        doctorPatientId: doctorPatient.id,
-                        userId: event.patient.userId || '',
-                        date: event.fechaHoraInicio,
-                        status: 'SCHEDULED',
-                        confirmationStatus: 'PENDING',
-                        notes: `Cita creada desde evento de calendario - ${event.titulo}`
-                    }
-                });
-                console.log(`✅ Appointment creado para cancelar: ${appointment.id}`);
-            }
-            catch (createError) {
-                console.error('❌ Error al crear appointment para cancelar:', createError);
-                throw new error_utils_1.AppError('No se pudo crear la cita relacionada con este evento', 500);
-            }
+            throw new error_utils_1.AppError('No se encontró la cita asociada a este evento', 404);
         }
+        console.log(`   ✅ Appointment encontrado: ${appointment.id} (${appointment.date})`);
+        const canonicalStart = (_a = appointment.rescheduledTo) !== null && _a !== void 0 ? _a : appointment.date;
+        const durationMs = Math.max(event.fechaHoraFin.getTime() - event.fechaHoraInicio.getTime(), 30 * 60 * 1000);
+        const canonicalEnd = new Date(canonicalStart.getTime() + durationMs);
         // Actualizar el appointment a CANCELLED
         await prisma.appointment.update({
             where: { id: appointment.id },
             data: {
                 confirmationStatus: 'CANCELLED',
                 cancelledAt: new Date(),
-                status: 'CANCELLED'
-            }
+                status: 'CANCELLED',
+            },
         });
         console.log(`✅ Cita ${appointment.id} cancelada por el profesional de la salud`);
-        // CRÍTICO: Actualizar el evento en el calendario externo para notificar al paciente
+        const cleanTitle = event.titulo
+            .replace(/^❌\s*Cita cancelada:\s*/i, '')
+            .replace(/^❌ Cita rechazada:\s*/i, '')
+            .replace(/^❌ CANCELADA:\s*/i, '')
+            .replace(/^❌ CANCELADA\s*-\s*/i, '')
+            .replace(/^🏥\s*/g, '')
+            .replace(/\s+consulta$/i, '')
+            .trim();
+        const cancelledTitle = `❌ Cita cancelada: ${cleanTitle || event.titulo}`;
+        const cancelledDescription = (0, appointmentConfirmation_utils_1.stripManageLinkBlocksFromDescription)(event.descripcion);
+        await prisma.internalCalendarEvent.update({
+            where: { id: event.id },
+            data: {
+                appointmentId: appointment.id,
+                fechaHoraInicio: canonicalStart,
+                fechaHoraFin: canonicalEnd,
+                titulo: cancelledTitle,
+                descripcion: cancelledDescription || null,
+                linkMeeting: null,
+            },
+        });
+        // Una sola notificación al calendario externo (sin bucles posteriores)
         if (event.externalEventId && event.externalProvider) {
             try {
-                console.log(`📅 Actualizando evento en calendario externo (${event.externalProvider})...`);
-                // Obtener el email del paciente
                 let patientEmail = event.patient.email;
                 if (!patientEmail && event.patient.userId) {
                     const patientUser = await prisma.user.findUnique({
                         where: { id: event.patient.userId },
-                        select: { email: true }
+                        select: { email: true },
                     });
                     patientEmail = (patientUser === null || patientUser === void 0 ? void 0 : patientUser.email) || null;
                 }
                 if (patientEmail) {
-                    // Limpiar el título de cualquier prefijo anterior y crear uno claro de cancelación
-                    const cleanTitle = event.titulo
-                        .replace(/^❌ Cita rechazada:\s*/i, '')
-                        .replace(/^❌ CANCELADA:\s*/i, '')
-                        .replace(/^🏥\s*/g, '')
-                        .replace(/\s+consulta$/i, '')
-                        .trim();
-                    // Título muy visible para el calendario del paciente
-                    const cancelledTitle = `❌ CANCELADA - ${cleanTitle}`;
-                    // Descripción clara y completa
-                    const cancellationNotice = '\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n⚠️ ESTA CITA HA SIDO CANCELADA\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nEsta cita médica ha sido cancelada por el profesional de la salud.\n\nPor favor, contacta al consultorio si deseas reagendar tu cita.\n\nSaludos,\nEquipo Qlinexa360';
-                    const cancelledDescription = event.descripcion
-                        ? `${event.descripcion}${cancellationNotice}`
+                    const cancellationNotice = '\n\nEsta cita médica ha sido cancelada por el profesional de la salud.';
+                    const externalDescription = cancelledDescription
+                        ? `${cancelledDescription}${cancellationNotice}`
                         : `Cita médica cancelada.${cancellationNotice}`;
-                    console.log(`📧 Actualizando evento en calendario externo (${event.externalProvider}) para paciente: ${patientEmail}`);
-                    console.log(`   Título: ${cancelledTitle}`);
+                    console.log(`📅 Actualizando evento cancelado en ${event.externalProvider} (una sola notificación)`);
                     if (event.externalProvider === 'google') {
-                        const { GoogleCalendarSyncService } = await Promise.resolve().then(() => __importStar(require('../services/googleCalendarSync.service')));
-                        await GoogleCalendarSyncService.upsertEvent(doctor.id, {
+                        await googleCalendarSync_service_1.GoogleCalendarSyncService.upsertEvent(doctor.id, {
                             id: event.id,
                             title: cancelledTitle,
-                            description: cancelledDescription,
-                            start: event.fechaHoraInicio,
-                            end: event.fechaHoraFin,
-                            attendees: [patientEmail], // CRÍTICO: Incluir el paciente para que reciba la actualización
+                            description: externalDescription,
+                            start: canonicalStart,
+                            end: canonicalEnd,
+                            attendees: [patientEmail],
                             externalEventId: event.externalEventId,
-                            location: (_a = event.linkMeeting) !== null && _a !== void 0 ? _a : undefined
+                            disableConference: true,
+                            sendUpdates: 'all',
                         });
-                        console.log(`✅ Evento actualizado en Google Calendar como cancelado - el paciente recibirá la actualización automáticamente`);
                     }
                     else if (event.externalProvider === 'outlook') {
-                        const { OutlookCalendarSyncService } = await Promise.resolve().then(() => __importStar(require('../services/outlookCalendarSync.service')));
-                        await OutlookCalendarSyncService.upsertEvent(doctor.id, {
+                        await outlookCalendarSync_service_1.OutlookCalendarSyncService.upsertEvent(doctor.id, {
                             id: event.id,
                             title: cancelledTitle,
-                            description: cancelledDescription,
-                            start: event.fechaHoraInicio,
-                            end: event.fechaHoraFin,
-                            attendees: [patientEmail], // CRÍTICO: Incluir el paciente para que reciba la actualización
+                            description: externalDescription,
+                            start: canonicalStart,
+                            end: canonicalEnd,
+                            attendees: [patientEmail],
                             externalEventId: event.externalEventId,
-                            location: (_b = event.linkMeeting) !== null && _b !== void 0 ? _b : undefined
+                            disableConference: true,
                         });
-                        console.log(`✅ Evento actualizado en Outlook Calendar como cancelado - el paciente recibirá la actualización automáticamente`);
                     }
                     else if (event.externalProvider === 'apple') {
-                        const { AppleCalendarSyncService } = await Promise.resolve().then(() => __importStar(require('../services/appleCalendarSync.service')));
-                        await AppleCalendarSyncService.upsertEvent(doctor.id, {
+                        await appleCalendarSync_service_1.AppleCalendarSyncService.upsertEvent(doctor.id, {
                             id: event.id,
                             title: cancelledTitle,
-                            description: cancelledDescription,
-                            start: event.fechaHoraInicio,
-                            end: event.fechaHoraFin,
-                            attendees: [patientEmail], // CRÍTICO: Incluir el paciente para que reciba la actualización
-                            externalEventId: event.externalEventId
+                            description: externalDescription,
+                            start: canonicalStart,
+                            end: canonicalEnd,
+                            attendees: [patientEmail],
+                            externalEventId: event.externalEventId,
                         });
-                        console.log(`✅ Evento actualizado en Apple Calendar como cancelado - el paciente recibirá la actualización automáticamente`);
                     }
                 }
                 else {
@@ -2159,7 +2531,6 @@ const cancelAppointment = async (req, res) => {
             }
             catch (syncError) {
                 console.error('❌ Error al actualizar evento en calendario externo:', syncError);
-                // No fallar la cancelación si falla la sincronización
             }
         }
         // Enviar notificación al paciente
@@ -2192,11 +2563,11 @@ const cancelAppointment = async (req, res) => {
                 }
             });
             if (patientData && doctorData) {
-                const patientEmail = patientData.email || ((_c = patientData.user) === null || _c === void 0 ? void 0 : _c.email);
-                const patientPhone = (_d = patientData.user) === null || _d === void 0 ? void 0 : _d.phone;
+                const patientEmail = patientData.email || ((_b = patientData.user) === null || _b === void 0 ? void 0 : _b.email);
+                const patientPhone = (_c = patientData.user) === null || _c === void 0 ? void 0 : _c.phone;
                 const patientName = `${patientData.firstName} ${patientData.lastName}`.trim();
                 const doctorName = `${doctorData.user.firstName} ${doctorData.user.lastName}`.trim();
-                const appointmentDate = event.fechaHoraInicio;
+                const appointmentDate = canonicalStart;
                 const appointmentTime = `${appointmentDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
                 // Enviar email de cancelación
                 if (patientEmail) {
@@ -2289,10 +2660,171 @@ const getCalendarEvent = async (req, res) => {
     }
 };
 exports.getCalendarEvent = getCalendarEvent;
+// Reenviar invitación de calendario externo al paciente (sin email adicional de Qlinexa)
+const resendCalendarInvite = async (req, res) => {
+    var _a, _b, _c, _d, _e, _f;
+    try {
+        const doctorId = await resolveDoctorId(req);
+        const doctor = await prisma.doctor.findUnique({ where: { id: doctorId } });
+        if (!doctor)
+            throw new error_utils_1.AppError('Perfil de doctor no encontrado.', 404);
+        const { eventId } = req.params;
+        const event = await prisma.internalCalendarEvent.findFirst({
+            where: { id: eventId, doctorId: doctor.id },
+            select: {
+                id: true,
+                titulo: true,
+                descripcion: true,
+                fechaHoraInicio: true,
+                fechaHoraFin: true,
+                linkMeeting: true,
+                externalProvider: true,
+                externalEventId: true,
+                origenEvento: true,
+                appointmentId: true,
+                patientId: true,
+                patient: {
+                    select: {
+                        id: true,
+                        userId: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                    },
+                },
+            },
+        });
+        if (!event)
+            throw new error_utils_1.AppError('Evento no encontrado', 404);
+        if (!event.patient)
+            throw new error_utils_1.AppError('Este evento no está asociado a un paciente', 400);
+        let patientEmail = event.patient.email;
+        if (!patientEmail && event.patient.userId) {
+            const patientUser = await prisma.user.findUnique({
+                where: { id: event.patient.userId },
+                select: { email: true },
+            });
+            patientEmail = (patientUser === null || patientUser === void 0 ? void 0 : patientUser.email) || null;
+        }
+        if (!patientEmail)
+            throw new error_utils_1.AppError('El paciente no tiene email registrado', 400);
+        console.log('📧 resendCalendarInvite:', {
+            eventId: event.id,
+            appointmentId: event.appointmentId,
+            patientEmail,
+            externalProvider: event.externalProvider,
+            externalEventId: event.externalEventId,
+        });
+        if (event.appointmentId) {
+            await appointmentConfirmation_controller_1.AppointmentConfirmationController.syncAppointmentCalendars(event.appointmentId, {
+                notifyAttendees: true,
+            });
+            return res.json({
+                success: true,
+                message: 'Invitación de calendario reenviada al paciente',
+                calendarSync: true,
+            });
+        }
+        const hasGoogleCalendar = await prisma.calendarSyncConfig.findFirst({
+            where: { doctorId: doctor.id, provider: 'google', isConnected: true, accessToken: { not: null } },
+        });
+        const hasOutlookCalendar = await prisma.calendarSyncConfig.findFirst({
+            where: { doctorId: doctor.id, provider: 'outlook', isConnected: true, accessToken: { not: null } },
+        });
+        const shouldSyncWithGoogle = event.externalProvider === 'google' ||
+            event.origenEvento === 'google' ||
+            (!event.externalProvider && !!hasGoogleCalendar);
+        const shouldSyncWithOutlook = event.externalProvider === 'outlook' ||
+            event.origenEvento === 'outlook' ||
+            (!event.externalProvider && !hasGoogleCalendar && !!hasOutlookCalendar);
+        const attendees = [patientEmail];
+        const cleanTitle = event.titulo.replace(/^❌ Cita rechazada:\s*/i, '').trim();
+        const syncDescription = await buildDescriptionWithManageLink({
+            doctorId: doctor.id,
+            patientId: event.patient.id,
+            fechaHoraInicio: event.fechaHoraInicio,
+            descripcion: event.descripcion,
+        });
+        const hasMeetLink = !!event.linkMeeting && event.linkMeeting.includes('meet.google.com');
+        const hasTeamsLink = !!event.linkMeeting && event.linkMeeting.includes('teams.microsoft.com');
+        let synced = false;
+        if (shouldSyncWithGoogle && hasGoogleCalendar) {
+            const syncResult = await googleCalendarSync_service_1.GoogleCalendarSyncService.upsertEvent(doctor.id, {
+                id: event.id,
+                title: cleanTitle,
+                description: syncDescription,
+                start: event.fechaHoraInicio,
+                end: event.fechaHoraFin,
+                attendees,
+                externalEventId: (_a = event.externalEventId) !== null && _a !== void 0 ? _a : undefined,
+                location: (_b = event.linkMeeting) !== null && _b !== void 0 ? _b : undefined,
+                conferenceType: hasMeetLink ? 'google-meet' : null,
+                conferenceLink: (_c = event.linkMeeting) !== null && _c !== void 0 ? _c : undefined,
+                googleMeetEnabled: hasMeetLink,
+                disableConference: !hasMeetLink,
+                sendUpdates: (0, calendarSync_utils_1.resolveGoogleCalendarSendUpdates)({
+                    externalEventId: event.externalEventId,
+                    attendeeCount: attendees.length,
+                    notifyAttendees: true,
+                }),
+            });
+            if (syncResult) {
+                synced = true;
+                await prisma.internalCalendarEvent.update({
+                    where: { id: event.id },
+                    data: {
+                        externalProvider: 'google',
+                        externalEventId: syncResult.externalEventId,
+                        externalUpdatedAt: syncResult.externalUpdatedAt,
+                    },
+                });
+            }
+        }
+        else if (shouldSyncWithOutlook && hasOutlookCalendar) {
+            const syncResult = await outlookCalendarSync_service_1.OutlookCalendarSyncService.upsertEvent(doctor.id, {
+                id: event.id,
+                title: cleanTitle,
+                description: syncDescription,
+                start: event.fechaHoraInicio,
+                end: event.fechaHoraFin,
+                attendees,
+                externalEventId: (_d = event.externalEventId) !== null && _d !== void 0 ? _d : undefined,
+                location: (_e = event.linkMeeting) !== null && _e !== void 0 ? _e : undefined,
+                teamsEnabled: hasTeamsLink,
+                disableConference: !hasTeamsLink,
+                conferenceLink: (_f = event.linkMeeting) !== null && _f !== void 0 ? _f : undefined,
+            });
+            if (syncResult) {
+                synced = true;
+                await prisma.internalCalendarEvent.update({
+                    where: { id: event.id },
+                    data: {
+                        externalProvider: 'outlook',
+                        externalEventId: syncResult.externalEventId,
+                        externalUpdatedAt: syncResult.externalUpdatedAt,
+                    },
+                });
+            }
+        }
+        if (!synced) {
+            throw new error_utils_1.AppError('No se pudo sincronizar con un calendario externo. Verifica que Google Calendar esté enlazado en Configuración → Calendario.', 400);
+        }
+        res.json({
+            success: true,
+            message: 'Invitación de calendario reenviada al paciente',
+            calendarSync: true,
+        });
+    }
+    catch (error) {
+        const handled = error instanceof error_utils_1.AppError ? error : new error_utils_1.AppError('Error al reenviar invitación de calendario.', 500);
+        res.status(handled.statusCode).json({ message: handled.message });
+    }
+};
+exports.resendCalendarInvite = resendCalendarInvite;
 // Compartir evento del calendario por email
 // TODO: Preparado para agregar WhatsApp en el futuro - se puede agregar sendCalendarEventWhatsApp
 const shareCalendarEvent = async (req, res) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
     try {
         const doctorId = await resolveDoctorId(req);
         const doctor = await prisma.doctor.findUnique({
@@ -2505,7 +3037,12 @@ const shareCalendarEvent = async (req, res) => {
                         location: (_d = event.linkMeeting) !== null && _d !== void 0 ? _d : undefined,
                         conferenceType: ((_e = event.linkMeeting) === null || _e === void 0 ? void 0 : _e.includes('meet.google.com')) ? 'google-meet' : null,
                         conferenceLink: (_f = event.linkMeeting) !== null && _f !== void 0 ? _f : undefined,
-                        googleMeetEnabled: !!((_g = event.linkMeeting) === null || _g === void 0 ? void 0 : _g.includes('meet.google.com'))
+                        googleMeetEnabled: !!((_g = event.linkMeeting) === null || _g === void 0 ? void 0 : _g.includes('meet.google.com')),
+                        sendUpdates: (0, calendarSync_utils_1.resolveGoogleCalendarSendUpdates)({
+                            externalEventId: event.externalEventId,
+                            attendeeCount: attendees.length,
+                            notifyAttendees: true,
+                        }),
                     });
                     if (syncResult) {
                         // Actualizar el evento con el externalEventId si es nuevo
@@ -2548,6 +3085,7 @@ const shareCalendarEvent = async (req, res) => {
                         fechaHoraInicio: event.fechaHoraInicio,
                         descripcion: event.descripcion
                     });
+                    const hasTeamsLink = !!event.linkMeeting && event.linkMeeting.includes('teams.microsoft.com');
                     const syncResult = await outlookCalendarSync_service_1.OutlookCalendarSyncService.upsertEvent(doctor.id, {
                         id: event.id,
                         title: cleanTitle,
@@ -2556,7 +3094,10 @@ const shareCalendarEvent = async (req, res) => {
                         end: event.fechaHoraFin,
                         attendees,
                         externalEventId: (_k = event.externalEventId) !== null && _k !== void 0 ? _k : undefined,
-                        location: (_l = event.linkMeeting) !== null && _l !== void 0 ? _l : undefined
+                        location: (_l = event.linkMeeting) !== null && _l !== void 0 ? _l : undefined,
+                        teamsEnabled: hasTeamsLink,
+                        conferenceLink: (_m = event.linkMeeting) !== null && _m !== void 0 ? _m : undefined,
+                        disableConference: !hasTeamsLink
                     });
                     if (syncResult) {
                         if (!event.externalEventId && syncResult.externalEventId) {
@@ -2597,7 +3138,7 @@ const shareCalendarEvent = async (req, res) => {
                     const cleanTitle = event.titulo.replace(/^❌ Cita rechazada:\s*/i, '').trim();
                     const syncDescription = await buildDescriptionWithManageLink({
                         doctorId: doctor.id,
-                        patientId: (_o = (_m = event.patient) === null || _m === void 0 ? void 0 : _m.id) !== null && _o !== void 0 ? _o : null,
+                        patientId: (_p = (_o = event.patient) === null || _o === void 0 ? void 0 : _o.id) !== null && _p !== void 0 ? _p : null,
                         fechaHoraInicio: event.fechaHoraInicio,
                         descripcion: event.descripcion
                     });
@@ -2608,7 +3149,7 @@ const shareCalendarEvent = async (req, res) => {
                         start: event.fechaHoraInicio,
                         end: event.fechaHoraFin,
                         attendees,
-                        externalEventId: (_p = event.externalEventId) !== null && _p !== void 0 ? _p : undefined
+                        externalEventId: (_q = event.externalEventId) !== null && _q !== void 0 ? _q : undefined
                     });
                     if (syncResult) {
                         if (!event.externalEventId && syncResult.externalEventId) {
@@ -2651,9 +3192,8 @@ const shareCalendarEvent = async (req, res) => {
         // if (event.patient.phone) {
         //   await whatsappService.sendCalendarEventWhatsApp(...);
         // }
-        let manageLink = undefined;
-        const resolvedDoctorId = event.doctorId || ((_q = event.doctor) === null || _q === void 0 ? void 0 : _q.id);
-        const resolvedPatientId = event.patientId || ((_r = event.patient) === null || _r === void 0 ? void 0 : _r.id) || undefined;
+        const resolvedDoctorId = event.doctorId || ((_r = event.doctor) === null || _r === void 0 ? void 0 : _r.id);
+        const resolvedPatientId = event.patientId || ((_s = event.patient) === null || _s === void 0 ? void 0 : _s.id) || undefined;
         const appointmentCandidate = await prisma.appointment.findFirst({
             where: {
                 doctorId: resolvedDoctorId,
@@ -2665,21 +3205,30 @@ const shareCalendarEvent = async (req, res) => {
             },
             select: { id: true }
         });
-        if (appointmentCandidate === null || appointmentCandidate === void 0 ? void 0 : appointmentCandidate.id) {
-            manageLink = await getOrCreateManageLink(appointmentCandidate.id);
-        }
-        const emailSent = await emailService.sendCalendarEventEmail(patientEmail, {
-            patientName,
-            doctorName,
-            eventTitle: event.titulo,
-            eventDate: event.fechaHoraInicio,
-            eventEndDate: event.fechaHoraFin,
-            description: event.descripcion || undefined,
-            linkMeeting: event.linkMeeting || undefined,
-            tipoCita: event.linkMeeting ? 'remota' : 'presencial',
-            preConsultationLink,
-            manageLink
-        });
+        const emailPayload = (appointmentCandidate === null || appointmentCandidate === void 0 ? void 0 : appointmentCandidate.id)
+            ? await (0, appointmentConfirmation_utils_1.buildAppointmentCalendarEmailPayload)({
+                doctorId: doctor.id,
+                appointmentId: appointmentCandidate.id,
+                doctorTimezone: doctor.timezone,
+                eventTitle: event.titulo,
+                eventDate: event.fechaHoraInicio,
+                eventEndDate: event.fechaHoraFin,
+                description: event.descripcion,
+                linkMeeting: event.linkMeeting,
+                eventId: event.id,
+                preConsultationLink,
+            })
+            : {
+                eventTitle: event.titulo,
+                eventDate: event.fechaHoraInicio,
+                eventEndDate: event.fechaHoraFin,
+                description: event.descripcion || undefined,
+                linkMeeting: event.linkMeeting || undefined,
+                tipoCita: (event.linkMeeting ? 'remota' : 'presencial'),
+                preConsultationLink,
+            };
+        const emailSent = await emailService.sendCalendarEventEmail(patientEmail, Object.assign(Object.assign({ patientName,
+            doctorName }, emailPayload), { appointmentId: appointmentCandidate === null || appointmentCandidate === void 0 ? void 0 : appointmentCandidate.id, calendarInviteExpected: true }));
         if (!emailSent) {
             throw new error_utils_1.AppError('Error al enviar el email', 500);
         }

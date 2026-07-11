@@ -1,10 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { InformationCircleIcon, PlusIcon, MagnifyingGlassIcon, ChevronDownIcon, ChevronRightIcon, DocumentArrowDownIcon, TrashIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
+
+// Etiquetas de régimen fiscal SAT (México) - catálogo en sat.gob.mx
+const TAX_REGIME_LABELS = {
+  '601': 'General de Ley Personas Morales',
+  '603': 'Personas Morales con Fines no Lucrativos',
+  '605': 'Sueldos y Salarios e Ingresos Asimilados',
+  '606': 'Arrendamiento',
+  '607': 'Enajenación o Adquisición de Bienes',
+  '608': 'Demás ingresos',
+  '610': 'Residentes en el Extranjero sin Establecimiento Permanente',
+  '611': 'Ingresos por Dividendos',
+  '612': 'Actividades Empresariales y Profesionales',
+  '614': 'Ingresos por intereses',
+  '615': 'Ingresos por obtención de premios',
+  '616': 'Sin obligaciones fiscales',
+  '620': 'Sociedades Cooperativas de Producción',
+  '621': 'Incorporación Fiscal',
+  '622': 'Actividades Agrícolas, Ganaderas, Silvícolas y Pesqueras',
+  '623': 'Opcional para Grupos de Sociedades',
+  '624': 'Coordinados',
+  '625': 'Actividades Empresariales con Plataformas Tecnológicas',
+  '626': 'Régimen Simplificado de Confianza (RESICO)'
+};
 import AddInvoiceModal from '../components/billing/AddInvoiceModal';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { useAuth } from '../context/AuthContext';
-import { getApiUrl } from '../utils/api';
+import { getApiUrl, getApiHeaders } from '../utils/api';
 
 const Billing = () => {
   const { user } = useAuth();
@@ -119,7 +142,12 @@ const Billing = () => {
     }
   }, [isPatient]);
 
-  const filteredPatients = patients.filter(p =>
+  // Unificar por paciente: my-patients devuelve una fila por caso clínico; en facturación mostramos 1 por paciente
+  const uniquePatients = patients.reduce((acc, p) => {
+    if (!acc.some(x => x.id === p.id)) acc.push(p);
+    return acc;
+  }, []);
+  const filteredPatients = uniquePatients.filter(p =>
     (`${p.firstName} ${p.lastName} ${p.rfc || ''} ${p.email || ''}`).toLowerCase().includes(search.toLowerCase())
   );
 
@@ -180,17 +208,21 @@ const Billing = () => {
     }
   };
 
-  const handleDownload = (url) => {
-    if (!url) return;
-    // Usar URL absoluta del API: en producción /uploads/ está en api.qlinexa360.com,
-    // no en www. Si se abre la URL relativa, el frontend recibe la petición, devuelve
-    // el SPA y redirige a /login -> /dashboard/patients (bug: paciente ve "Mis pacientes").
-    const fullUrl = url.startsWith('http') ? url : getApiUrl(url) || url;
+  const handleDownloadInvoiceFile = async (invoiceId, type) => {
     try {
-      window.open(fullUrl, '_blank', 'noopener,noreferrer');
+      const res = await axios.get(getApiUrl(`/api/doctors/invoices/${invoiceId}/file/${type}`), {
+        headers: getApiHeaders(),
+        responseType: 'blob',
+      });
+      const contentType =
+        res.headers['content-type'] || (type === 'pdf' ? 'application/pdf' : 'application/xml');
+      const blob = new Blob([res.data], { type: contentType });
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     } catch (error) {
-      console.error('Error al abrir archivo:', error);
-      toast.error('Error al abrir el archivo');
+      console.error('Error al abrir factura:', error);
+      toast.error(error.response?.data?.message || 'No se pudo abrir el archivo');
     }
   };
 
@@ -300,7 +332,7 @@ const Billing = () => {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleDownload(inv.pdfUrl);
+                                handleDownloadInvoiceFile(inv.id, 'pdf');
                               }}
                             >
                               <DocumentArrowDownIcon className="h-4 w-4 mr-1" /> PDF
@@ -312,7 +344,7 @@ const Billing = () => {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleDownload(inv.xmlUrl);
+                                handleDownloadInvoiceFile(inv.id, 'xml');
                               }}
                             >
                               <DocumentArrowDownIcon className="h-4 w-4 mr-1" /> XML
@@ -350,6 +382,19 @@ const Billing = () => {
                 </div>
                 {expandedPatientId === patient.id && (
                   <div className="bg-gray-50 px-8 py-4">
+                    {/* Datos fiscales del paciente */}
+                    {(patient.taxName || patient.taxId || patient.taxAddress || patient.taxPostalCode || patient.taxRegime) && (
+                      <div className="mb-4 p-4 bg-white rounded-lg border border-gray-200">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Datos fiscales</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-600">
+                          {patient.taxName && <div><span className="font-medium">Razón social:</span> {patient.taxName}</div>}
+                          {patient.taxId && <div><span className="font-medium">RFC:</span> {patient.taxId}</div>}
+                          {patient.taxAddress && <div className="sm:col-span-2"><span className="font-medium">Dirección:</span> {patient.taxAddress}</div>}
+                          {patient.taxPostalCode && <div><span className="font-medium">C.P. fiscal:</span> {patient.taxPostalCode}</div>}
+                          {patient.taxRegime && <div><span className="font-medium">Régimen fiscal:</span> {TAX_REGIME_LABELS[patient.taxRegime] ? `${patient.taxRegime} - ${TAX_REGIME_LABELS[patient.taxRegime]}` : patient.taxRegime}</div>}
+                        </div>
+                      </div>
+                    )}
                     {loadingInvoices ? (
                       <div className="text-gray-500 text-sm">Cargando facturas...</div>
                     ) : (invoicesByPatient[patient.id]?.length > 0 ? (
@@ -373,7 +418,7 @@ const Billing = () => {
                                     e.preventDefault();
                                     e.stopPropagation();
                                     console.log('PDF URL:', inv.pdfUrl);
-                                    handleDownload(inv.pdfUrl);
+                                    handleDownloadInvoiceFile(inv.id, 'pdf');
                                   }}
                                 >
                                   <DocumentArrowDownIcon className="h-4 w-4 mr-1" /> PDF
@@ -386,7 +431,7 @@ const Billing = () => {
                                     e.preventDefault();
                                     e.stopPropagation();
                                     console.log('XML URL:', inv.xmlUrl);
-                                    handleDownload(inv.xmlUrl);
+                                    handleDownloadInvoiceFile(inv.id, 'xml');
                                   }}
                                 >
                                   <DocumentArrowDownIcon className="h-4 w-4 mr-1" /> XML

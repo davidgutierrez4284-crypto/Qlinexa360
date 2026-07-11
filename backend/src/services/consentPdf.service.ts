@@ -2,27 +2,21 @@ import puppeteer from 'puppeteer';
 import Handlebars from 'handlebars';
 import fs from 'fs';
 import path from 'path';
+import { PRIVACY_POLICY_PDF_HTML } from '../legal/privacyPolicyPdfHtml';
+import { REFERRAL_PROGRAM_TERMS_PDF_HTML } from '../legal/referralProgramTermsPdfHtml';
+import {
+  MERCADOPAGO_CONTRACT_PDF_HTML,
+  MERCADOPAGO_TERMS_PDF_HTML,
+} from '../legal/mercadoPagoTermsPdfHtml';
 import { uploadBufferToS3 } from '../utils/file.utils';
 
 const BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME || process.env.AWS_BUCKET_NAME || '';
 
-// Contenido de documentos (mismo que RegisterDoctor - documentos iguales para todos)
-const CONSENT_CONTENT = {
+// Contenido de documentos (alineado con la web pública y formularios de registro)
+export const CONSENT_CONTENT = {
   PRIVACY_POLICY: {
     title: 'Aviso de Privacidad',
-    content: `
-      <p><b>AVISO DE PRIVACIDAD INTEGRAL - Qlinexa360</b></p>
-      <p><b>1. Responsable del Tratamiento:</b> Qlinexa360, plataforma digital de gestión médica, es responsable del tratamiento de sus datos personales.</p>
-      <p><b>2. Finalidades del Tratamiento:</b> Sus datos personales serán utilizados para: (a) Gestionar su registro en la plataforma; (b) Facilitar la comunicación entre profesionales de la salud y pacientes; (c) Mantener su historial clínico digital; (d) Enviar notificaciones relacionadas con su atención médica; (e) Cumplir con obligaciones legales y regulatorias.</p>
-      <p><b>3. Datos Personales Recopilados:</b> Recopilamos: (a) Datos de identificación (nombre, email, teléfono); (b) Datos médicos (historial clínico, diagnósticos, tratamientos); (c) Datos de contacto de emergencia; (d) Datos fiscales (cuando aplique); (e) Datos de seguro médico (cuando aplique).</p>
-      <p><b>4. Transferencias:</b> Sus datos pueden ser transferidos a: (a) Profesionales de la salud autorizados; (b) Autoridades sanitarias cuando sea requerido por ley; (c) Proveedores de servicios tecnológicos que nos apoyan en la operación de la plataforma.</p>
-      <p><b>5. Medidas de Seguridad:</b> Implementamos medidas técnicas, administrativas y físicas para proteger sus datos personales, incluyendo encriptación de datos, acceso restringido y auditorías regulares de seguridad.</p>
-      <p><b>6. Derechos ARCO:</b> Usted tiene derecho a: (a) Acceder a sus datos personales; (b) Rectificar sus datos cuando sean inexactos; (c) Cancelar el uso de sus datos; (d) Oponerse al tratamiento de sus datos para fines específicos.</p>
-      <p><b>7. Revocación del Consentimiento:</b> Puede revocar su consentimiento en cualquier momento, sin embargo, esto puede limitar la funcionalidad de la plataforma.</p>
-      <p><b>8. Conservación de Datos:</b> Sus datos se conservarán conforme a la normativa sanitaria mexicana (NOM-004-SSA3-2012) por un mínimo de 5 años desde el último acto médico.</p>
-      <p><b>9. Cambios al Aviso:</b> Nos reservamos el derecho de modificar este aviso. Los cambios serán notificados a través de la plataforma.</p>
-      <p><b>10. Contacto:</b> Para ejercer sus derechos ARCO o realizar consultas sobre este aviso, puede contactarnos a través de la plataforma o al correo electrónico de soporte.</p>
-    `
+    content: PRIVACY_POLICY_PDF_HTML
   },
   TERMS_OF_SERVICE: {
     title: 'Términos de Uso',
@@ -35,9 +29,13 @@ const CONSENT_CONTENT = {
       <p><b>6. Propiedad intelectual:</b> Todos los contenidos, diseños y elementos visuales son propiedad exclusiva de Qlinexa360 y no podrán ser reproducidos sin autorización.</p>
       <p><b>7. Suspensión y cancelación:</b> La plataforma podrá suspender el acceso a usuarios que no cumplan los presentes términos o usen la plataforma de forma inapropiada.</p>
       <p><b>8. Limitación de responsabilidad:</b> Qlinexa360 no se hace responsable de diagnósticos clínicos ni consecuencias médicas derivadas del uso de la información registrada por los usuarios.</p>
-      <p><b>9. Modificaciones:</b> Los términos podrán modificarse y se notificarán a los usuarios registrados. El uso continuo implicará su aceptación.</p>
-      <p><b>10. Legislación aplicable:</b> Este documento se rige conforme a las leyes mexicanas, incluyendo la LFPDPPP y la NOM-004-SSA3-2012.</p>
-      <p><b>Cláusula de Comunicación:</b> El usuario acepta recibir comunicación a través de correo electrónico, WhatsApp y a través de la misma plataforma Qlinexa360 en la sesión de usuario registrado; acepta que esta comunicación es profesional y enfocada a fomentar una buena atención Clínica y responsable entre Profesionales de la Salud, Pacientes y Asistentes de Profesionales de la Salud.</p>
+      ${REFERRAL_PROGRAM_TERMS_PDF_HTML}
+      ${MERCADOPAGO_TERMS_PDF_HTML}
+      <p><b>Naturaleza de la plataforma:</b> Qlinexa360 no presta servicios médicos, no realiza diagnósticos ni prescribe tratamientos. La plataforma actúa únicamente como intermediario tecnológico para la gestión de información clínica. Qlinexa360 es una plataforma tecnológica de gestión clínica. Las recetas, consultas, citas y seguimiento son emitidas exclusivamente por el profesional de la salud que la suscribe, quien es el único responsable del diagnóstico, tratamiento y prescripción.</p>
+      <p>Qlinexa360 es una plataforma tecnológica de apoyo a la gestión clínica. No actúa como establecimiento médico, no sustituye el juicio profesional y no se ostenta como sistema certificado o autorizado por autoridad sanitaria salvo que expresamente se indique con el documento oficial correspondiente.</p>
+      <p><b>11. Modificaciones:</b> Los términos podrán modificarse y se notificarán a los usuarios registrados. El uso continuo implicará su aceptación.</p>
+      <p><b>12. Legislación aplicable:</b> Este documento se rige conforme a las leyes mexicanas, incluyendo la LFPDPPP y la NOM-004-SSA3-2012.</p>
+      <p><b>Cláusula de Comunicación:</b> El usuario acepta recibir comunicación a través de correo electrónico, WhatsApp y a través de la misma plataforma Qlinexa360 en la sesión de usuario registrado; acepta que esta comunicación es profesional y enfocada a fomentar una buena atención Clínica y responsable entre Profesionales de la Salud, Pacientes y Asistentes de Profesionales de la Salud. Contactos: legal@qlinexa360.com , admin@qlinexa360.com</p>
     `
   },
   PLATFORM_CONTRACT: {
@@ -51,9 +49,12 @@ const CONSENT_CONTENT = {
       <p><b>5. Consentimiento informado:</b> El paciente deberá aceptar el presente contrato y firmar de forma digital, registrando nombre completo, fecha y hora (timestamp). Este consentimiento forma parte del proceso de registro.</p>
       <p><b>6. Responsabilidad del paciente:</b> El paciente es responsable de proporcionar información médica veraz, mantener la confidencialidad de su acceso y usar la plataforma de manera ética y conforme a la ley.</p>
       <p><b>7. Comunicación médica:</b> La plataforma facilita la comunicación entre pacientes y profesionales de la salud, pero no sustituye la consulta médica presencial cuando sea necesaria.</p>
-      <p><b>8. Modificaciones:</b> Este contrato podrá modificarse y se notificarán los cambios a los usuarios registrados. El uso continuo implicará su aceptación.</p>
-      <p><b>9. Legislación aplicable:</b> Este contrato se rige conforme a las leyes mexicanas aplicables.</p>
-      <p><b>Cláusula de Comunicación:</b> El usuario acepta recibir comunicación a través de correo electrónico, WhatsApp y a través de la misma plataforma Qlinexa360 en la sesión de usuario registrado; acepta que esta comunicación es profesional y enfocada a fomentar una buena atención Clínica y responsable entre Profesionales de la Salud, Pacientes y Asistentes de Profesionales de la Salud.</p>
+      <p><b>Naturaleza de la plataforma:</b> Qlinexa360 no presta servicios médicos, no realiza diagnósticos ni prescribe tratamientos. La plataforma actúa únicamente como intermediario tecnológico para la gestión de información clínica. Qlinexa360 es una plataforma tecnológica de gestión clínica. Las recetas, consultas, citas y seguimiento son emitidas exclusivamente por el profesional de la salud que la suscribe, quien es el único responsable del diagnóstico, tratamiento y prescripción.</p>
+      <p>Qlinexa360 es una plataforma tecnológica de apoyo a la gestión clínica. No actúa como establecimiento médico, no sustituye el juicio profesional y no se ostenta como sistema certificado o autorizado por autoridad sanitaria salvo que expresamente se indique con el documento oficial correspondiente.</p>
+      ${MERCADOPAGO_CONTRACT_PDF_HTML}
+      <p><b>9. Modificaciones:</b> Este contrato podrá modificarse y se notificarán los cambios a los usuarios registrados. El uso continuo implicará su aceptación.</p>
+      <p><b>10. Legislación aplicable:</b> Este contrato se rige conforme a las leyes mexicanas aplicables.</p>
+      <p><b>Cláusula de Comunicación:</b> El usuario acepta recibir comunicación a través de correo electrónico, WhatsApp y a través de la misma plataforma Qlinexa360 en la sesión de usuario registrado; acepta que esta comunicación es profesional y enfocada a fomentar una buena atención Clínica y responsable entre Profesionales de la Salud, Pacientes y Asistentes de Profesionales de la Salud. Contactos: legal@qlinexa360.com , admin@qlinexa360.com</p>
     `
   }
 };
@@ -62,7 +63,11 @@ export interface ConsentPdfParams {
   userId: string;
   email: string;
   fullName: string;
+  phone?: string;
   signature: string;
+  role: string;
+  ipAddress: string;
+  signedAt?: Date;
 }
 
 export interface ConsentPdfResult {
@@ -75,11 +80,13 @@ export class ConsentPdfService {
    * Genera los 3 PDFs de consentimiento y retorna URLs y buffers (para adjuntar en emails)
    */
   static async generateConsentPdfs(params: ConsentPdfParams): Promise<Record<string, ConsentPdfResult>> {
-    const { userId, email, fullName, signature } = params;
-    const timestamp = new Date().toLocaleString('es-MX', {
+    const { userId, email, fullName, phone, signature, role, ipAddress, signedAt } = params;
+    const signedAtDate = signedAt ?? new Date();
+    const timestamp = signedAtDate.toLocaleString('es-MX', {
       dateStyle: 'long',
       timeStyle: 'medium'
     });
+    const isoTimestamp = signedAtDate.toISOString();
 
     const results: Record<string, ConsentPdfResult> = {} as Record<string, ConsentPdfResult>;
 
@@ -90,7 +97,11 @@ export class ConsentPdfService {
         signature,
         fullName,
         email,
-        timestamp
+        phone: phone?.trim() || 'No indicado',
+        role,
+        timestamp,
+        isoTimestamp,
+        ipAddress
       });
 
       const pdfBuffer = await this.generatePdf(html);
@@ -127,7 +138,11 @@ export class ConsentPdfService {
     signature: string;
     fullName: string;
     email: string;
+    phone: string;
+    role: string;
     timestamp: string;
+    isoTimestamp: string;
+    ipAddress: string;
   }): Promise<string> {
     const templatePath = path.join(__dirname, '../templates/consent-document-template.html');
     const templateContent = fs.readFileSync(templatePath, 'utf-8');

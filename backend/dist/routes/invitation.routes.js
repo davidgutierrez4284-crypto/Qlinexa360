@@ -4,10 +4,12 @@ const express_1 = require("express");
 const invitation_controller_1 = require("../controllers/invitation.controller");
 const auth_middleware_1 = require("../middlewares/auth.middleware");
 const router = (0, express_1.Router)();
-// Rutas protegidas (requieren autenticación)
-router.post('/create', auth_middleware_1.authMiddleware, invitation_controller_1.createPatientInvitation);
-router.post('/resend', auth_middleware_1.authMiddleware, invitation_controller_1.resendPatientInvitation);
-router.get('/doctor', auth_middleware_1.authMiddleware, invitation_controller_1.getDoctorInvitations);
+// Rutas protegidas (requieren autenticación). authMiddleware es una fábrica
+// (allowedRoles) => middleware; debe invocarse con los roles. El controlador
+// resuelve al doctor por req.user.userId, por lo que el rol válido es DOCTOR.
+router.post('/create', (0, auth_middleware_1.authMiddleware)(['DOCTOR']), invitation_controller_1.createPatientInvitation);
+router.post('/resend', (0, auth_middleware_1.authMiddleware)(['DOCTOR']), invitation_controller_1.resendPatientInvitation);
+router.get('/doctor', (0, auth_middleware_1.authMiddleware)(['DOCTOR']), invitation_controller_1.getDoctorInvitations);
 // Rutas públicas (no requieren autenticación)
 router.get('/validate/:token', invitation_controller_1.validateInvitationToken);
 router.post('/complete', invitation_controller_1.completePatientRegistration);

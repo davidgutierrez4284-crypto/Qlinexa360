@@ -5,6 +5,11 @@ import { randomUUID } from 'node:crypto';
 import { OAuthService } from './oauth.service';
 import { notifyCalendarReconnectNeeded } from '../utils/calendarAuth.utils';
 import { getOAuthConfig } from '../config/oauth.config';
+import { formatDateTimeForExternalCalendar } from '../utils/date.utils';
+import {
+  ExternalCalendarEventComparable,
+  externalCalendarEventNeedsUpdate,
+} from '../utils/calendarSync.utils';
 
 const prisma = new PrismaClient();
 
@@ -20,13 +25,24 @@ interface GoogleEventPayload {
   conferenceType?: 'google-meet' | null;
   conferenceLink?: string | null;
   googleMeetEnabled?: boolean;
+  /** Si true, quita Google Meet de un evento externo existente (p. ej. cita presencial). */
+  disableConference?: boolean;
   attendeesResponseStatus?: 'accepted' | 'declined';
+  sendUpdates?: 'all' | 'externalOnly' | 'none';
+  timezone?: string | null;
 }
 
 interface SyncResult {
   externalEventId: string;
   externalUpdatedAt: Date;
   conferenceLink?: string | null;
+}
+
+export class GoogleCalendarNotReadyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GoogleCalendarNotReadyError';
+  }
 }
 
 export class GoogleCalendarSyncService {
@@ -70,11 +86,10 @@ export class GoogleCalendarSyncService {
     authClient: OAuth2Client,
     config: CalendarSyncConfig
   ): Promise<CalendarSyncConfig> {
-    if (
-      config.expiresAt &&
-      config.expiresAt.getTime() <= Date.now() + 60 * 1000 &&
-      config.refreshToken
-    ) {
+    const tokenExpired =
+      !!config.expiresAt && config.expiresAt.getTime() <= Date.now() + 60 * 1000;
+
+    if (tokenExpired && config.refreshToken) {
       const refreshed = await OAuthService.refreshAccessToken(
         'google',
         config.refreshToken
@@ -95,12 +110,27 @@ export class GoogleCalendarSyncService {
 
         config = updated;
       } else {
+        const reason =
+          'Conexión con Google Calendar expirada. Vuelve a enlazar tu calendario en Configuración → Calendario.';
         await notifyCalendarReconnectNeeded({
           doctorId: config.doctorId,
           provider: 'google',
-          reason: 'Conexión expirada. Vuelve a conectar Google Calendar.'
+          reason
         });
+        await prisma.calendarSyncConfig.update({
+          where: { id: config.id },
+          data: { error: reason }
+        });
+        throw new GoogleCalendarNotReadyError(reason);
       }
+    } else if (tokenExpired && !config.refreshToken) {
+      const reason =
+        'Google Calendar requiere volver a autorizarse (sin refresh token). Enlázalo de nuevo en Configuración → Calendario.';
+      await prisma.calendarSyncConfig.update({
+        where: { id: config.id },
+        data: { error: reason }
+      });
+      throw new GoogleCalendarNotReadyError(reason);
     }
 
     authClient.setCredentials({
@@ -112,7 +142,8 @@ export class GoogleCalendarSyncService {
   }
 
   private static buildEventBody(
-    payload: GoogleEventPayload
+    payload: GoogleEventPayload,
+    timezone: string
   ): calendar_v3.Schema$Event {
     // Si hay attendees (pacientes), agregar emoji de Qlinexa360 y "consulta" al título para que se destaque en el calendario del paciente
     // Primero limpiar TODOS los emojis 🏥 y la palabra "consulta" que puedan existir
@@ -127,14 +158,19 @@ export class GoogleCalendarSyncService {
       summary: titleForExternal,
       description: payload.description ?? undefined,
       start: {
-        dateTime: payload.start.toISOString(),
-        timeZone: GoogleCalendarSyncService.TIMEZONE
+        dateTime: formatDateTimeForExternalCalendar(payload.start, timezone),
+        timeZone: timezone
       },
       end: {
-        dateTime: payload.end.toISOString(),
-        timeZone: GoogleCalendarSyncService.TIMEZONE
+        dateTime: formatDateTimeForExternalCalendar(payload.end, timezone),
+        timeZone: timezone
       },
-      location: payload.location ?? undefined
+      // La liga de videollamada vive en conferenceData (Google Meet nativo), nunca en "location".
+      // Forzamos limpiar "location" para que el invitado (p. ej. en Outlook) no vea dos ligas:
+      // la de conferenceData y una vieja que hubiera quedado en location tras una reprogramación.
+      location: /meet\.google\.com|teams\.microsoft\.com|zoom\.us/i.test(payload.location ?? '')
+        ? ''
+        : (payload.location ?? '')
     };
 
     if (payload.attendees && payload.attendees.length > 0) {
@@ -145,6 +181,79 @@ export class GoogleCalendarSyncService {
     }
 
     return event;
+  }
+
+  private static eventDateTimeToMs(
+    dt: calendar_v3.Schema$EventDateTime | null | undefined
+  ): number | null {
+    if (!dt) return null;
+    if (dt.dateTime) return new Date(dt.dateTime).getTime();
+    if (dt.date) return new Date(dt.date).getTime();
+    return null;
+  }
+
+  private static eventHasVideoConference(event: calendar_v3.Schema$Event): boolean {
+    if (event.hangoutLink) return true;
+    return (
+      event.conferenceData?.entryPoints?.some(entry => entry.entryPointType === 'video') ?? false
+    );
+  }
+
+  private static extractAttendeeResponseStatus(
+    event: calendar_v3.Schema$Event,
+    attendeeEmails: string[]
+  ): 'accepted' | 'declined' | undefined {
+    if (!event.attendees?.length || !attendeeEmails.length) return undefined;
+    const targets = new Set(attendeeEmails.map(email => email.toLowerCase().trim()));
+    const match = event.attendees.find(
+      attendee =>
+        attendee.email && targets.has(attendee.email.toLowerCase().trim())
+    );
+    if (match?.responseStatus === 'accepted') return 'accepted';
+    if (match?.responseStatus === 'declined') return 'declined';
+    return undefined;
+  }
+
+  private static toComparableFromGoogleEvent(
+    event: calendar_v3.Schema$Event,
+    attendeeEmails: string[]
+  ): ExternalCalendarEventComparable {
+    return {
+      summary: event.summary,
+      description: event.description,
+      startMs: GoogleCalendarSyncService.eventDateTimeToMs(event.start),
+      endMs: GoogleCalendarSyncService.eventDateTimeToMs(event.end),
+      attendeeEmails,
+      attendeeResponseStatus: GoogleCalendarSyncService.extractAttendeeResponseStatus(
+        event,
+        attendeeEmails
+      ),
+      hasVideoConference: GoogleCalendarSyncService.eventHasVideoConference(event),
+      location: event.location,
+    };
+  }
+
+  private static toComparableFromRequestBody(
+    requestBody: calendar_v3.Schema$Event,
+    payload: GoogleEventPayload,
+    options: { shouldCreateConference: boolean; shouldStripConference: boolean }
+  ): ExternalCalendarEventComparable {
+    const hasVideoConference =
+      !options.shouldStripConference &&
+      (options.shouldCreateConference ||
+        !!payload.conferenceLink?.includes('meet.google.com') ||
+        GoogleCalendarSyncService.eventHasVideoConference(requestBody));
+
+    return {
+      summary: requestBody.summary,
+      description: requestBody.description,
+      startMs: GoogleCalendarSyncService.eventDateTimeToMs(requestBody.start),
+      endMs: GoogleCalendarSyncService.eventDateTimeToMs(requestBody.end),
+      attendeeEmails: payload.attendees ?? [],
+      attendeeResponseStatus: payload.attendeesResponseStatus,
+      hasVideoConference,
+      location: typeof requestBody.location === 'string' ? requestBody.location : null,
+    };
   }
 
   private static async executeWithRetry<T>(
@@ -205,14 +314,26 @@ export class GoogleCalendarSyncService {
   ): Promise<SyncResult | null> {
     const client = GoogleCalendarSyncService.createClient();
     if (!client) {
-      return null;
+      const msg =
+        'Google OAuth no está configurado en el servidor (faltan GOOGLE_CLIENT_ID/SECRET).';
+      await prisma.calendarSyncConfig.updateMany({
+        where: { doctorId, provider: 'google', isConnected: true },
+        data: { error: msg }
+      });
+      throw new GoogleCalendarNotReadyError(msg);
     }
 
     const { calendar, authClient } = client;
 
     const config = await GoogleCalendarSyncService.getDoctorConfig(doctorId);
     if (!config) {
-      return null;
+      const msg =
+        'Google Calendar aparece conectado pero no hay token de acceso válido. Vuelve a enlazarlo en Configuración → Calendario.';
+      await prisma.calendarSyncConfig.updateMany({
+        where: { doctorId, provider: 'google' },
+        data: { error: msg }
+      });
+      throw new GoogleCalendarNotReadyError(msg);
     }
 
     let workingConfig = await GoogleCalendarSyncService.ensureValidCredentials(
@@ -220,13 +341,24 @@ export class GoogleCalendarSyncService {
       config
     );
 
-    const requestBody = GoogleCalendarSyncService.buildEventBody(payload);
+    const doctor = await prisma.doctor.findUnique({
+      where: { id: doctorId },
+      select: { timezone: true }
+    });
+    const eventTimezone =
+      payload.timezone ||
+      doctor?.timezone ||
+      process.env.PRACTICE_TIMEZONE ||
+      GoogleCalendarSyncService.TIMEZONE;
+
+    const requestBody = GoogleCalendarSyncService.buildEventBody(payload, eventTimezone);
     const wantsConference = payload.conferenceType === 'google-meet';
     const existingConferenceLink = payload.conferenceLink ?? null;
     const hasExistingGoogleMeet =
       !!existingConferenceLink && existingConferenceLink.includes('meet.google.com');
     const shouldCreateConference =
       (wantsConference || payload.googleMeetEnabled) && !hasExistingGoogleMeet;
+    const shouldStripConference = payload.disableConference === true;
 
     if (shouldCreateConference) {
       requestBody.conferenceData = {
@@ -240,12 +372,20 @@ export class GoogleCalendarSyncService {
     }
 
     try {
+      const hasAttendees = (payload.attendees?.length ?? 0) > 0;
+      const resolvedSendUpdatesOnInsert = payload.sendUpdates ?? (hasAttendees ? 'all' : 'none');
+      const resolvedSendUpdatesOnUpdate = payload.sendUpdates ?? 'none';
+
       console.log('🔧 GoogleCalendarSyncService.upsertEvent:');
       console.log('   Event ID:', payload.id);
       console.log('   External Event ID:', payload.externalEventId || 'NUEVO');
       console.log('   Attendees:', payload.attendees?.join(', ') || 'NINGUNO');
       console.log('   Request Body attendees:', requestBody.attendees?.map(a => a.email).join(', ') || 'NINGUNO');
-      
+      console.log(
+        '   sendUpdates (update/create):',
+        payload.externalEventId ? resolvedSendUpdatesOnUpdate : resolvedSendUpdatesOnInsert
+      );
+
       const { result } = await GoogleCalendarSyncService.executeWithRetry(
         calendar,
         authClient,
@@ -254,21 +394,92 @@ export class GoogleCalendarSyncService {
           if (payload.externalEventId) {
             try {
               console.log('   📝 Actualizando evento existente en Google Calendar...');
-              const updateParams: calendar_v3.Params$Resource$Events$Patch = {
+
+              if (shouldStripConference) {
+                const existing = await cal.events.get({
+                  calendarId: GoogleCalendarSyncService.CALENDAR_ID,
+                  eventId: payload.externalEventId
+                });
+                const merged: calendar_v3.Schema$Event = {
+                  ...existing.data,
+                  ...requestBody,
+                  conferenceData: undefined,
+                  hangoutLink: undefined
+                };
+                delete merged.conferenceData;
+                delete merged.hangoutLink;
+
+                const result = await cal.events.update({
+                  calendarId: GoogleCalendarSyncService.CALENDAR_ID,
+                  eventId: payload.externalEventId,
+                  requestBody: merged,
+                  sendUpdates: resolvedSendUpdatesOnUpdate
+                });
+                console.log('   ✅ Evento actualizado (sin videollamada)');
+                if (resolvedSendUpdatesOnUpdate === 'all') {
+                  console.log(
+                    '   📧 Google enviará actualización de invitación a:',
+                    merged.attendees?.map(a => a.email).join(', ') || 'NINGUNO'
+                  );
+                } else {
+                  console.log('   📧 sendUpdates=none — no se reenvían invitaciones por correo');
+                }
+                return result;
+              }
+
+              const existing = await cal.events.get({
+                calendarId: GoogleCalendarSyncService.CALENDAR_ID,
+                eventId: payload.externalEventId
+              });
+              const mergedForUpdate: calendar_v3.Schema$Event = {
+                ...existing.data,
+                ...requestBody
+              };
+
+              const desiredComparable = GoogleCalendarSyncService.toComparableFromRequestBody(
+                mergedForUpdate,
+                payload,
+                {
+                  shouldCreateConference: !!shouldCreateConference,
+                  shouldStripConference: !!shouldStripConference,
+                }
+              );
+              const existingComparable = GoogleCalendarSyncService.toComparableFromGoogleEvent(
+                existing.data,
+                payload.attendees ?? []
+              );
+
+              if (
+                !externalCalendarEventNeedsUpdate(existingComparable, desiredComparable) &&
+                !shouldCreateConference &&
+                !shouldStripConference
+              ) {
+                console.log('   ⏭️ Sin cambios significativos — omitiendo update en Google Calendar');
+                return { data: existing.data };
+              }
+
+              const sendUpdates = resolvedSendUpdatesOnUpdate;
+              const updateParams: calendar_v3.Params$Resource$Events$Update = {
                 calendarId: GoogleCalendarSyncService.CALENDAR_ID,
                 eventId: payload.externalEventId,
-                requestBody,
-                // CRÍTICO: Enviar invitaciones a todos los attendees (pacientes) cuando se actualiza
-                sendUpdates: 'all' // 'all' envía a todos, 'externalOnly' solo a externos, 'none' no envía
+                requestBody: mergedForUpdate,
+                sendUpdates
               };
 
               if (shouldCreateConference) {
                 updateParams.conferenceDataVersion = 1;
               }
 
-              const result = await cal.events.patch(updateParams);
+              const result = await cal.events.update(updateParams);
               console.log('   ✅ Evento actualizado en Google Calendar');
-              console.log('   📧 Invitaciones enviadas a:', requestBody.attendees?.map(a => a.email).join(', ') || 'NINGUNO');
+              if (sendUpdates === 'all') {
+                console.log(
+                  '   📧 Google enviará actualización de invitación a:',
+                  requestBody.attendees?.map(a => a.email).join(', ') || 'NINGUNO'
+                );
+              } else {
+                console.log('   📧 sendUpdates=none — no se reenvían invitaciones por correo');
+              }
               return result;
             } catch (error: any) {
               const status = error?.code || error?.response?.status;
@@ -282,8 +493,8 @@ export class GoogleCalendarSyncService {
           const insertParams: calendar_v3.Params$Resource$Events$Insert = {
             calendarId: GoogleCalendarSyncService.CALENDAR_ID,
             requestBody,
-            // CRÍTICO: Enviar invitaciones a todos los attendees (pacientes)
-            sendUpdates: 'all' // 'all' envía a todos, 'externalOnly' solo a externos, 'none' no envía
+            // Primera creación: enviar invitación al paciente
+            sendUpdates: resolvedSendUpdatesOnInsert
           };
 
           if (shouldCreateConference) {
@@ -292,14 +503,22 @@ export class GoogleCalendarSyncService {
 
           const result = await cal.events.insert(insertParams);
           console.log('   ✅ Evento creado en Google Calendar con ID:', result.data.id);
-          console.log('   📧 Invitaciones enviadas a:', requestBody.attendees?.map(a => a.email).join(', ') || 'NINGUNO');
+          if (resolvedSendUpdatesOnInsert === 'all') {
+            console.log(
+              '   📧 Google enviará invitación a:',
+              requestBody.attendees?.map(a => a.email).join(', ') || 'NINGUNO'
+            );
+          } else {
+            console.log('   📧 sendUpdates=none — no se envían invitaciones por correo');
+          }
           return result;
         }
       );
 
       const updatedEvent = result.data;
       if (!updatedEvent?.id) {
-        return null;
+        const msg = 'Google Calendar no devolvió ID de evento tras crear/actualizar.';
+        throw new Error(msg);
       }
 
       await prisma.calendarSyncConfig.update({
@@ -310,12 +529,13 @@ export class GoogleCalendarSyncService {
         }
       });
 
-      const conferenceLink =
-        updatedEvent.hangoutLink ||
-        updatedEvent.conferenceData?.entryPoints?.find(entry => entry.entryPointType === 'video')
-          ?.uri ||
-        updatedEvent.conferenceData?.entryPoints?.[0]?.uri ||
-        null;
+      const conferenceLink = shouldCreateConference
+        ? updatedEvent.hangoutLink ||
+          updatedEvent.conferenceData?.entryPoints?.find(entry => entry.entryPointType === 'video')
+            ?.uri ||
+          updatedEvent.conferenceData?.entryPoints?.[0]?.uri ||
+          null
+        : null;
 
       return {
         externalEventId: updatedEvent.id,

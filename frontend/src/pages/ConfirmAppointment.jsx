@@ -18,6 +18,7 @@ const ConfirmAppointment = () => {
   const [appointmentData, setAppointmentData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState(null); // 'confirm', 'cancel', 'reschedule'
+  const [rescheduledAt, setRescheduledAt] = useState(null);
   const [cancellationReason, setCancellationReason] = useState('');
   const [rescheduleData, setRescheduleData] = useState({
     preferredDate: '',
@@ -26,6 +27,12 @@ const ConfirmAppointment = () => {
   });
   const [availableSlots, setAvailableSlots] = useState([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [canRequestRefund, setCanRequestRefund] = useState(false);
+  const [refundableAmount, setRefundableAmount] = useState(0);
+  const [refundRequest, setRefundRequest] = useState(null);
+  const [refundPolicyText, setRefundPolicyText] = useState(null);
+  const [refundReason, setRefundReason] = useState('');
+  const [submittingRefund, setSubmittingRefund] = useState(false);
 
   useEffect(() => {
     fetchAppointmentData();
@@ -36,6 +43,12 @@ const ConfirmAppointment = () => {
       const response = await axios.get(`/api/appointment-confirmation/info/${token}`);
       if (response.data?.success) {
         const data = response.data.data;
+        // Las teleconsultas se gestionan en su propia página (firma de aviso + liga de videollamada).
+        // Redirigimos para que cualquier enlace (correo o invitación de calendario) lleve al flujo correcto.
+        if (data.appointmentType === 'teleconsulta') {
+          navigate(`/teleconsulta/${token}`, { replace: true });
+          return;
+        }
         setAppointmentData({
           id: data.appointmentId,
           date: new Date(data.date),
@@ -43,8 +56,22 @@ const ConfirmAppointment = () => {
           displayTime: data.displayTime,
           patient: data.patient,
           doctor: data.doctor,
-          status: data.confirmationStatus
+          status: data.confirmationStatus,
+          appointmentType: data.appointmentType,
+          inPersonPaymentOffered: data.inPersonPaymentOffered,
+          inPersonPaymentStatus: data.inPersonPaymentStatus,
+          inPersonPaymentAmount: data.inPersonPaymentAmount,
+          inPersonPaymentCurrency: data.inPersonPaymentCurrency,
+          inPersonCheckoutUrl: data.inPersonCheckoutUrl,
+          refundPolicyText: data.refundPolicyText,
+          canRequestRefund: data.canRequestRefund,
+          refundableAmount: data.refundableAmount,
+          refundRequest: data.refundRequest,
         });
+        setCanRequestRefund(!!data.canRequestRefund);
+        setRefundableAmount(Number(data.refundableAmount || 0));
+        setRefundRequest(data.refundRequest || null);
+        setRefundPolicyText(data.refundPolicyText || null);
       } else {
         throw new Error('No se pudo cargar la cita');
       }
@@ -108,6 +135,34 @@ const ConfirmAppointment = () => {
     }
   };
 
+  const handleSubmitRefund = async () => {
+    if (!refundReason.trim() || refundReason.trim().length < 10) {
+      toast.error('Describe el motivo del reembolso (mínimo 10 caracteres)');
+      return;
+    }
+    try {
+      setSubmittingRefund(true);
+      const response = await axios.post(`/api/appointment-confirmation/refund-request/${token}`, {
+        reason: refundReason.trim(),
+        requestedAmount: refundableAmount,
+      });
+      if (response.data?.success) {
+        toast.success('Solicitud enviada. La cita quedará cancelada mientras el profesional revisa el reembolso.');
+        setRefundRequest(response.data.data);
+        setCanRequestRefund(false);
+        setAction('refund_requested');
+        setRefundReason('');
+        await fetchAppointmentData();
+      } else {
+        throw new Error(response.data?.error || 'Error al solicitar reembolso');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.error || error.message || 'Error al solicitar reembolso');
+    } finally {
+      setSubmittingRefund(false);
+    }
+  };
+
   // Cargar horarios disponibles cuando se selecciona una fecha
   const fetchAvailableSlots = async (date) => {
     if (!date) {
@@ -154,8 +209,14 @@ const ConfirmAppointment = () => {
       const response = await axios.post(`/api/appointment-confirmation/reschedule/${token}`, rescheduleData);
       
       if (response.data.success) {
-        toast.success('Cita reprogramada exitosamente');
-        setAction('rescheduled');
+        if (response.data.waitlisted) {
+          toast.success('Te agregamos a la lista de espera. El consultorio te contactará con un nuevo horario.');
+          setAction('waitlisted');
+        } else {
+          toast.success('Cita reprogramada exitosamente');
+          setRescheduledAt(response.data.data?.newDate || null);
+          setAction('rescheduled');
+        }
       }
     } catch (error) {
       console.error('Error al solicitar reprogramación:', error);
@@ -184,7 +245,7 @@ const ConfirmAppointment = () => {
   }
 
   // Si ya se tomó una acción, mostrar confirmación
-  if (action === 'confirmed' || action === 'cancelled' || action === 'rescheduled') {
+  if (action === 'confirmed' || action === 'cancelled' || action === 'rescheduled' || action === 'waitlisted' || action === 'refund_requested') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
@@ -207,13 +268,51 @@ const ConfirmAppointment = () => {
               </p>
             </>
           )}
+
+          {action === 'refund_requested' && (
+            <>
+              <ExclamationTriangleIcon className="h-16 w-16 text-amber-500 mx-auto mb-4" />
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">Reembolso solicitado</h1>
+              <p className="text-gray-600 mb-6">
+                Tu solicitud fue enviada al profesional y la cita quedó cancelada. Te avisaremos cuando se procese el reembolso en Mercado Pago.
+              </p>
+            </>
+          )}
           
           {action === 'rescheduled' && (
             <>
               <CalendarIcon className="h-16 w-16 text-blue-500 mx-auto mb-4" />
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">Reprogramación Solicitada</h1>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">Cita reprogramada</h1>
               <p className="text-gray-600 mb-6">
-                Hemos recibido tu solicitud de reprogramación. Te contactaremos pronto con las nuevas opciones disponibles.
+                Tu cita quedó actualizada con el nuevo horario.
+                {rescheduledAt && (
+                  <>
+                    {' '}
+                    <strong className="text-gray-800">
+                      {new Date(rescheduledAt).toLocaleString('es-MX', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </strong>
+                  </>
+                )}
+                {' '}
+                También la verás en <strong>Mis citas</strong> al iniciar sesión y recibirás un correo de
+                confirmación.
+              </p>
+            </>
+          )}
+
+          {action === 'waitlisted' && (
+            <>
+              <ClockIcon className="h-16 w-16 text-amber-500 mx-auto mb-4" />
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">Lista de espera</h1>
+              <p className="text-gray-600 mb-6">
+                El horario elegido ya no está disponible. Te agregamos a la lista de espera y el consultorio te propondrá otra fecha.
               </p>
             </>
           )}
@@ -276,7 +375,53 @@ const ConfirmAppointment = () => {
           </div>
         </div>
 
-        {/* Acciones */}
+        {appointmentData.inPersonPaymentOffered &&
+          appointmentData.inPersonPaymentStatus !== 'approved' &&
+          appointmentData.inPersonCheckoutUrl && (
+            <div className="bg-sky-50 border border-sky-200 rounded-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold text-sky-900 mb-2">Pago opcional con Mercado Pago</h3>
+              <p className="text-sm text-sky-800 mb-4">
+                Puedes pagar esta consulta presencial por{' '}
+                <strong>
+                  ${Number(appointmentData.inPersonPaymentAmount || 0).toLocaleString('es-MX', {
+                    minimumFractionDigits: 2,
+                  })}{' '}
+                  {appointmentData.inPersonPaymentCurrency || 'MXN'}
+                </strong>{' '}
+                si lo deseas. También puedes pagar en efectivo o directamente en el consultorio.
+              </p>
+              <a
+                href={appointmentData.inPersonCheckoutUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex w-full justify-center bg-sky-600 text-white py-3 px-4 rounded-lg hover:bg-sky-700 font-medium"
+              >
+                Pagar con Mercado Pago (opcional)
+              </a>
+            </div>
+          )}
+
+        {appointmentData.inPersonPaymentOffered && appointmentData.inPersonPaymentStatus === 'approved' && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 text-sm text-green-800">
+            Consulta presencial pagada con Mercado Pago.
+          </div>
+        )}
+
+        {refundRequest && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-sm text-amber-900">
+            <p className="font-medium mb-1">Solicitud de reembolso</p>
+            <p>
+              Estado:{' '}
+              {refundRequest.status === 'pending'
+                ? 'Pendiente de revisión'
+                : refundRequest.status === 'completed'
+                  ? 'Reembolso procesado'
+                  : refundRequest.status}
+            </p>
+          </div>
+        )}
+
+        {appointmentData.status !== 'CANCELLED' && (
         <div className="bg-white rounded-lg shadow-md p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">¿Qué deseas hacer?</h3>
           
@@ -321,7 +466,69 @@ const ConfirmAppointment = () => {
               Solicita cambiar la fecha o hora de tu cita
             </p>
           </div>
+
+          {canRequestRefund && (
+            <div className="mb-2 border-t border-gray-100 pt-6">
+              <button
+                type="button"
+                onClick={() => setAction(action === 'showRefund' ? null : 'showRefund')}
+                className="w-full bg-amber-600 text-white py-4 px-6 rounded-lg hover:bg-amber-700 font-medium text-lg flex items-center justify-center space-x-2"
+              >
+                <ExclamationTriangleIcon className="h-6 w-6" />
+                <span>Solicitar reembolso y cancelar</span>
+              </button>
+              <p className="text-sm text-gray-600 mt-2 text-center">
+                Si pagaste con Mercado Pago y no podrás asistir, solicita reembolso. La cita se cancelará automáticamente.
+              </p>
+            </div>
+          )}
         </div>
+        )}
+
+        {action === 'showRefund' && canRequestRefund && (
+          <div className="bg-white rounded-lg shadow-md p-6 mt-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Solicitar reembolso</h3>
+            {refundPolicyText && (
+              <p className="text-sm text-gray-600 mb-3">
+                <strong>Política:</strong> {refundPolicyText}
+              </p>
+            )}
+            <p className="text-sm text-gray-700 mb-4">
+              Monto:{' '}
+              <strong>
+                ${Number(refundableAmount || appointmentData.inPersonPaymentAmount || 0).toLocaleString('es-MX', {
+                  minimumFractionDigits: 2,
+                })}{' '}
+                {appointmentData.inPersonPaymentCurrency || 'MXN'}
+              </strong>
+            </p>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Motivo del reembolso *</label>
+            <textarea
+              value={refundReason}
+              onChange={(e) => setRefundReason(e.target.value)}
+              placeholder="Explica por qué solicitas el reembolso (mínimo 10 caracteres)"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500 mb-4"
+              rows={3}
+            />
+            <div className="flex space-x-3">
+              <button
+                type="button"
+                onClick={handleSubmitRefund}
+                disabled={submittingRefund}
+                className="flex-1 bg-amber-600 text-white py-2 px-4 rounded-md hover:bg-amber-700 font-medium disabled:opacity-50"
+              >
+                {submittingRefund ? 'Enviando…' : 'Enviar solicitud'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAction(null)}
+                className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-md hover:bg-gray-400 font-medium"
+              >
+                Volver
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Formulario de cancelación */}
         {action === 'showCancel' && (
@@ -395,30 +602,29 @@ const ConfirmAppointment = () => {
                   </p>
                 </div>
               ) : (
-                <select
-                  value={rescheduleData.preferredTime}
-                  onChange={(e) => setRescheduleData({...rescheduleData, preferredTime: e.target.value})}
-                  disabled={!rescheduleData.preferredDate || availableSlots.length === 0}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  required
-                >
-                  <option value="">
-                    {!rescheduleData.preferredDate 
-                      ? 'Selecciona primero una fecha' 
-                      : availableSlots.length === 0 
-                        ? 'No hay horarios disponibles' 
-                        : 'Selecciona un horario'}
-                  </option>
-                  {availableSlots.map((slot) => {
-                    const slotDate = new Date(slot.startTime);
-                    const timeString = slotDate.toTimeString().slice(0, 5); // "HH:MM"
-                    return (
-                      <option key={slot.id} value={timeString}>
-                        {slot.displayTime}
-                      </option>
-                    );
-                  })}
-                </select>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-40 overflow-y-auto">
+                  {availableSlots.map((slot) => (
+                    <button
+                      key={slot.id}
+                      type="button"
+                      onClick={() =>
+                        setRescheduleData({ ...rescheduleData, preferredTime: slot.startTime })
+                      }
+                      className={`px-2 py-2 text-sm rounded-md border ${
+                        rescheduleData.preferredTime === slot.startTime
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-800 border-gray-300 hover:border-blue-400'
+                      }`}
+                    >
+                      {slot.displayTime ||
+                        new Date(slot.startTime).toLocaleTimeString('es-MX', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false
+                        })}
+                    </button>
+                  ))}
+                </div>
               )}
               {rescheduleData.preferredDate && availableSlots.length > 0 && (
                 <p className="text-xs text-gray-500 mt-1">
@@ -469,7 +675,7 @@ const ConfirmAppointment = () => {
             <li>• Confirma tu cita al menos 24 horas antes de la fecha programada</li>
             <li>• Si cancelas, puedes solicitar reprogramación en cualquier momento</li>
             <li>• Para emergencias, contacta directamente con el consultorio</li>
-            <li>• Este enlace expira en 24 horas por seguridad</li>
+            <li>• Este enlace permanece activo hasta 48 horas después de la fecha de tu cita</li>
           </ul>
         </div>
       </div>

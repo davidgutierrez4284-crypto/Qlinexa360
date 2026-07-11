@@ -594,7 +594,8 @@ export class AgendaPacientesController {
         patientName, 
         patientEmail, 
         patientPhone, 
-        motivoConsulta 
+        motivoConsulta,
+        clinicalIntakeToken
       } = req.body;
 
       if (!slotId || !patientName || !patientEmail || !patientPhone || !motivoConsulta) {
@@ -743,23 +744,58 @@ export class AgendaPacientesController {
 
       console.log('✅ Appointment creado:', appointment.id);
 
-      // Generar automáticamente pre-consulta si es la primera cita del paciente con este doctor
+      // Ligar la pre-consulta (ClinicalIntake) con la cita recién agendada, cuando el paciente
+      // llegó a la agenda desde el flujo de pre-consulta. El enlace es duro (appointmentId) para
+      // que el doctor vea cita y pre-consulta correlacionadas en el módulo de Pre-consultas.
+      const intakeToken = String(clinicalIntakeToken || '').trim();
+      let intakeLinked = false;
+      if (intakeToken) {
+        try {
+          const intake = await prisma.clinicalIntake.findFirst({
+            where: { token: intakeToken, doctorId: agendaConfig.doctor_id }
+          });
+          if (intake && intake.status !== 'CONVERTED') {
+            await prisma.clinicalIntake.update({
+              where: { id: intake.id },
+              data: {
+                appointmentId: appointment.id,
+                patientId: intake.patientId ?? patient.id
+              }
+            });
+            intakeLinked = true;
+            console.log('🔗 ClinicalIntake vinculada a la cita:', intake.id);
+          } else if (!intake) {
+            console.warn('⚠️  No se encontró ClinicalIntake para el token recibido (no se vincula).');
+          }
+        } catch (linkErr) {
+          // No fallar la creación de la cita si la vinculación con la pre-consulta falla.
+          console.error('Error vinculando ClinicalIntake con la cita:', linkErr);
+        }
+      }
+
+      // Generar automáticamente pre-consulta si es la primera cita del paciente con este doctor.
+      // EXCEPCIÓN: si el paciente llegó desde el flujo de pre-consulta (ClinicalIntake ya vinculada),
+      // NO se crea otra pre-consulta ni se le envía un segundo enlace — ya capturó sus datos.
       let preConsultationToken: string | null = null;
-      try {
-        console.log('Intentando crear pre-consulta automática para appointment:', appointment.id);
-        const preConsultationModule = await import('./preConsultation.controller');
-        preConsultationToken = await preConsultationModule.createPreConsultationForAppointment(appointment.id);
-        if (preConsultationToken) {
-          console.log('Pre-consulta creada exitosamente');
-        } else {
-          console.log('No se creó pre-consulta (no es primera cita o ya existe consulta médica)');
+      if (intakeLinked) {
+        console.log('↩️  Pre-consulta ya capturada por el paciente (ClinicalIntake vinculada): se omite la auto-creación de PreConsultation.');
+      } else {
+        try {
+          console.log('Intentando crear pre-consulta automática para appointment:', appointment.id);
+          const preConsultationModule = await import('./preConsultation.controller');
+          preConsultationToken = await preConsultationModule.createPreConsultationForAppointment(appointment.id);
+          if (preConsultationToken) {
+            console.log('Pre-consulta creada exitosamente');
+          } else {
+            console.log('No se creó pre-consulta (no es primera cita o ya existe consulta médica)');
+          }
+        } catch (preConsultationError) {
+          console.error('Error generando pre-consulta automática:', preConsultationError);
+          if (preConsultationError instanceof Error && preConsultationError.stack) {
+            console.error('Stack trace:', preConsultationError.stack);
+          }
+          // No fallar la creación de la cita si la pre-consulta falla
         }
-      } catch (preConsultationError) {
-        console.error('Error generando pre-consulta automática:', preConsultationError);
-        if (preConsultationError instanceof Error && preConsultationError.stack) {
-          console.error('Stack trace:', preConsultationError.stack);
-        }
-        // No fallar la creación de la cita si la pre-consulta falla
       }
 
       // Crear evento en el calendario interno de Qlinexa360
@@ -772,6 +808,7 @@ export class AgendaPacientesController {
         data: {
           doctorId: agendaConfig.doctor_id,
           patientId: patient.id,
+          appointmentId: appointment.id, // Vínculo duro cita↔evento (matching determinístico en aprobación/sync)
           fechaHoraInicio: slotTime,
           fechaHoraFin: slotEnd,
           titulo: eventTitle,
@@ -809,15 +846,8 @@ export class AgendaPacientesController {
         timezone: doctorTimezone
       };
 
-      // Enviar email al paciente con adjunto .ics para que agregue el evento a su calendario
+      // Enviar email al paciente (la cita en agenda llega vía invitación Google/Outlook/Apple)
       const emailService = (await import('../services/notification.service')).EmailService.getInstance();
-      const icsContent = (await import('../utils/ics.utils')).generateIcsForAppointment({
-        eventId: calendarEvent.id,
-        title: eventTitle,
-        description: eventDescription,
-        start: slotTime,
-        end: slotEnd
-      });
       const frontendUrl = process.env.FRONTEND_URL || 'https://www.qlinexa360.com';
       const emailSent = await emailService.sendCalendarEventEmail(patientEmail, {
         patientName,
@@ -827,11 +857,11 @@ export class AgendaPacientesController {
         eventEndDate: slotEnd,
         description: motivoConsulta,
         timezone: doctorTimezone,
-        icsContent,
+        calendarInviteExpected: true,
         preConsultationLink: preConsultationToken ? `${frontendUrl}/pre-consulta/${preConsultationToken}` : undefined
       });
 
-      // Enviar WhatsApp si está configurado (solo mensaje, el email ya se envió con .ics)
+      // Enviar WhatsApp si está configurado
       let whatsappSent = false;
       if (patientPhone) {
         const { WhatsAppService } = await import('../services/notification.service');

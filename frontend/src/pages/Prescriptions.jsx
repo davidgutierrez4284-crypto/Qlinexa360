@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 
 // Componente para crear nueva receta
 function CreateRecipe({ onRecipeCreated, setActiveTab }) {
+  const { user } = useAuth();
   const [patients, setPatients] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -191,9 +192,15 @@ function CreateRecipe({ onRecipeCreated, setActiveTab }) {
 
     try {
       setLoading(true);
-      
-      const doctorId = JSON.parse(localStorage.getItem('user')).doctorId;
-      const userId = JSON.parse(localStorage.getItem('user')).id;
+      const storedUser = localStorage.getItem('user');
+      const parsedUser = storedUser ? JSON.parse(storedUser) : {};
+      const doctorId = user?.doctorId || parsedUser.doctorId;
+      const userId = user?.id || parsedUser.id;
+      if (!doctorId) {
+        toast.error('No se pudo determinar el doctor. Cierra sesión e inicia de nuevo.');
+        setLoading(false);
+        return;
+      }
       
              const recipeData = {
          doctorId,
@@ -559,19 +566,42 @@ function CreateRecipe({ onRecipeCreated, setActiveTab }) {
 }
 
 // Componente para listar recetas
-function RecipeList({ recipes, onRefresh, loading, isAssistant }) {
+function RecipeList({ recipes, onRefresh, loading, isAssistant, patientMode = false }) {
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [search, setSearch] = useState('');
   const [sendingId, setSendingId] = useState(null);
 
   const filteredRecipes = recipes.filter((r) => {
+    const q = search.toLowerCase().trim();
+    if (!q) return true;
+    if (patientMode) {
+      const doctorName = `${r.doctor?.professionalTitle || ''} ${r.doctor?.user?.firstName || ''} ${r.doctor?.user?.lastName || ''}`.toLowerCase();
+      const padecimiento = (r.padecimiento || r.consulta?.clinicalCase?.padecimiento || '').toLowerCase();
+      return doctorName.includes(q) || padecimiento.includes(q);
+    }
     const name = `${r.paciente?.firstName || ''} ${r.paciente?.lastName || ''}`.toLowerCase();
     const email = (r.paciente?.user?.email || r.paciente?.email || '').toLowerCase();
     const padecimiento = (r.padecimiento || r.consulta?.clinicalCase?.padecimiento || '').toLowerCase();
-    const q = search.toLowerCase().trim();
-    if (!q) return true;
     return name.includes(q) || email.includes(q) || padecimiento.includes(q);
   });
+
+  const showEmailSendError = (message) => {
+    const msg = message || 'No se pudo enviar la receta por correo';
+    const unblockUrl = 'https://mail.zoho.com/UnblockMe';
+    if (msg.includes('UnblockMe') || /550.*5\.4\.6/i.test(msg)) {
+      toast.error(
+        <span>
+          {msg.replace(unblockUrl, '').trim()}{' '}
+          <a href={unblockUrl} target="_blank" rel="noopener noreferrer" className="underline font-semibold">
+            Desbloquear en Zoho
+          </a>
+        </span>,
+        { autoClose: 15000 }
+      );
+      return;
+    }
+    toast.error(msg, { autoClose: 10000 });
+  };
 
   const shareByEmail = async (recipe) => {
     try {
@@ -580,11 +610,11 @@ function RecipeList({ recipes, onRefresh, loading, isAssistant }) {
         method: 'POST',
         headers: { ...getApiHeaders(), 'Content-Type': 'application/json' }
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         toast.success('Receta enviada por correo al paciente');
       } else {
-        toast.error(data.message || 'No se pudo enviar la receta por correo');
+        showEmailSendError(data.message);
       }
     } catch (e) {
       toast.error('Error al enviar correo: ' + e.message);
@@ -596,7 +626,10 @@ function RecipeList({ recipes, onRefresh, loading, isAssistant }) {
   const viewRecipe = async (recipe) => {
     try {
       console.log('Loading recipe details for:', recipe.id);
-      const res = await fetch(getApiUrl(`/api/recipes/${recipe.id}`), {
+      const url = patientMode
+        ? getApiUrl(`/api/patients/my/recipes/${recipe.id}`)
+        : getApiUrl(`/api/recipes/${recipe.id}`);
+      const res = await fetch(url, {
         headers: getApiHeaders()
       });
       
@@ -657,6 +690,22 @@ function RecipeList({ recipes, onRefresh, loading, isAssistant }) {
 
   const openRecipePdf = async (recipe) => {
     try {
+      if (patientMode) {
+        const res = await fetch(getApiUrl(`/api/patients/my/recipes/${recipe.id}/pdf-view-url`), {
+          headers: getApiHeaders(),
+        });
+        const response = await res.json();
+        if (res.ok && response.success && response.data?.viewUrl) {
+          const pdfUrl = response.data.viewUrl.startsWith('http')
+            ? response.data.viewUrl
+            : getApiUrl(response.data.viewUrl);
+          window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+          return;
+        }
+        toast.error(response.message || 'No se pudo abrir la receta');
+        return;
+      }
+
       const res = await fetch(getApiUrl(`/api/recipes/${recipe.id}/pdf`), {
         headers: getApiHeaders()
       });
@@ -687,8 +736,13 @@ function RecipeList({ recipes, onRefresh, loading, isAssistant }) {
     <div className="bg-white rounded-lg p-4 sm:p-6 shadow w-full max-w-full overflow-hidden">
       <h3 className="text-lg font-semibold mb-4 flex items-center">
         <DocumentTextIcon className="w-5 h-5 mr-2" />
-        Recetas Emitidas
+        {patientMode ? 'Mis recetas' : 'Recetas Emitidas'}
       </h3>
+      {patientMode && (
+        <p className="text-sm text-gray-600 mb-4">
+          Aquí puedes consultar las recetas que te han emitido. Solo lectura.
+        </p>
+      )}
       {/* Search bar */}
       <div className="mb-4">
         <div className="relative w-full max-w-xl">
@@ -696,7 +750,7 @@ function RecipeList({ recipes, onRefresh, loading, isAssistant }) {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, email o padecimiento..."
+            placeholder={patientMode ? 'Buscar por profesional o padecimiento...' : 'Buscar por nombre, email o padecimiento...'}
             className="w-full border border-gray-300 rounded-md px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -745,9 +799,23 @@ function RecipeList({ recipes, onRefresh, loading, isAssistant }) {
                     </p>
                   )}
                   
-                                     <div className="text-sm text-gray-500">
-                     Paciente: {recipe.paciente?.firstName} {recipe.paciente?.lastName}
-        </div>
+                  <div className="text-sm text-gray-500">
+                    {patientMode ? (
+                      <>
+                        Profesional:{' '}
+                        {[recipe.doctor?.professionalTitle, recipe.doctor?.user?.firstName, recipe.doctor?.user?.lastName]
+                          .filter(Boolean)
+                          .join(' ')}
+                        {(recipe.padecimiento || recipe.consulta?.clinicalCase?.padecimiento) && (
+                          <span className="block text-gray-400 mt-0.5">
+                            {recipe.padecimiento || recipe.consulta?.clinicalCase?.padecimiento}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <>Paciente: {recipe.paciente?.firstName} {recipe.paciente?.lastName}</>
+                    )}
+                  </div>
       </div>
 
                 <div className="flex flex-wrap gap-2 sm:gap-4 flex-shrink-0">
@@ -758,6 +826,8 @@ function RecipeList({ recipes, onRefresh, loading, isAssistant }) {
                   >
                     <EyeIcon className="w-6 h-6" />
                   </button>
+                  {!patientMode && (
+                    <>
                   <button
                     onClick={() => shareByEmail(recipe)}
                     disabled={sendingId === recipe.id}
@@ -770,6 +840,8 @@ function RecipeList({ recipes, onRefresh, loading, isAssistant }) {
                       <ShareIcon className="w-6 h-6" />
                     )}
                   </button>
+                    </>
+                  )}
                   <button
                     onClick={() => openRecipePdf(recipe)}
                     className="text-green-600 hover:text-green-700 p-2 rounded-lg hover:bg-green-50 transition-colors"
@@ -777,7 +849,7 @@ function RecipeList({ recipes, onRefresh, loading, isAssistant }) {
                   >
                     <DocumentTextIcon className="w-6 h-6" />
                   </button>
-                  {!isAssistant && (
+                  {!isAssistant && !patientMode && (
                     <button
                       onClick={() => deleteRecipe(recipe.id)}
                       className="text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition-colors"
@@ -793,7 +865,7 @@ function RecipeList({ recipes, onRefresh, loading, isAssistant }) {
           
           {recipes.length === 0 && (
             <div className="text-center text-gray-500 py-8">
-              No hay recetas emitidas
+              {patientMode ? 'Aún no tienes recetas emitidas' : 'No hay recetas emitidas'}
               </div>
           )}
         </div>
@@ -822,9 +894,11 @@ function RecipeList({ recipes, onRefresh, loading, isAssistant }) {
                 <strong>Fecha:</strong> {selectedRecipe.fechaEmision ? new Date(selectedRecipe.fechaEmision).toLocaleString() : 'No especificada'}
               </div>
               
+              {!patientMode && (
               <div>
                 <strong>Paciente:</strong> {selectedRecipe.paciente?.firstName} {selectedRecipe.paciente?.lastName}
               </div>
+              )}
 
               <div>
                 <strong>Profesional:</strong> {selectedRecipe.doctor?.user?.firstName} {selectedRecipe.doctor?.user?.lastName}
@@ -877,7 +951,8 @@ function RecipeList({ recipes, onRefresh, loading, isAssistant }) {
 export default function Prescriptions() {
   const { user } = useAuth();
   const isAssistant = user?.role === 'ASISTENTE';
-  const [activeTab, setActiveTab] = useState('create');
+  const isPatient = user?.role === 'PATIENT';
+  const [activeTab, setActiveTab] = useState(isPatient ? 'list' : 'create');
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchParams] = useSearchParams();
@@ -899,18 +974,37 @@ export default function Prescriptions() {
 
   useEffect(() => {
     fetchRecipes();
-  }, []);
+  }, [user]);
 
   const fetchRecipes = async () => {
     try {
       setLoading(true);
+
+      if (isPatient) {
+        const res = await fetch(getApiUrl('/api/patients/my/recipes'), {
+          headers: getApiHeaders(),
+        });
+        const response = await res.json();
+        if (response.success && Array.isArray(response.data)) {
+          setRecipes(response.data);
+        } else {
+          setRecipes([]);
+        }
+        return;
+      }
+
       const selectedDoctorId = localStorage.getItem('selectedDoctorId');
+      const storedUser = localStorage.getItem('user');
       const doctorId = isAssistant
         ? selectedDoctorId
-        : JSON.parse(localStorage.getItem('user')).doctorId;
+        : (user?.doctorId || (storedUser ? JSON.parse(storedUser).doctorId : null));
 
       if (!doctorId) {
-        toast.error('No se pudo determinar el doctor seleccionado');
+        if (user?.role === 'DOCTOR') {
+          toast.error('No se pudo determinar el doctor. Cierra sesión e inicia de nuevo.');
+        } else if (isAssistant) {
+          toast.error('No se pudo determinar el doctor seleccionado');
+        }
         setRecipes([]);
         return;
       }
@@ -964,32 +1058,42 @@ export default function Prescriptions() {
         return;
       }
       
-      const res = await fetch(getApiUrl('/api/recipes/test'), {
+      const res = await fetch(getApiUrl('/api/recipes/test-smtp'), {
         method: 'GET',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+        headers: getApiHeaders(),
       });
       
       console.log('Response status:', res.status);
-      console.log('Response headers:', res.headers);
       
-      if (res.ok) {
-        const data = await res.json();
-        console.log('Backend test response:', data);
-        toast.success('✅ Conexión exitosa: ' + (data.message || 'Backend funcionando correctamente'));
+      const data = await res.json().catch(() => ({}));
+      console.log('SMTP test response:', data);
+      
+      if (res.ok && data.success) {
+        toast.success('✅ SMTP OK: ' + (data.message || 'Correo de prueba enviado'));
       } else {
-        console.error('Backend test failed with status:', res.status);
-        const errorText = await res.text();
-        console.error('Error response:', errorText);
-        toast.error('❌ Error de conexión: ' + res.status + ' - ' + errorText);
+        const errMsg = data.message || (await res.text().catch(() => '')) || res.status;
+        toast.error('❌ SMTP: ' + errMsg);
       }
     } catch (error) {
       console.error('Backend test error:', error);
       toast.error('❌ Error de conexión: ' + error.message);
     }
   };
+
+  if (isPatient) {
+    return (
+      <div className="w-full min-w-0 overflow-x-hidden">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 mb-6">Mis recetas</h1>
+        <RecipeList
+          recipes={recipes}
+          onRefresh={fetchRecipes}
+          loading={loading}
+          isAssistant={false}
+          patientMode
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full min-w-0 overflow-x-hidden">

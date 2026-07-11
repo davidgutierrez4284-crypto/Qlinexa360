@@ -3,13 +3,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendInvoiceByEmail = exports.deleteInvoice = exports.getInvoices = exports.uploadInvoice = void 0;
+exports.downloadInvoiceFile = exports.sendInvoiceByEmail = exports.deleteInvoice = exports.getInvoices = exports.uploadInvoice = void 0;
 const client_1 = require("@prisma/client");
 const path_1 = __importDefault(require("path"));
-const fs_1 = __importDefault(require("fs"));
 const notification_service_1 = require("../services/notification.service");
 const logger_utils_1 = require("../utils/logger.utils");
 const error_utils_1 = require("../utils/error.utils");
+const invoiceFile_utils_1 = require("../utils/invoiceFile.utils");
 const prisma = new client_1.PrismaClient();
 const resolveDoctorId = async (req) => {
     if (!req.user) {
@@ -60,16 +60,8 @@ const uploadInvoice = async (req, res) => {
         }
         const pdfFile = req.files.pdf[0];
         const xmlFile = req.files.xml[0];
-        // Guardar archivos localmente (puedes adaptar a S3 si lo usas)
-        const uploadsDir = path_1.default.join(__dirname, '../../uploads/invoices');
-        if (!fs_1.default.existsSync(uploadsDir))
-            fs_1.default.mkdirSync(uploadsDir, { recursive: true });
-        const pdfPath = path_1.default.join(uploadsDir, `${Date.now()}-${pdfFile.originalname}`);
-        const xmlPath = path_1.default.join(uploadsDir, `${Date.now()}-${xmlFile.originalname}`);
-        fs_1.default.writeFileSync(pdfPath, pdfFile.buffer);
-        fs_1.default.writeFileSync(xmlPath, xmlFile.buffer);
-        const pdfUrl = `/uploads/invoices/${path_1.default.basename(pdfPath)}`;
-        const xmlUrl = `/uploads/invoices/${path_1.default.basename(xmlPath)}`;
+        const pdfUrl = await (0, invoiceFile_utils_1.uploadInvoiceFileToStorage)(pdfFile, doctorId, 'pdf');
+        const xmlUrl = await (0, invoiceFile_utils_1.uploadInvoiceFileToStorage)(xmlFile, doctorId, 'xml');
         const invoice = await prisma.invoice.create({
             data: {
                 doctorId,
@@ -157,18 +149,12 @@ const deleteInvoice = async (req, res) => {
         if (!doctorId || doctorId !== invoice.doctorId) {
             return res.status(403).json({ message: 'No tienes permiso para eliminar esta factura' });
         }
-        // Elimina archivos locales (opcional)
         try {
-            if (invoice.pdfUrl && invoice.pdfUrl.startsWith('/uploads/')) {
-                fs_1.default.unlinkSync(path_1.default.join(__dirname, '../../', invoice.pdfUrl));
-            }
-            if (invoice.xmlUrl && invoice.xmlUrl.startsWith('/uploads/')) {
-                fs_1.default.unlinkSync(path_1.default.join(__dirname, '../../', invoice.xmlUrl));
-            }
+            await (0, invoiceFile_utils_1.deleteStoredInvoiceFile)(invoice.pdfUrl);
+            await (0, invoiceFile_utils_1.deleteStoredInvoiceFile)(invoice.xmlUrl);
         }
         catch (e) {
-            console.log('Error al eliminar archivos locales:', e);
-            // Continuar aunque falle la eliminación de archivos
+            console.log('Error al eliminar archivos de factura:', e);
         }
         await prisma.invoice.delete({ where: { id } });
         res.json({ message: 'Factura eliminada' });
@@ -237,29 +223,28 @@ const sendInvoiceByEmail = async (req, res) => {
             month: 'long',
             day: 'numeric'
         });
-        // Construir rutas completas de los archivos
-        const pdfPath = invoice.pdfUrl.startsWith('/uploads/')
-            ? path_1.default.join(__dirname, '../../', invoice.pdfUrl)
-            : invoice.pdfUrl;
-        const xmlPath = invoice.xmlUrl.startsWith('/uploads/')
-            ? path_1.default.join(__dirname, '../../', invoice.xmlUrl)
-            : invoice.xmlUrl;
-        // Verificar que los archivos existan
-        if (!fs_1.default.existsSync(pdfPath)) {
-            return res.status(404).json({ success: false, message: 'El archivo PDF no se encuentra en el servidor' });
+        const pdfFile = await (0, invoiceFile_utils_1.readInvoiceFile)(invoice.pdfUrl);
+        const xmlFile = await (0, invoiceFile_utils_1.readInvoiceFile)(invoice.xmlUrl);
+        if (!pdfFile) {
+            return res.status(404).json({
+                success: false,
+                message: 'El archivo PDF no se encuentra en el servidor. Vuelve a subir la factura (archivos antiguos en disco local no persisten en producción).',
+            });
         }
-        if (!fs_1.default.existsSync(xmlPath)) {
-            return res.status(404).json({ success: false, message: 'El archivo XML no se encuentra en el servidor' });
+        if (!xmlFile) {
+            return res.status(404).json({
+                success: false,
+                message: 'El archivo XML no se encuentra en el servidor. Vuelve a subir la factura (archivos antiguos en disco local no persisten en producción).',
+            });
         }
-        // Enviar correo con archivos adjuntos
         const notificationService = notification_service_1.NotificationService.getInstance();
         const sent = await notificationService.sendInvoiceToPatientEmail({
             toEmail: patientEmail,
             patientName: `${invoice.patient.firstName} ${invoice.patient.lastName}`,
             doctorName: `${((_c = (_b = invoice.doctor) === null || _b === void 0 ? void 0 : _b.user) === null || _c === void 0 ? void 0 : _c.firstName) || ''} ${((_e = (_d = invoice.doctor) === null || _d === void 0 ? void 0 : _d.user) === null || _e === void 0 ? void 0 : _e.lastName) || ''}`.trim(),
             invoiceDate,
-            pdfPath,
-            xmlPath
+            pdfAttachment: { filename: pdfFile.filename, content: pdfFile.buffer },
+            xmlAttachment: { filename: xmlFile.filename, content: xmlFile.buffer },
         });
         if (!sent) {
             return res.status(500).json({ success: false, message: 'No se pudo enviar el correo' });
@@ -273,3 +258,51 @@ const sendInvoiceByEmail = async (req, res) => {
     }
 };
 exports.sendInvoiceByEmail = sendInvoiceByEmail;
+async function assertInvoiceAccess(req, invoice) {
+    var _a;
+    if (!req.user)
+        throw new error_utils_1.AppError('Autenticación requerida', 401);
+    if (((_a = req.user.role) === null || _a === void 0 ? void 0 : _a.toUpperCase()) === 'PATIENT') {
+        const patient = await prisma.patient.findUnique({ where: { userId: req.user.userId } });
+        if (!patient || patient.id !== invoice.patientId) {
+            throw new error_utils_1.AppError('No autorizado', 403);
+        }
+        return;
+    }
+    const doctorId = await resolveDoctorId(req);
+    if (doctorId !== invoice.doctorId) {
+        throw new error_utils_1.AppError('No autorizado', 403);
+    }
+}
+const downloadInvoiceFile = async (req, res) => {
+    try {
+        const { id, type } = req.params;
+        if (type !== 'pdf' && type !== 'xml') {
+            return res.status(400).json({ success: false, message: 'Tipo de archivo inválido' });
+        }
+        const invoice = await prisma.invoice.findUnique({ where: { id } });
+        if (!invoice) {
+            return res.status(404).json({ success: false, message: 'Factura no encontrada' });
+        }
+        await assertInvoiceAccess(req, invoice);
+        const storedUrl = type === 'pdf' ? invoice.pdfUrl : invoice.xmlUrl;
+        const target = await (0, invoiceFile_utils_1.resolveInvoiceDownloadTarget)(storedUrl);
+        if (!target) {
+            return res.status(404).json({
+                success: false,
+                message: 'Archivo no encontrado. Si la factura es antigua, vuelve a subir el PDF y XML (los archivos locales no se conservan en el servidor de producción).',
+            });
+        }
+        if (target.type === 'redirect') {
+            return res.redirect(302, target.url);
+        }
+        res.setHeader('Content-Type', target.contentType);
+        res.setHeader('Content-Disposition', `inline; filename="${path_1.default.basename(target.path)}"`);
+        return res.sendFile(target.path);
+    }
+    catch (error) {
+        const handled = error instanceof error_utils_1.AppError ? error : new error_utils_1.AppError('Error al descargar factura', 500);
+        res.status(handled.statusCode).json({ success: false, message: handled.message });
+    }
+};
+exports.downloadInvoiceFile = downloadInvoiceFile;

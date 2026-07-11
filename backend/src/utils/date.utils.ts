@@ -133,6 +133,30 @@ export function createDateInTimezone(
 /**
  * Formatea la hora con am/pm para mayor claridad (ej: "9:00 a.m.", "3:00 p.m.").
  */
+/**
+ * Formato local sin sufijo Z para APIs de calendario (Google/Outlook).
+ * Ej: "2026-05-29T11:15:00" en la zona del profesional.
+ */
+export function formatDateTimeForExternalCalendar(
+  date: Date,
+  timezone?: string | null
+): string {
+  const tz = resolveTimezone(timezone);
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  const parts = formatter.formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || '00';
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`;
+}
+
 export function formatAppointmentTimeWithAmPm(
   date: Date,
   timezone?: string | null

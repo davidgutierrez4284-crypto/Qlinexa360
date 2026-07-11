@@ -5,6 +5,7 @@ const client_1 = require("@prisma/client");
 const date_utils_1 = require("../utils/date.utils");
 const prisma = new client_1.PrismaClient();
 const DEFAULT_TIMEZONE = process.env.PRACTICE_TIMEZONE || 'America/Mexico_City';
+const ACTIVE_CONFIRMATION_STATUSES = ['PENDING', 'CONFIRMED', 'RESCHEDULED'];
 class ScheduleService {
     // Obtener configuración de horarios del doctor
     static async getScheduleConfig(doctorId) {
@@ -216,6 +217,121 @@ class ScheduleService {
         }
         catch (error) {
             console.error('Error al actualizar configuración de horarios:', error);
+            return false;
+        }
+    }
+    /** Parsea YYYY-MM-DD o Date a medianoche local. */
+    static parseLocalDateOnly(dateInput) {
+        if (dateInput instanceof Date) {
+            const d = new Date(dateInput);
+            d.setHours(0, 0, 0, 0);
+            return d;
+        }
+        const dateParts = dateInput.split('-');
+        if (dateParts.length === 3) {
+            const d = new Date(parseInt(dateParts[0], 10), parseInt(dateParts[1], 10) - 1, parseInt(dateParts[2], 10));
+            d.setHours(0, 0, 0, 0);
+            return d;
+        }
+        const d = new Date(dateInput);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }
+    /**
+     * Slots reservables para un día según agenda compartida del doctor,
+     * descontando citas activas y eventos ocupados del calendario interno.
+     */
+    static async getBookableSlotsForDate(doctorId, dateInput, options = {}) {
+        try {
+            const tz = options.timezone || DEFAULT_TIMEZONE;
+            const targetDate = this.parseLocalDateOnly(dateInput);
+            const isDateAvailable = await this.isDateAvailable(doctorId, targetDate);
+            if (!isDateAvailable)
+                return [];
+            const scheduleConfig = await this.getScheduleConfig(doctorId);
+            const appointmentDuration = (scheduleConfig === null || scheduleConfig === void 0 ? void 0 : scheduleConfig.appointmentDuration) || 30;
+            const bufferTime = (scheduleConfig === null || scheduleConfig === void 0 ? void 0 : scheduleConfig.bufferTime) || 15;
+            const slotDuration = appointmentDuration * 60000;
+            const availableSlots = await this.generateAvailableSlots(doctorId, targetDate, tz);
+            if (availableSlots.length === 0)
+                return [];
+            const dateStart = new Date(targetDate);
+            dateStart.setHours(0, 0, 0, 0);
+            const dateEnd = new Date(targetDate);
+            dateEnd.setHours(23, 59, 59, 999);
+            const occupiedAppointments = await prisma.appointment.findMany({
+                where: Object.assign(Object.assign({ doctorId }, (options.excludeAppointmentId ? { id: { not: options.excludeAppointmentId } } : {})), { date: { gte: dateStart, lt: dateEnd }, status: { not: 'CANCELLED' }, confirmationStatus: { in: [...ACTIVE_CONFIRMATION_STATUSES] } }),
+                select: { id: true, date: true }
+            });
+            const allEvents = await prisma.internalCalendarEvent.findMany({
+                where: Object.assign(Object.assign({ doctorId }, (options.excludeEventId ? { id: { not: options.excludeEventId } } : {})), { fechaHoraInicio: { gte: dateStart, lte: dateEnd } }),
+                include: {
+                    patient: {
+                        include: {
+                            appointments: {
+                                where: Object.assign(Object.assign({ doctorId }, (options.excludeAppointmentId ? { id: { not: options.excludeAppointmentId } } : {})), { date: { gte: dateStart, lte: dateEnd }, status: { not: 'CANCELLED' }, confirmationStatus: { in: [...ACTIVE_CONFIRMATION_STATUSES] } }),
+                                select: { id: true, date: true, confirmationStatus: true }
+                            }
+                        }
+                    }
+                }
+            });
+            const occupiedEvents = allEvents.filter(event => {
+                var _a;
+                if (!event.patientId || !event.patient)
+                    return true;
+                if ((_a = event.patient.appointments) === null || _a === void 0 ? void 0 : _a.length) {
+                    const eventTime = event.fechaHoraInicio.getTime();
+                    return event.patient.appointments.some(appointment => {
+                        const appointmentTime = new Date(appointment.date).getTime();
+                        return Math.abs(eventTime - appointmentTime) <= 30 * 60 * 1000;
+                    });
+                }
+                return true;
+            });
+            const availableTimes = availableSlots.filter(slot => {
+                const slotEnd = new Date(slot.getTime() + slotDuration);
+                const slotStartWithBuffer = new Date(slot.getTime() - bufferTime * 60000);
+                const slotEndWithBuffer = new Date(slotEnd.getTime() + bufferTime * 60000);
+                const hasAppointmentConflict = occupiedAppointments.some(appointment => {
+                    const appointmentStart = new Date(appointment.date);
+                    const appointmentEnd = new Date(appointmentStart.getTime() + slotDuration);
+                    return ((slotStartWithBuffer < appointmentEnd && slotEndWithBuffer > appointmentStart) ||
+                        (appointmentStart < slotEndWithBuffer && appointmentEnd > slotStartWithBuffer));
+                });
+                if (hasAppointmentConflict)
+                    return false;
+                return !occupiedEvents.some(event => {
+                    const eventStart = new Date(event.fechaHoraInicio);
+                    const eventEnd = new Date(event.fechaHoraFin);
+                    return ((slotStartWithBuffer < eventEnd && slotEndWithBuffer > eventStart) ||
+                        (eventStart < slotEndWithBuffer && eventEnd > slotStartWithBuffer));
+                });
+            });
+            return availableTimes.map(slot => ({
+                id: `slot_${slot.getTime()}`,
+                startTime: slot.toISOString(),
+                endTime: new Date(slot.getTime() + slotDuration).toISOString(),
+                displayTime: (0, date_utils_1.formatAppointmentTime)(slot, tz)
+            }));
+        }
+        catch (error) {
+            console.error('Error al obtener slots reservables:', error);
+            return [];
+        }
+    }
+    /** Verifica si un instante coincide con un slot reservable de la agenda compartida. */
+    static async isSlotBookable(doctorId, slotTime, options = {}) {
+        try {
+            const tz = options.timezone || DEFAULT_TIMEZONE;
+            const { year, month, day } = (0, date_utils_1.getDatePartsInTimezone)(slotTime, tz);
+            const date = new Date(year, month, day);
+            const slots = await this.getBookableSlotsForDate(doctorId, date, options);
+            const slotMs = slotTime.getTime();
+            return slots.some(s => Math.abs(new Date(s.startTime).getTime() - slotMs) < 60000);
+        }
+        catch (error) {
+            console.error('Error al verificar slot reservable:', error);
             return false;
         }
     }

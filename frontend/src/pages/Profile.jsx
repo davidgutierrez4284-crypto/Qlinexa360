@@ -10,8 +10,10 @@ import Loader from '../components/common/Loader';
 import SmallLoader from '../components/common/SmallLoader';
 import PWAInstallGuide from '../components/common/PWAInstallGuide';
 import Tooltip from '../components/common/Tooltip';
-import { InformationCircleIcon } from '@heroicons/react/24/outline';
+import { InformationCircleIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../context/AuthContext';
+import { isReferralsFeatureEnabled } from '../config/featureFlags';
+import MercadoPagoSettings from '../components/payments/MercadoPagoSettings';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -50,6 +52,15 @@ const Profile = () => {
   });
   const [isInviteAssistantModalOpen, setIsInviteAssistantModalOpen] = useState(false);
   const [doctorId, setDoctorId] = useState(null);
+  const [referralInfo, setReferralInfo] = useState(null);
+  const [referralLoading, setReferralLoading] = useState(false);
+  const [isReferralEmailModalOpen, setIsReferralEmailModalOpen] = useState(false);
+  const [referralInviteeEmail, setReferralInviteeEmail] = useState('');
+  const [referralEmailSending, setReferralEmailSending] = useState(false);
+  const [referralTab, setReferralTab] = useState('code');
+  const [referralHistory, setReferralHistory] = useState(null);
+  const [referralHistoryLoading, setReferralHistoryLoading] = useState(false);
+  const [referralLoadError, setReferralLoadError] = useState(null);
 
   // Obtener doctorId al cargar el componente
   useEffect(() => {
@@ -64,15 +75,105 @@ const Profile = () => {
     fetchDoctorId();
   }, []);
 
-  // Cargar detalles de la suscripción
+  // Programa de referidos: código y enlace (solo doctores; build prod lo omite salvo VITE_ENABLE_REFERRALS=true)
+  useEffect(() => {
+    if (!isReferralsFeatureEnabled() || user?.role !== 'DOCTOR') {
+      setReferralInfo(null);
+      return;
+    }
+    const loadReferral = async () => {
+      try {
+        setReferralLoading(true);
+        setReferralLoadError(null);
+        const token = localStorage.getItem('token');
+        const res = await axios.get(getApiUrl('/api/referrals/me'), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setReferralInfo(res.data);
+      } catch (e) {
+        console.error('Error cargando referidos:', e);
+        setReferralInfo(null);
+        const msg =
+          e.response?.data?.message ||
+          (e.code === 'ERR_NETWORK'
+            ? 'Sin conexión al backend (¿API en http://localhost:3000 y servidor backend en marcha?).'
+            : 'No se pudo cargar el código de invitación.');
+        setReferralLoadError(msg);
+      } finally {
+        setReferralLoading(false);
+      }
+    };
+    loadReferral();
+  }, [user?.role, user?.id]);
+
+  useEffect(() => {
+    if (!isReferralsFeatureEnabled() || user?.role !== 'DOCTOR' || referralTab !== 'history') return;
+    const loadHistory = async () => {
+      try {
+        setReferralHistoryLoading(true);
+        const token = localStorage.getItem('token');
+        const res = await axios.get(getApiUrl('/api/referrals/history'), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setReferralHistory(res.data);
+      } catch (e) {
+        console.error('Error historial referidos:', e);
+        toast.error('No se pudo cargar el historial de referidos');
+        setReferralHistory({ items: [], milestones: [] });
+      } finally {
+        setReferralHistoryLoading(false);
+      }
+    };
+    loadHistory();
+  }, [referralTab, user?.role]);
+
+  const buildReferralShareText = () => {
+    if (!referralInfo?.registerUrl || !referralInfo?.referralCode) return '';
+    return `Te invito a Qlinexa360 (plataforma para profesionales de la salud).
+
+Con mi código obtienes 1 mes adicional gratis al activar tu suscripción, más los días de bienvenida de la plataforma (y puedes combinarlo con un código promocional si aplica). Yo acumulo crédito Qlinexa360 del 20% por cada colega con suscripción activa; al juntar 100% recibo 1 mes gratis automático en PayPal.
+
+Tu código: ${referralInfo.referralCode}
+
+Registro:
+${referralInfo.registerUrl}
+
+Condiciones: https://www.qlinexa360.com`;
+  };
+
+  const sendReferralInviteEmailRequest = async () => {
+    const to = referralInviteeEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      toast.error('Introduce un correo electrónico válido');
+      return;
+    }
+    try {
+      setReferralEmailSending(true);
+      const token = localStorage.getItem('token');
+      await axios.post(
+        getApiUrl('/api/referrals/send-invite-email'),
+        { to },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success('Invitación enviada por correo');
+      setIsReferralEmailModalOpen(false);
+      setReferralInviteeEmail('');
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'No se pudo enviar el correo');
+    } finally {
+      setReferralEmailSending(false);
+    }
+  };
+
+  // Cargar detalles de la suscripción (y al volver de reanudar suscripción / promo)
   useEffect(() => {
     const loadSubscriptionDetails = async () => {
       if (user?.role !== 'DOCTOR') return;
-      
+
       try {
         setLoadingSubscription(true);
         const token = localStorage.getItem('token');
-        const response = await axios.get('/api/subscriptions/details', {
+        const response = await axios.get(getApiUrl('/api/subscriptions/details'), {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -83,12 +184,32 @@ const Profile = () => {
         }
       } catch (error) {
         console.error('Error cargando detalles de suscripción:', error);
+        const st = error.response?.status;
+        const msg = error.response?.data?.message || error.response?.data?.error;
+        if (st === 404) {
+          setSubscriptionDetails({
+            status: 'NO_SUBSCRIPTION',
+            isLifetime: false,
+            hint:
+              msg ||
+              'No hay fila de suscripción en la base de datos para este doctor. En pruebas suele faltar si el usuario se creó sin pasar por el registro con PayPal.',
+          });
+        } else {
+          setSubscriptionDetails({
+            status: 'SUBSCRIPTION_LOAD_ERROR',
+            isLifetime: false,
+            hint: msg || error.message || 'Error al consultar la suscripción',
+          });
+        }
       } finally {
         setLoadingSubscription(false);
       }
     };
 
     loadSubscriptionDetails();
+    const onSubscriptionMaybeChanged = () => loadSubscriptionDetails();
+    window.addEventListener('userUpdated', onSubscriptionMaybeChanged);
+    return () => window.removeEventListener('userUpdated', onSubscriptionMaybeChanged);
   }, [user]);
 
   // Buscar asistentes
@@ -403,7 +524,7 @@ const Profile = () => {
         setCancelReason('');
         setOtherReason('');
         // Recargar detalles de la suscripción para actualizar el estado
-        const detailsResponse = await axios.get('/api/subscriptions/details', {
+        const detailsResponse = await axios.get(getApiUrl('/api/subscriptions/details'), {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -438,7 +559,7 @@ const Profile = () => {
       if (response.data.success) {
         toast.success('Tu suscripción ha sido reanudada exitosamente. Los cargos mensuales se realizarán normalmente.');
         // Recargar detalles de la suscripción para actualizar el estado
-        const detailsResponse = await axios.get('/api/subscriptions/details', {
+        const detailsResponse = await axios.get(getApiUrl('/api/subscriptions/details'), {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -472,7 +593,7 @@ const Profile = () => {
         setIsCancelModalOpen(false);
         // Recargar detalles de la suscripción
         const token = localStorage.getItem('token');
-        const detailsResponse = await axios.get('/api/subscriptions/details', {
+        const detailsResponse = await axios.get(getApiUrl('/api/subscriptions/details'), {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -690,6 +811,269 @@ const Profile = () => {
           </div>
         </div>
 
+        {user && user.role === 'DOCTOR' && isReferralsFeatureEnabled() && (
+          <div id="referral-section" className="mt-8">
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-4 py-5 sm:p-6">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  Programa de referidos
+                </h3>
+                <div className="mt-4 flex gap-1 border-b border-gray-200" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={referralTab === 'code'}
+                    onClick={() => setReferralTab('code')}
+                    className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-md ${
+                      referralTab === 'code'
+                        ? 'border-blue-600 text-blue-700 bg-white'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Código referidos
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={referralTab === 'history'}
+                    onClick={() => setReferralTab('history')}
+                    className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors rounded-t-md ${
+                      referralTab === 'history'
+                        ? 'border-blue-600 text-blue-700 bg-white'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Historial de referidos
+                  </button>
+                </div>
+
+                {referralTab === 'code' && (
+                  <>
+                    <p className="mt-4 text-sm text-gray-500">
+                      Comparte código o enlace con otro profesional de la salud.
+                    </p>
+                    <ul className="mt-2 text-sm text-gray-600 list-disc pl-5 space-y-1.5">
+                      <li>
+                        <span className="font-medium text-gray-800">Tú:</span> <strong>+20%</strong> por colega con pago
+                        calificado (PayPal recurrente o lifetime). <strong>5</strong> = <strong>100%</strong> ={' '}
+                        <strong>1 mes gratis</strong> en PayPal; lo que pase de 100% suma al mes siguiente.
+                      </li>
+                      <li>
+                        <span className="font-medium text-gray-800">Tu colega:</span> <strong>+1 mes</strong> y{' '}
+                        <strong>+15 días</strong> al registrarse; acumulable con promo vigente.
+                      </li>
+                    </ul>
+                    {referralLoading && (
+                      <p className="mt-4 text-sm text-gray-500">Cargando tu código de invitación…</p>
+                    )}
+                    {!referralLoading && referralInfo && (
+                      <div className="mt-5 border-t border-gray-200 pt-5 space-y-4">
+                        <div>
+                          <span className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
+                            Tu código
+                          </span>
+                          <p className="mt-1 font-mono text-lg font-semibold text-blue-900 tracking-wider">
+                            {referralInfo.referralCode}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <a
+                            href={`https://wa.me/?text=${encodeURIComponent(buildReferralShareText())}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+                          >
+                            Compartir por WhatsApp
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => setIsReferralEmailModalOpen(true)}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium text-white bg-slate-700 hover:bg-slate-800"
+                          >
+                            <EnvelopeIcon className="h-5 w-5 shrink-0" aria-hidden />
+                            Enviar invitación por correo
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500 break-all">
+                          <span className="font-medium text-gray-600">Enlace:</span> {referralInfo.registerUrl}
+                        </p>
+                        {(typeof referralInfo.referralCreditPercent === 'number' &&
+                          referralInfo.referralCreditPercent > 0) ||
+                        (typeof referralInfo.qualifiedReferralsCount === 'number' &&
+                          referralInfo.qualifiedReferralsCount > 0) ||
+                        (typeof referralInfo.referralFreeMonthsGranted === 'number' &&
+                          referralInfo.referralFreeMonthsGranted > 0) ? (
+                          <div className="text-sm text-emerald-900 bg-emerald-50 border border-emerald-100 rounded-md px-3 py-2 space-y-1">
+                            <p>
+                              <span className="font-medium">Crédito</span> (100%):{' '}
+                              <strong>{referralInfo.referralCreditPercent ?? 0}%</strong> · +20% por acreditación.
+                            </p>
+                            {typeof referralInfo.qualifiedReferralsCount === 'number' && (
+                              <p>
+                                Acreditados: <strong>{referralInfo.qualifiedReferralsCount}</strong>
+                              </p>
+                            )}
+                            {typeof referralInfo.referralFreeMonthsGranted === 'number' &&
+                              referralInfo.referralFreeMonthsGranted > 0 && (
+                                <p>
+                                  Meses gratis (programa):{' '}
+                                  <strong>{referralInfo.referralFreeMonthsGranted}</strong>
+                                  {referralInfo.referralBenefitPeriodHint ? (
+                                    <span className="block text-xs font-normal text-emerald-900/90 mt-1 leading-snug">
+                                      {referralInfo.referralBenefitPeriodHint}
+                                    </span>
+                                  ) : null}
+                                </p>
+                              )}
+                            {typeof referralInfo.referralsNeededApproxForNextMonth === 'number' &&
+                              referralInfo.referralsNeededApproxForNextMonth > 0 && (
+                                <p className="text-xs text-emerald-900 leading-snug">
+                                  Faltan <strong>{referralInfo.referralsNeededApproxForNextMonth}</strong>{' '}
+                                  {referralInfo.referralsNeededApproxForNextMonth === 1
+                                    ? 'acreditación'
+                                    : 'acreditaciones'}{' '}
+                                  (+20% c/u) para el <strong>próximo mes sin cargo</strong>.
+                                </p>
+                              )}
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+                    {!referralLoading && !referralInfo && (
+                      <div className="mt-4 space-y-2">
+                        <p className="text-sm text-amber-700">
+                          No se pudo cargar el código de invitación. Intenta actualizar la página o contacta a soporte.
+                        </p>
+                        {referralLoadError && (
+                          <p className="text-xs text-gray-600 bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
+                            {referralLoadError}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {referralTab === 'history' && (
+                  <div className="mt-4">
+                    <p className="text-sm text-gray-500 mb-3">
+                      Por fecha de alta (reciente primero). <strong>Pendiente</strong>: sin +20% aún.{' '}
+                      <strong>Acreditado</strong>: +20% al saldo. <strong>5</strong> = 100% = 1 mes sin cargo (PayPal).
+                    </p>
+                    {!referralHistoryLoading && referralHistory?.summary && (
+                      <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">
+                        <p className="font-semibold text-slate-900 mb-1.5">Resumen</p>
+                        <ul className="list-disc pl-5 space-y-1 text-slate-700">
+                          <li>
+                            Acreditados: <strong>{referralHistory.summary.qualifiedReferrals}</strong>
+                          </li>
+                          <li>
+                            Saldo: <strong>{referralHistory.summary.creditBalancePercent}%</strong> (
+                            {referralHistory.summary.creditPercentPerReferral}%/ref. ·{' '}
+                            {referralHistory.summary.creditsPerFreeMonth}% = 1 mes)
+                          </li>
+                          <li>
+                            Meses gratis aplicados: <strong>{referralHistory.summary.freeMonthsGrantedAuto}</strong>
+                          </li>
+                        </ul>
+                      </div>
+                    )}
+                    {!referralHistoryLoading &&
+                      referralHistory?.milestones &&
+                      referralHistory.milestones.length > 0 && (
+                        <div className="space-y-3 mb-4">
+                          {referralHistory.milestones.map((m) => (
+                            <div
+                              key={m.freeMonthIndex}
+                              className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950"
+                            >
+                              <p className="font-semibold">
+                                Mes sin cargo por estos <strong>{m.referrers.length}</strong> referidos acreditados.
+                              </p>
+                              <p className="mt-1 text-emerald-900/95">
+                                100% alcanzado en: <strong className="text-emerald-950">{m.awardedMonthLabel}</strong>
+                              </p>
+                              {m.freeMonthIndex > 1 && (
+                                <p className="mt-1 text-xs text-emerald-800">
+                                  Beneficio #{m.freeMonthIndex} del programa.
+                                </p>
+                              )}
+                              <ul className="mt-2 list-disc pl-5 text-emerald-900">
+                                {m.referrers.map((r, idx) => (
+                                  <li key={`${m.freeMonthIndex}-${idx}`}>
+                                    {r.displayName}{' '}
+                                    <span className="text-emerald-800/90">({r.emailMasked})</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    {referralHistoryLoading && (
+                      <p className="text-sm text-gray-500">Cargando historial…</p>
+                    )}
+                    {!referralHistoryLoading &&
+                      referralHistory?.items &&
+                      referralHistory.items.length === 0 && (
+                        <p className="text-sm text-gray-600">Aún no hay colegas registrados con tu código.</p>
+                      )}
+                    {!referralHistoryLoading &&
+                      referralHistory?.items &&
+                      referralHistory.items.length > 0 && (
+                        <div className="overflow-x-auto -mx-1">
+                          <table className="min-w-full text-sm text-left">
+                            <thead>
+                              <tr className="text-gray-500 border-b border-gray-200">
+                                <th className="pr-3 py-2 font-medium">Colega</th>
+                                <th className="pr-3 py-2 font-medium whitespace-nowrap">Alta</th>
+                                <th className="pr-3 py-2 font-medium">Suscripción</th>
+                                <th className="pr-3 py-2 font-medium whitespace-nowrap">Crédito</th>
+                                <th className="py-2 font-medium min-w-[9rem]">Nota</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {referralHistory.items.map((it) => (
+                                <tr key={it.referredDoctorId} className="border-b border-gray-100 align-top">
+                                  <td className="py-2 pr-3">
+                                    <div className="font-medium text-gray-900">{it.displayName}</div>
+                                    <div className="text-xs text-gray-500">{it.emailMasked}</div>
+                                  </td>
+                                  <td className="py-2 pr-3 whitespace-nowrap text-gray-700">
+                                    {new Date(it.registeredAt).toLocaleDateString('es-MX', {
+                                      day: 'numeric',
+                                      month: 'short',
+                                      year: 'numeric',
+                                    })}
+                                  </td>
+                                  <td className="py-2 pr-3 text-gray-700">{it.subscriptionStatus || '—'}</td>
+                                  <td className="py-2 pr-3">
+                                    {it.discountStatus === 'credited' ? (
+                                      <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
+                                        Acreditado (+{it.percentGranted ?? 20}% crédito)
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                                        Pendiente
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-2 text-gray-600 text-xs sm:text-sm">{it.billingCycleHint}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {user && user.role === 'DOCTOR' && <MercadoPagoSettings />}
+
                 {/* Sección de Suscripción - Solo para doctores */}
         {user && user.role === 'DOCTOR' && (
           <div id="subscription-section" className="mt-8">
@@ -704,22 +1088,71 @@ const Profile = () => {
                      <div className="flex-1">
                        <div className="mb-3">
                          <p className="text-sm text-gray-500">
-                           Estado actual: {subscriptionDetails?.status === 'CANCELLED' ? (
+                           Estado actual:{' '}
+                           {subscriptionDetails?.status === 'NO_SUBSCRIPTION' ? (
+                             <span className="text-gray-600 font-medium">Sin suscripción en base de datos</span>
+                           ) : subscriptionDetails?.status === 'SUBSCRIPTION_LOAD_ERROR' ? (
+                             <span className="text-amber-700 font-medium">No se pudieron cargar los datos</span>
+                           ) : subscriptionDetails?.status === 'CANCELLED' ? (
                              <span className="text-red-600 font-medium">Cancelada</span>
+                           ) : subscriptionDetails?.status === 'EXPIRED' ? (
+                             <span className="text-amber-700 font-medium">Vencida (renovación requerida)</span>
                            ) : (
                              <span className="text-green-600 font-medium">Activa</span>
                            )}
                          </p>
-                         {subscriptionDetails?.status !== 'CANCELLED' && (
+                         {subscriptionDetails?.status === 'ACTIVE' && subscriptionDetails?.isLifetime && (
                            <p className="text-xs text-gray-400 mt-1">
-                             Todos los cargos son mensuales consecutivos a través de PayPal
+                             Acceso de por vida con código promocional — sin cargos recurrentes por PayPal
                            </p>
                          )}
+                         {subscriptionDetails?.status === 'ACTIVE' && !subscriptionDetails?.isLifetime && (
+                           <p className="text-xs text-gray-400 mt-1">
+                             Cargo mensual recurrente vía PayPal
+                           </p>
+                         )}
+                         {subscriptionDetails?.status === 'ACTIVE' &&
+                           !subscriptionDetails?.isLifetime &&
+                           subscriptionDetails?.scheduledBenefitPauseActive && (
+                             <p className="text-xs text-emerald-800 mt-1 font-medium">
+                               Periodo de beneficio (mes gratis / referidos): sin cargo en PayPal hasta la fecha de
+                               reanudación. Después vuelve el cobro normal ({subscriptionDetails.standardMonthlyPriceLabel}
+                               ).
+                             </p>
+                           )}
+                         {subscriptionDetails?.paypalPaymentIssueSuspected &&
+                           subscriptionDetails?.status === 'ACTIVE' &&
+                           !subscriptionDetails?.isLifetime && (
+                             <p className="text-xs text-amber-700 mt-1 font-medium">
+                               PayPal indica la suscripción como suspendida (p. ej. problema con el método de pago).
+                               Actualiza el pago en PayPal para evitar interrupciones.
+                             </p>
+                           )}
                        </div>
                        {loadingSubscription ? (
                          <p className="text-sm text-gray-500">Cargando información de suscripción...</p>
                        ) : subscriptionDetails ? (
-                         subscriptionDetails.status === 'CANCELLED' ? (
+                         subscriptionDetails.status === 'NO_SUBSCRIPTION' ? (
+                           <div className="bg-gray-50 border border-gray-200 rounded-md p-4 space-y-2">
+                             <p className="text-sm text-gray-800">
+                               No hay registro de suscripción para tu perfil de doctor. Por eso no se muestran fechas de
+                               facturación ni próximo cargo.
+                             </p>
+                             <p className="text-xs text-gray-600">{subscriptionDetails.hint}</p>
+                             <button
+                               type="button"
+                               onClick={() => navigate('/dashboard/resume-subscription')}
+                               className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                             >
+                               Ir a suscripción / pago
+                             </button>
+                           </div>
+                         ) : subscriptionDetails.status === 'SUBSCRIPTION_LOAD_ERROR' ? (
+                           <div className="bg-amber-50 border border-amber-200 rounded-md p-4">
+                             <p className="text-sm text-amber-900 font-medium">No se pudo obtener la información de suscripción.</p>
+                             <p className="text-xs text-amber-800 mt-1">{subscriptionDetails.hint}</p>
+                           </div>
+                         ) : subscriptionDetails.status === 'CANCELLED' ? (
                            <div className="bg-red-50 border border-red-200 rounded-md p-4">
                              <p className="text-sm font-medium text-red-800">
                                Tu suscripción ha sido cancelada. No se realizarán más cargos.
@@ -728,34 +1161,122 @@ const Profile = () => {
                                Puedes seguir consultando tus expedientes clínicos por hasta 5 años conforme a la NOM-004-SSA3-2012.
                              </p>
                            </div>
+                         ) : subscriptionDetails.status === 'EXPIRED' ? (
+                           <div className="space-y-3">
+                             <div className="bg-amber-50 border border-amber-200 rounded-md p-4">
+                               <p className="text-sm font-medium text-amber-900">
+                                 Según el registro de tu suscripción, el periodo actual ya venció. Por eso la barra superior
+                                 pide renovar, y el acceso de edición se limita hasta completar un nuevo pago.
+                               </p>
+                               <p className="text-xs text-amber-800 mt-2">
+                                 Si acabas de pagar en PayPal, puede tardar unos minutos en reflejarse, o hace falta
+                                 alinear el periodo con PayPal. Si crees que es un error, contacta soporte con tu email de
+                                 cuenta.
+                               </p>
+                             </div>
+                             <button
+                               type="button"
+                               onClick={() => navigate('/dashboard/resume-subscription')}
+                               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-amber-600 hover:bg-amber-700"
+                             >
+                               Ir a pagar / renovar
+                             </button>
+                           </div>
+                         ) : subscriptionDetails.isLifetime ? (
+                           <div className="bg-emerald-50 border border-emerald-200 rounded-md p-4 space-y-2">
+                             <p className="text-sm font-medium text-emerald-900">
+                               Tu acceso está activo con un <strong>código de por vida</strong>. No hay fechas de
+                               &quot;próximo cargo&quot; en PayPal porque no aplica suscripción recurrente.
+                             </p>
+                             <p className="text-xs text-emerald-800">
+                               Vigencia registrada en la plataforma hasta el{' '}
+                               {subscriptionDetails.endDate
+                                 ? new Date(subscriptionDetails.endDate).toLocaleDateString('es-ES', {
+                                     day: 'numeric',
+                                     month: 'long',
+                                     year: 'numeric'
+                                   })
+                                 : '—'}
+                               .
+                             </p>
+                           </div>
                          ) : (
                            <div className="space-y-2">
                              {subscriptionDetails.freeMonthUsed && subscriptionDetails.freeMonthEndDate ? (
                                <>
                                  <div className="bg-green-50 border border-green-200 rounded-md p-3">
                                    <p className="text-sm font-medium text-gray-700">
-                                     Próximo cargo: <span className="text-green-700">{new Date(subscriptionDetails.freeMonthEndDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                     Sin cargo en la app hasta:{' '}
+                                     <span className="text-green-700">
+                                       {new Date(subscriptionDetails.freeMonthEndDate).toLocaleDateString('es-ES', {
+                                         day: 'numeric',
+                                         month: 'long',
+                                         year: 'numeric',
+                                       })}
+                                     </span>
                                    </p>
                                    <p className="text-xs text-green-600 font-medium mt-1">
-                                     Gratuito para que permanezcas en Qlinexa360
+                                     Periodo gratuito o beneficio registrado en Qlinexa360 (no es el extracto de PayPal).
                                    </p>
                                  </div>
                                  <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
-                                   <p className="text-sm font-medium text-gray-700">
-                                     Siguiente cargo: <span className="text-gray-900">{new Date(subscriptionDetails.nextChargeDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                   <p className="text-sm text-gray-800">
+                                     <span className="font-medium">Próximo cargo</span>
+                                     {subscriptionDetails.nextChargeSource === 'paypal'
+                                       ? ' (PayPal)'
+                                       : ' (estimada)'}
+                                     :{' '}
+                                     <span className="font-semibold text-gray-900">
+                                       {new Date(subscriptionDetails.nextChargeDate).toLocaleDateString('es-ES', {
+                                         day: 'numeric',
+                                         month: 'long',
+                                         year: 'numeric',
+                                       })}
+                                     </span>
                                    </p>
                                    <p className="text-xs text-gray-500 mt-1">
-                                     Cargo mensual a través de PayPal
+                                     {subscriptionDetails.nextChargeSource === 'paypal'
+                                       ? 'Mensual vía PayPal; fecha según tu cuenta.'
+                                       : 'Mensual vía PayPal; fecha estimada en la app.'}
+                                   </p>
+                                   <p className="text-sm text-gray-800 mt-2">
+                                     <span className="font-medium">Importe en ese cobro:</span>{' '}
+                                     <span className="font-semibold text-gray-900">
+                                       {subscriptionDetails.nextBillingPeriodAmountLabel ||
+                                         subscriptionDetails.standardMonthlyPriceLabel ||
+                                         '$499 MXN/mes IVA incluido'}
+                                     </span>
                                    </p>
                                  </div>
                                </>
                              ) : (
                                <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
-                                 <p className="text-sm font-medium text-gray-700">
-                                   Próximo cargo: <span className="text-gray-900">{new Date(subscriptionDetails.nextChargeDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                 <p className="text-sm text-gray-800">
+                                   <span className="font-medium">Próximo cargo</span>
+                                   {subscriptionDetails.nextChargeSource === 'paypal'
+                                     ? ' (PayPal)'
+                                     : ' (estimada)'}
+                                   :{' '}
+                                   <span className="font-semibold text-gray-900">
+                                     {new Date(subscriptionDetails.nextChargeDate).toLocaleDateString('es-ES', {
+                                       day: 'numeric',
+                                       month: 'long',
+                                       year: 'numeric',
+                                     })}
+                                   </span>
                                  </p>
                                  <p className="text-xs text-gray-500 mt-1">
-                                   Cargo mensual a través de PayPal
+                                   {subscriptionDetails.nextChargeSource === 'paypal'
+                                     ? 'Mensual vía PayPal; fecha según tu cuenta.'
+                                     : 'Mensual vía PayPal; fecha estimada en la app.'}
+                                 </p>
+                                 <p className="text-sm text-gray-800 mt-2">
+                                   <span className="font-medium">Importe en ese cobro:</span>{' '}
+                                   <span className="font-semibold text-gray-900">
+                                     {subscriptionDetails.nextBillingPeriodAmountLabel ||
+                                       subscriptionDetails.standardMonthlyPriceLabel ||
+                                       '$499 MXN/mes IVA incluido'}
+                                   </span>
                                  </p>
                                </div>
                              )}
@@ -779,7 +1300,16 @@ const Profile = () => {
                            </svg>
                            {isLoading ? 'Reanudando...' : 'Reanudar suscripción'}
                          </button>
-                       ) : (
+                       ) : subscriptionDetails?.status === 'NO_SUBSCRIPTION' ||
+                         subscriptionDetails?.status === 'SUBSCRIPTION_LOAD_ERROR' ? null : subscriptionDetails?.status === 'EXPIRED' ? (
+                         <button
+                           type="button"
+                           onClick={() => navigate('/dashboard/resume-subscription')}
+                           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-amber-600 hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500"
+                         >
+                           Renovar suscripción
+                         </button>
+                       ) : subscriptionDetails?.isLifetime ? null : (
                          <button
                            onClick={async () => {
                              setIsCancelModalOpen(true);
@@ -787,7 +1317,7 @@ const Profile = () => {
                              try {
                                setIsCheckingFreeMonth(true);
                                const token = localStorage.getItem('token');
-                               const response = await axios.get('/api/subscriptions/check-free-month', {
+                               const response = await axios.get(getApiUrl('/api/subscriptions/check-free-month'), {
                                  headers: {
                                    'Authorization': `Bearer ${token}`
                                  }
@@ -813,7 +1343,7 @@ const Profile = () => {
                        )}
                      </div>
                    </div>
-                   {subscriptionDetails?.status !== 'CANCELLED' && (
+                   {subscriptionDetails?.status === 'ACTIVE' && !subscriptionDetails?.isLifetime && (
                      <p className="mt-2 text-sm text-gray-500">
                        Puedes cancelar tu suscripción en cualquier momento. Los expedientes clínicos que hayas creado permanecerán accesibles por 5 años conforme a la NOM-004-SSA3-2012.
                      </p>
@@ -1079,6 +1609,66 @@ const Profile = () => {
             </div>
           </div>
         </Dialog>
+        )}
+
+        {isReferralsFeatureEnabled() && isReferralEmailModalOpen && (
+          <Dialog
+            open={isReferralEmailModalOpen}
+            onClose={() => {
+              if (!referralEmailSending) {
+                setIsReferralEmailModalOpen(false);
+                setReferralInviteeEmail('');
+              }
+            }}
+            className="fixed inset-0 z-20 overflow-y-auto"
+          >
+            <div className="flex items-center justify-center min-h-screen px-4">
+              <Dialog.Overlay className="fixed inset-0 bg-black/40" />
+              <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                <Dialog.Title className="text-lg font-semibold text-gray-900">
+                  Enviar invitación por correo
+                </Dialog.Title>
+                <p className="mt-2 text-sm text-gray-600">
+                  Tu colega recibirá un correo con diseño profesional de Qlinexa360: beneficios del programa, tu código y
+                  un botón para registrarse.
+                </p>
+                <label htmlFor="referral-invitee-email" className="mt-4 block text-sm font-medium text-gray-700">
+                  Correo del colega
+                </label>
+                <input
+                  id="referral-invitee-email"
+                  type="email"
+                  autoComplete="email"
+                  value={referralInviteeEmail}
+                  onChange={(e) => setReferralInviteeEmail(e.target.value)}
+                  placeholder="colega@ejemplo.com"
+                  disabled={referralEmailSending}
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100"
+                />
+                <div className="mt-6 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    disabled={referralEmailSending}
+                    onClick={() => {
+                      setIsReferralEmailModalOpen(false);
+                      setReferralInviteeEmail('');
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={referralEmailSending}
+                    onClick={sendReferralInviteEmailRequest}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {referralEmailSending ? 'Enviando…' : 'Enviar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Dialog>
         )}
 
         {/* Modal para invitar asistente */}

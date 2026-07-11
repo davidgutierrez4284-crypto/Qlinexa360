@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Consentimientos — Pre-consulta Qlinexa360</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; line-height: 1.5; color: #333; background: white; }
+        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+        .cover { text-align: center; margin-bottom: 28px; padding-bottom: 16px; border-bottom: 2px solid #2563eb; }
+        .cover h1 { font-size: 20px; color: #1e40af; }
+        .cover p { font-size: 12px; color: #64748b; margin-top: 6px; }
+        .doc-section { margin-bottom: 32px; page-break-inside: avoid; }
+        .doc-section h2 { font-size: 14px; color: #1e40af; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; }
+        .doc-content { font-size: 10px; }
+        .doc-content p { margin-bottom: 8px; }
+        .doc-content ul { margin: 6px 0 6px 18px; }
+        .page-break { page-break-after: always; }
+        .signature-block { margin-top: 24px; padding: 16px; background: #f0f9ff; border: 2px solid #2563eb; border-radius: 8px; }
+        .signature-block h3 { font-size: 13px; color: #1e40af; margin-bottom: 10px; }
+        .signature-block p { margin: 5px 0; font-size: 11px; }
+        .signature-block .label { font-weight: bold; color: #1e3a8a; }
+        .accept-list { margin: 10px 0 0 0; padding-left: 18px; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="cover">
+            <h1>Consentimientos — Pre-consulta</h1>
+            <p>Plataforma Qlinexa360 · Documento firmado digitalmente por el paciente</p>
+        </div>
+
+        {{#each documents}}
+        <div class="doc-section">
+            <h2>{{title}}</h2>
+            <div class="doc-content">{{{content}}}</div>
+        </div>
+        {{#unless @last}}<div class="page-break"></div>{{/unless}}
+        {{/each}}
+
+        <div class="signature-block">
+            <h3>Datos de firma y aceptación</h3>
+            <p>El paciente manifestó su consentimiento expreso marcando las casillas correspondientes en el formulario de pre-consulta:</p>
+            <ul class="accept-list">
+                <li>Aviso de privacidad</li>
+                <li>Autorización de tratamiento de datos de salud</li>
+                <li>Términos y contrato de uso de la plataforma</li>
+            </ul>
+            <p style="margin-top: 14px;"><span class="label">Firma digital (nombre completo):</span> {{signature}}</p>
+            <p><span class="label">Nombre del paciente:</span> {{fullName}}</p>
+            <p><span class="label">Correo electrónico:</span> {{email}}</p>
+            <p><span class="label">Teléfono:</span> {{phone}}</p>
+            <p><span class="label">Fecha y hora de firma:</span> {{timestamp}}</p>
+            <p><span class="label">Marca de tiempo (ISO):</span> {{isoTimestamp}}</p>
+            <p><span class="label">Dirección IP:</span> {{ipAddress}}</p>
+        </div>
+    </div>
+</body>
+</html>

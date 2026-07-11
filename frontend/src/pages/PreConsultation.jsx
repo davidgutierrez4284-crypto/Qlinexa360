@@ -16,7 +16,8 @@ import FileUpload from '../components/medical/FileUpload';
 import LinkManager from '../components/medical/LinkManager';
 
 const PreConsultation = () => {
-  const { token } = useParams();
+  const { token, segment } = useParams();
+  const effectiveToken = token || segment;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [completing, setCompleting] = useState(false);
@@ -61,7 +62,7 @@ const PreConsultation = () => {
     const loadPreConsultation = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`/api/pre-consultations/token/${token}`);
+        const response = await axios.get(`/api/pre-consultations/token/${effectiveToken}`);
         
         if (response.data.success) {
           setPreConsultation(response.data.preConsultation);
@@ -117,10 +118,10 @@ const PreConsultation = () => {
       }
     };
 
-    if (token) {
+    if (effectiveToken) {
       loadPreConsultation();
     }
-  }, [token]);
+  }, [effectiveToken]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -152,7 +153,7 @@ const PreConsultation = () => {
               formData.append('file', file);
               formData.append('category', category);
               
-              const uploadResponse = await axios.post(`/api/pre-consultations/token/${token}/upload`, formData, {
+              const uploadResponse = await axios.post(`/api/pre-consultations/token/${effectiveToken}/upload`, formData, {
                 headers: {
                   'Content-Type': 'multipart/form-data'
                 }
@@ -205,7 +206,7 @@ const PreConsultation = () => {
         ...formData
       };
       
-      await axios.put(`/api/pre-consultations/token/${token}/save`, {
+      await axios.put(`/api/pre-consultations/token/${effectiveToken}/save`, {
         formData: dataToSave
       });
       
@@ -259,7 +260,7 @@ const PreConsultation = () => {
               formData.append('file', file);
               formData.append('category', category);
               
-              const uploadResponse = await axios.post(`/api/pre-consultations/token/${token}/upload`, formData, {
+              const uploadResponse = await axios.post(`/api/pre-consultations/token/${effectiveToken}/upload`, formData, {
                 headers: {
                   'Content-Type': 'multipart/form-data'
                 }
@@ -302,7 +303,7 @@ const PreConsultation = () => {
         ...formData
       };
       
-      const response = await axios.post(`/api/pre-consultations/token/${token}/complete`, {
+      const response = await axios.post(`/api/pre-consultations/token/${effectiveToken}/complete`, {
         formData: dataToComplete
       });
       
@@ -365,6 +366,7 @@ const PreConsultation = () => {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Pre-Consulta Inicial</h1>
               <p className="text-gray-600 mt-1">Completa tu información antes de tu cita</p>
+              <p className="text-sm font-semibold text-blue-800 mt-2">Qlinexa360</p>
             </div>
             {isCompleted && (
               <div className="flex items-center text-green-600">

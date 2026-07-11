@@ -21,7 +21,7 @@ import {
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { subscriptionAccess } from '../middlewares/subscription.middleware';
 import { upload } from '../middlewares/upload.middleware';
-import { uploadInvoice, getInvoices, deleteInvoice, sendInvoiceByEmail } from '../controllers/invoice.controller';
+import { uploadInvoice, getInvoices, deleteInvoice, sendInvoiceByEmail, downloadInvoiceFile } from '../controllers/invoice.controller';
 import { ReminderController } from '../controllers/reminder.controller';
 import { AssistantMiddleware } from '../middlewares/assistant.middleware';
 
@@ -86,10 +86,10 @@ router.post('/register', upload.fields([
 ]), registerDoctor);
 
 // --- RUTA PARA LA BÚSQUEDA DE PACIENTES ---
-router.get('/search-patients', authMiddleware(['DOCTOR']), searchMyPatients);
+router.get('/search-patients', authMiddleware(['DOCTOR', 'ASISTENTE']), searchMyPatients);
 
-// --- RUTA PARA LA BÚSQUEDA DE PROFESIONALES DE LA SALUD (solo rol DOCTOR, colaboración en expedientes) ---
-router.get('/', authMiddleware(['DOCTOR']), searchHealthProfessionals);
+// --- Búsqueda de PROFESIONALES (doctores) para colaboración / segunda opinión (médico o paciente) ---
+router.get('/', authMiddleware(['DOCTOR', 'PATIENT']), searchHealthProfessionals);
 
 // --- RUTA PARA CREAR UN PACIENTE ---
 router.post('/patients', authMiddleware(['DOCTOR', 'ASISTENTE']), AssistantMiddleware.checkAssistantModulePermission('clinicalHistory'), createPatient);
@@ -114,6 +114,13 @@ router.post('/invoices', authMiddleware(['DOCTOR', 'ASISTENTE']), assistantBilli
 
 // Obtener facturas (doctor ve todas, paciente solo las suyas)
 router.get('/invoices', authMiddleware(['DOCTOR', 'ASISTENTE', 'PATIENT']), assistantBillingOnly, getInvoices);
+
+router.get(
+  '/invoices/:id/file/:type',
+  authMiddleware(['DOCTOR', 'ASISTENTE', 'PATIENT']),
+  assistantBillingOnly,
+  downloadInvoiceFile
+);
 
 // Eliminar factura (solo doctor dueño)
 router.delete('/invoices/:id', authMiddleware(['DOCTOR', 'ASISTENTE']), assistantBillingOnly, deleteInvoice);

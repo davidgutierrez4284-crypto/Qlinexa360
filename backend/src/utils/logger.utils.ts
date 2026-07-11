@@ -107,11 +107,20 @@ class SecurityLogger {
     const stream = this.getStream(filename);
     stream.write(formattedLog + '\n');
     
-    // También escribir a consola para desarrollo
-    if (process.env.NODE_ENV === 'development') {
-      const consoleMethod = entry.level === LogLevel.ERROR ? 'error' : 
-                           entry.level === LogLevel.WARN ? 'warn' : 
-                           entry.level === LogLevel.SECURITY ? 'warn' : 'log';
+    const shouldMirrorToConsole =
+      process.env.NODE_ENV === 'development' ||
+      (process.env.NODE_ENV === 'production' &&
+        (entry.level === LogLevel.ERROR ||
+          entry.level === LogLevel.WARN ||
+          entry.level === LogLevel.SECURITY));
+
+    if (shouldMirrorToConsole) {
+      const consoleMethod =
+        entry.level === LogLevel.ERROR
+          ? 'error'
+          : entry.level === LogLevel.WARN || entry.level === LogLevel.SECURITY
+            ? 'warn'
+            : 'log';
       console[consoleMethod](formattedLog);
     }
     

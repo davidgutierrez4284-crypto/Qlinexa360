@@ -560,13 +560,13 @@ class AgendaPacientesController {
     }
     // Crear cita desde el link público
     static async createAppointment(req, res) {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d, _e, _f;
         try {
             console.log('=== INICIO createAppointment ===');
             console.log('Params:', req.params);
             console.log('Body:', req.body);
             const { doctorUsername } = req.params;
-            const { slotId, patientName, patientEmail, patientPhone, motivoConsulta } = req.body;
+            const { slotId, patientName, patientEmail, patientPhone, motivoConsulta, clinicalIntakeToken } = req.body;
             if (!slotId || !patientName || !patientEmail || !patientPhone || !motivoConsulta) {
                 console.error('❌ Faltan campos requeridos');
                 return res.status(400).json({
@@ -700,35 +700,73 @@ class AgendaPacientesController {
                 }
             });
             console.log('✅ Appointment creado:', appointment.id);
-            // Generar automáticamente pre-consulta si es la primera cita del paciente con este doctor
-            let preConsultationToken = null;
-            try {
-                console.log('Intentando crear pre-consulta automática para appointment:', appointment.id);
-                const preConsultationModule = await Promise.resolve().then(() => __importStar(require('./preConsultation.controller')));
-                preConsultationToken = await preConsultationModule.createPreConsultationForAppointment(appointment.id);
-                if (preConsultationToken) {
-                    console.log('Pre-consulta creada exitosamente');
+            // Ligar la pre-consulta (ClinicalIntake) con la cita recién agendada, cuando el paciente
+            // llegó a la agenda desde el flujo de pre-consulta. El enlace es duro (appointmentId) para
+            // que el doctor vea cita y pre-consulta correlacionadas en el módulo de Pre-consultas.
+            const intakeToken = String(clinicalIntakeToken || '').trim();
+            let intakeLinked = false;
+            if (intakeToken) {
+                try {
+                    const intake = await prisma.clinicalIntake.findFirst({
+                        where: { token: intakeToken, doctorId: agendaConfig.doctor_id }
+                    });
+                    if (intake && intake.status !== 'CONVERTED') {
+                        await prisma.clinicalIntake.update({
+                            where: { id: intake.id },
+                            data: {
+                                appointmentId: appointment.id,
+                                patientId: (_d = intake.patientId) !== null && _d !== void 0 ? _d : patient.id
+                            }
+                        });
+                        intakeLinked = true;
+                        console.log('🔗 ClinicalIntake vinculada a la cita:', intake.id);
+                    }
+                    else if (!intake) {
+                        console.warn('⚠️  No se encontró ClinicalIntake para el token recibido (no se vincula).');
+                    }
                 }
-                else {
-                    console.log('No se creó pre-consulta (no es primera cita o ya existe consulta médica)');
+                catch (linkErr) {
+                    // No fallar la creación de la cita si la vinculación con la pre-consulta falla.
+                    console.error('Error vinculando ClinicalIntake con la cita:', linkErr);
                 }
             }
-            catch (preConsultationError) {
-                console.error('Error generando pre-consulta automática:', preConsultationError);
-                if (preConsultationError instanceof Error && preConsultationError.stack) {
-                    console.error('Stack trace:', preConsultationError.stack);
+            // Generar automáticamente pre-consulta si es la primera cita del paciente con este doctor.
+            // EXCEPCIÓN: si el paciente llegó desde el flujo de pre-consulta (ClinicalIntake ya vinculada),
+            // NO se crea otra pre-consulta ni se le envía un segundo enlace — ya capturó sus datos.
+            let preConsultationToken = null;
+            if (intakeLinked) {
+                console.log('↩️  Pre-consulta ya capturada por el paciente (ClinicalIntake vinculada): se omite la auto-creación de PreConsultation.');
+            }
+            else {
+                try {
+                    console.log('Intentando crear pre-consulta automática para appointment:', appointment.id);
+                    const preConsultationModule = await Promise.resolve().then(() => __importStar(require('./preConsultation.controller')));
+                    preConsultationToken = await preConsultationModule.createPreConsultationForAppointment(appointment.id);
+                    if (preConsultationToken) {
+                        console.log('Pre-consulta creada exitosamente');
+                    }
+                    else {
+                        console.log('No se creó pre-consulta (no es primera cita o ya existe consulta médica)');
+                    }
                 }
-                // No fallar la creación de la cita si la pre-consulta falla
+                catch (preConsultationError) {
+                    console.error('Error generando pre-consulta automática:', preConsultationError);
+                    if (preConsultationError instanceof Error && preConsultationError.stack) {
+                        console.error('Stack trace:', preConsultationError.stack);
+                    }
+                    // No fallar la creación de la cita si la pre-consulta falla
+                }
             }
             // Crear evento en el calendario interno de Qlinexa360
-            const doctorFirstName = ((_d = agendaConfig.Doctor.user) === null || _d === void 0 ? void 0 : _d.firstName) || '';
-            const doctorLastName = ((_e = agendaConfig.Doctor.user) === null || _e === void 0 ? void 0 : _e.lastName) || '';
+            const doctorFirstName = ((_e = agendaConfig.Doctor.user) === null || _e === void 0 ? void 0 : _e.firstName) || '';
+            const doctorLastName = ((_f = agendaConfig.Doctor.user) === null || _f === void 0 ? void 0 : _f.lastName) || '';
             const eventTitle = `${patientName} consulta`;
             const eventDescription = `Cita con ${agendaConfig.Doctor.professionalTitle} ${doctorFirstName} ${doctorLastName}\n\nMotivo: ${motivoConsulta}\nPaciente: ${patientName}\nEmail: ${patientEmail}\nTeléfono: ${patientPhone}`;
             const calendarEvent = await prisma.internalCalendarEvent.create({
                 data: {
                     doctorId: agendaConfig.doctor_id,
                     patientId: patient.id,
+                    appointmentId: appointment.id, // Vínculo duro cita↔evento (matching determinístico en aprobación/sync)
                     fechaHoraInicio: slotTime,
                     fechaHoraFin: slotEnd,
                     titulo: eventTitle,
@@ -762,15 +800,8 @@ class AgendaPacientesController {
                 reason: motivoConsulta,
                 timezone: doctorTimezone
             };
-            // Enviar email al paciente con adjunto .ics para que agregue el evento a su calendario
+            // Enviar email al paciente (la cita en agenda llega vía invitación Google/Outlook/Apple)
             const emailService = (await Promise.resolve().then(() => __importStar(require('../services/notification.service')))).EmailService.getInstance();
-            const icsContent = (await Promise.resolve().then(() => __importStar(require('../utils/ics.utils')))).generateIcsForAppointment({
-                eventId: calendarEvent.id,
-                title: eventTitle,
-                description: eventDescription,
-                start: slotTime,
-                end: slotEnd
-            });
             const frontendUrl = process.env.FRONTEND_URL || 'https://www.qlinexa360.com';
             const emailSent = await emailService.sendCalendarEventEmail(patientEmail, {
                 patientName,
@@ -780,10 +811,10 @@ class AgendaPacientesController {
                 eventEndDate: slotEnd,
                 description: motivoConsulta,
                 timezone: doctorTimezone,
-                icsContent,
+                calendarInviteExpected: true,
                 preConsultationLink: preConsultationToken ? `${frontendUrl}/pre-consulta/${preConsultationToken}` : undefined
             });
-            // Enviar WhatsApp si está configurado (solo mensaje, el email ya se envió con .ics)
+            // Enviar WhatsApp si está configurado
             let whatsappSent = false;
             if (patientPhone) {
                 const { WhatsAppService } = await Promise.resolve().then(() => __importStar(require('../services/notification.service')));

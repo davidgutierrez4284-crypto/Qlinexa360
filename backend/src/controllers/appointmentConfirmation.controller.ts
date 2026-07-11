@@ -9,7 +9,32 @@ import { GoogleCalendarSyncService } from '../services/googleCalendarSync.servic
 import { OutlookCalendarSyncService } from '../services/outlookCalendarSync.service';
 import { AppleCalendarSyncService } from '../services/appleCalendarSync.service';
 import { EmailService } from '../services/notification.service';
-import { shouldAllowVideoConferenceForAppointment } from '../utils/calendarSync.utils';
+import { shouldAllowVideoConferenceForAppointment, resolveGoogleCalendarSendUpdates, recordCalendarProviderSyncError, type AppointmentCalendarSyncOutcome } from '../utils/calendarSync.utils';
+import {
+  requiresTeleconsultationPayment,
+  getTeleconsultationPaymentContext,
+} from '../payments/mercadopago/mercadopago.teleconsultation.service';
+import {
+  getInPersonPaymentContext,
+  ensureInPersonCheckoutUrl,
+} from '../payments/mercadopago/mercadopago.inperson.service';
+import { buildTeleconsultationConsentUrl } from '../payments/mercadopago/mercadopago.config';
+import { isTeleconsultationPaymentApproved } from '../payments/mercadopago/mercadopago.preference.service';
+import {
+  createRefundRequestByToken,
+  getRefundContextForAppointment,
+  getRefundRequestByToken,
+  RefundRequestError,
+} from '../payments/mercadopago/mercadopago.refund.service';
+import { getDoctorMercadoPagoSettings } from '../payments/mercadopago/mercadopago.teleconsultation.service';
+import {
+  buildCleanEventDescriptionForSync,
+  ensureActiveConfirmationRequest,
+  getOrCreateAppointmentManageLink,
+  refreshConfirmationTokenExpiryForAppointment,
+  computeConfirmationTokenExpiry,
+  stripManageLinkBlocksFromDescription,
+} from '../utils/appointmentConfirmation.utils';
 import crypto from 'crypto';
 
 const prisma = new PrismaClient();
@@ -86,8 +111,12 @@ export class AppointmentConfirmationController {
         return res.status(404).json({ error: 'Solicitud de confirmación no encontrada' });
       }
 
-      if (confirmationRequest.expiresAt < new Date()) {
-        return res.status(400).json({ error: 'Token de confirmación expirado' });
+      try {
+        await ensureActiveConfirmationRequest(confirmationRequest);
+      } catch (tokenErr: any) {
+        return res.status(tokenErr.statusCode || 400).json({
+          error: tokenErr.message || 'Token de confirmación expirado',
+        });
       }
 
       const appointment = confirmationRequest.appointment;
@@ -105,6 +134,38 @@ export class AppointmentConfirmationController {
       const displayDate = formatAppointmentDate(appointment.date, doctorTimezone);
       const displayTime = formatAppointmentTime(appointment.date, doctorTimezone);
 
+      let inPersonPaymentOffered = false;
+      let inPersonPaymentStatus: string = 'not_required';
+      let inPersonPaymentAmount = 0;
+      let inPersonPaymentCurrency = 'MXN';
+      let inPersonCheckoutUrl: string | null = null;
+
+      if (appointment.appointmentType === 'presencial') {
+        const inPersonCtx = await getInPersonPaymentContext(appointment.doctorId, appointment.id);
+        inPersonPaymentOffered = inPersonCtx.paymentOffered;
+        inPersonPaymentStatus = inPersonCtx.paymentStatus;
+        inPersonPaymentAmount = inPersonCtx.amount;
+        inPersonPaymentCurrency = inPersonCtx.currency;
+        if (inPersonCtx.paymentOffered && inPersonCtx.paymentStatus === 'pending') {
+          try {
+            inPersonCheckoutUrl =
+              inPersonCtx.checkoutUrl ||
+              (await ensureInPersonCheckoutUrl(appointment.id, token));
+          } catch {
+            inPersonCheckoutUrl = inPersonCtx.checkoutUrl;
+          }
+        }
+      }
+
+      const mpSettings = await getDoctorMercadoPagoSettings(appointment.doctorId);
+      const refundCtx = await getRefundContextForAppointment(appointment.id);
+      const paymentApprovedForRefund =
+        appointment.appointmentType === 'presencial'
+          ? inPersonPaymentStatus === 'approved'
+          : appointment.appointmentType === 'teleconsulta'
+            ? await isTeleconsultationPaymentApproved(appointment.id)
+            : false;
+
       res.json({
         success: true,
         data: {
@@ -115,7 +176,16 @@ export class AppointmentConfirmationController {
           patient: patientName,
           doctor: doctorName,
           confirmationStatus: appointment.confirmationStatus,
-          appointmentType: appointment.appointmentType
+          appointmentType: appointment.appointmentType,
+          inPersonPaymentOffered,
+          inPersonPaymentStatus,
+          inPersonPaymentAmount,
+          inPersonPaymentCurrency,
+          inPersonCheckoutUrl,
+          refundPolicyText: mpSettings?.refundPolicyText ?? null,
+          canRequestRefund: paymentApprovedForRefund && refundCtx.canRequestRefund,
+          refundableAmount: refundCtx.refundableAmount,
+          refundRequest: refundCtx.refundRequest,
         }
       });
     } catch (error) {
@@ -124,34 +194,7 @@ export class AppointmentConfirmationController {
     }
   }
   private static async getOrCreateManageLink(appointmentId: string): Promise<string> {
-    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const existingRequest = await prisma.appointmentConfirmationRequest.findFirst({
-      where: {
-        appointmentId,
-        status: 'PENDING',
-        expiresAt: { gt: new Date() }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    if (existingRequest) {
-      return `${baseUrl}/confirm-appointment/${existingRequest.confirmationToken}`;
-    }
-
-    const confirmationToken = crypto.randomBytes(32).toString('hex');
-    await prisma.appointmentConfirmationRequest.create({
-      data: {
-        appointmentId,
-        reminderType: 'FINAL_REMINDER',
-        scheduledFor: new Date(),
-        status: 'PENDING',
-        confirmationToken,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        patientResponse: 'NO_RESPONSE'
-      }
-    });
-
-    return `${baseUrl}/confirm-appointment/${confirmationToken}`;
+    return getOrCreateAppointmentManageLink(appointmentId);
   }
   
   // Obtener estado de confirmaciones para un doctor
@@ -335,11 +378,20 @@ export class AppointmentConfirmationController {
         return res.status(404).json({ error: 'Solicitud de confirmación no encontrada' });
       }
       
-      if (confirmationRequest.expiresAt < new Date()) {
-        return res.status(400).json({ error: 'Token de confirmación expirado' });
+      try {
+        await ensureActiveConfirmationRequest(confirmationRequest);
+      } catch (tokenErr: any) {
+        return res.status(tokenErr.statusCode || 400).json({
+          error: tokenErr.message || 'Token de confirmación expirado',
+        });
       }
       
-      // Actualizar estado de la cita (reactivar si quedó CANCELLED por reutilización de registro)
+      if (confirmationRequest.appointment.status === 'CANCELLED' ||
+          confirmationRequest.appointment.confirmationStatus === 'CANCELLED') {
+        return res.status(400).json({ error: 'Esta cita ya fue cancelada' });
+      }
+      
+      // Actualizar estado de la cita
       await prisma.appointment.update({
         where: { id: confirmationRequest.appointmentId },
         data: {
@@ -354,7 +406,7 @@ export class AppointmentConfirmationController {
       // Sincronizar evento interno/externo para reflejar la cita confirmada
       await AppointmentConfirmationController.syncAppointmentCalendars(
         confirmationRequest.appointmentId,
-        { responseStatus: 'accepted' }
+        { responseStatus: 'accepted', notifyAttendees: true }
       );
       
       // Actualizar estado de la solicitud
@@ -395,8 +447,12 @@ export class AppointmentConfirmationController {
         return res.status(404).json({ error: 'Solicitud de confirmación no encontrada' });
       }
       
-      if (confirmationRequest.expiresAt < new Date()) {
-        return res.status(400).json({ error: 'Token de confirmación expirado' });
+      try {
+        await ensureActiveConfirmationRequest(confirmationRequest);
+      } catch (tokenErr: any) {
+        return res.status(tokenErr.statusCode || 400).json({
+          error: tokenErr.message || 'Token de confirmación expirado',
+        });
       }
       
       // Actualizar estado de la cita
@@ -459,8 +515,12 @@ export class AppointmentConfirmationController {
         return res.status(404).json({ error: 'Token de confirmación no encontrado' });
       }
       
-      if (confirmationRequest.expiresAt < new Date()) {
-        return res.status(400).json({ error: 'Token de confirmación expirado' });
+      try {
+        await ensureActiveConfirmationRequest(confirmationRequest);
+      } catch (tokenErr: any) {
+        return res.status(tokenErr.statusCode || 400).json({
+          error: tokenErr.message || 'Token de confirmación expirado',
+        });
       }
       
       const doctorId = confirmationRequest.appointment.doctorId;
@@ -507,8 +567,12 @@ export class AppointmentConfirmationController {
         return res.status(404).json({ error: 'Solicitud de confirmación no encontrada' });
       }
       
-      if (confirmationRequest.expiresAt < new Date()) {
-        return res.status(400).json({ error: 'Token de confirmación expirado' });
+      try {
+        await ensureActiveConfirmationRequest(confirmationRequest);
+      } catch (tokenErr: any) {
+        return res.status(tokenErr.statusCode || 400).json({
+          error: tokenErr.message || 'Token de confirmación expirado',
+        });
       }
       
       const doctorId = confirmationRequest.appointment.doctorId;
@@ -636,9 +700,12 @@ export class AppointmentConfirmationController {
         }
       });
 
+      await refreshConfirmationTokenExpiryForAppointment(confirmationRequest.appointmentId);
+
       // Sincronizar el evento interno/externo con la nueva fecha
       await AppointmentConfirmationController.syncAppointmentCalendars(
-        confirmationRequest.appointmentId
+        confirmationRequest.appointmentId,
+        { notifyAttendees: true }
       );
 
       const refreshedAppointment = await prisma.appointment.findUnique({
@@ -843,10 +910,90 @@ export class AppointmentConfirmationController {
   }
 
   /** Sincroniza evento interno y calendario externo (Meet/Teams) y registro Teleconsultation. Público para reutilizar tras firmar consentimiento. */
+
+  public static async sendPatientTeleconsultationCalendarEmail(appointmentId: string) {
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { patient: { include: { user: true } }, doctor: { include: { user: true } } },
+    });
+    if (!appointment || appointment.appointmentType !== 'teleconsulta') return;
+    if (appointment.status === 'CANCELLED' || appointment.confirmationStatus === 'CANCELLED') return;
+
+    const patientEmail = appointment.patient.email || appointment.patient.user?.email || '';
+    if (!patientEmail) return;
+
+    const teleconsultation = await prisma.teleconsultation.findUnique({
+      where: { appointmentId },
+      select: { id: true, consentSigned: true, meetingUrl: true },
+    });
+
+    if (teleconsultation?.id) {
+      const recentEmail = await prisma.teleconsultationAuditLog.findFirst({
+        where: {
+          teleconsultationId: teleconsultation.id,
+          action: 'CALENDAR_EMAIL_SENT',
+          createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+        },
+      });
+      if (recentEmail) {
+        console.log(`⏭️ Correo de calendario omitido (duplicado reciente) para cita ${appointmentId}`);
+        return;
+      }
+    }
+
+    let calendarEvent = await prisma.internalCalendarEvent.findUnique({ where: { appointmentId } });
+    if (!calendarEvent) {
+      await AppointmentConfirmationController.syncAppointmentCalendars(appointmentId, {
+        responseStatus: 'accepted',
+        notifyAttendees: false,
+      });
+      calendarEvent = await prisma.internalCalendarEvent.findUnique({ where: { appointmentId } });
+    }
+    if (!calendarEvent) return;
+
+    const { buildAppointmentCalendarEmailPayload } = await import('../utils/appointmentConfirmation.utils');
+    const emailPayload = await buildAppointmentCalendarEmailPayload({
+      doctorId: appointment.doctorId,
+      appointmentId: appointment.id,
+      doctorTimezone: appointment.doctor.timezone,
+      eventTitle: calendarEvent.titulo,
+      eventDate: calendarEvent.fechaHoraInicio,
+      eventEndDate: calendarEvent.fechaHoraFin,
+      description: calendarEvent.descripcion,
+      linkMeeting: calendarEvent.linkMeeting,
+      eventId: calendarEvent.id,
+    });
+
+    await EmailService.getInstance().sendCalendarEventEmail(patientEmail, {
+      patientName: `${appointment.patient.firstName || ''} ${appointment.patient.lastName || ''}`.trim() || 'Paciente',
+      doctorName: appointment.doctor.user
+        ? `${appointment.doctor.professionalTitle || ''} ${appointment.doctor.user.firstName} ${appointment.doctor.user.lastName}`.trim()
+        : appointment.doctor.professionalTitle || 'Profesional',
+      ...emailPayload,
+      appointmentId: appointment.id,
+      calendarInviteExpected: true,
+    });
+
+    if (teleconsultation?.id) {
+      await prisma.teleconsultationAuditLog.create({
+        data: {
+          teleconsultationId: teleconsultation.id,
+          action: 'CALENDAR_EMAIL_SENT',
+          metadata: { appointmentId },
+        },
+      });
+    }
+  }
+
   public static async syncAppointmentCalendars(
     appointmentId: string,
-    options: { responseStatus?: 'accepted' | 'declined'; cancelExternal?: boolean } = {}
-  ) {
+    options: {
+      responseStatus?: 'accepted' | 'declined';
+      cancelExternal?: boolean;
+      /** Enviar invitación/actualización al paciente (p. ej. al agregar enlace Meet tras pago). */
+      notifyAttendees?: boolean;
+    } = {}
+  ): Promise<AppointmentCalendarSyncOutcome | undefined> {
     const appointment = await prisma.appointment.findUnique({
       where: { id: appointmentId },
       include: {
@@ -857,15 +1004,28 @@ export class AppointmentConfirmationController {
 
     if (!appointment) return;
 
+    if (
+      !options.cancelExternal &&
+      (appointment.status === 'CANCELLED' || appointment.confirmationStatus === 'CANCELLED')
+    ) {
+      return;
+    }
+
     const scheduleConfig = await ScheduleService.getScheduleConfig(appointment.doctorId);
 
     const teleconsultationRow = await prisma.teleconsultation.findUnique({
       where: { appointmentId: appointment.id },
       select: { consentSigned: true }
     });
+    const paymentReq = await requiresTeleconsultationPayment(appointment.doctorId, appointment.id);
+    const paymentApproved = paymentReq.required
+      ? await isTeleconsultationPaymentApproved(appointment.id)
+      : true;
     const allowVideoConference = shouldAllowVideoConferenceForAppointment(
       appointment.appointmentType,
-      teleconsultationRow?.consentSigned
+      teleconsultationRow?.consentSigned,
+      paymentReq.required,
+      paymentApproved
     );
 
     const fallbackDate = appointment.rescheduledFrom || appointment.date;
@@ -916,9 +1076,12 @@ export class AppointmentConfirmationController {
       : appointment.doctor.professionalTitle || '';
 
     const manageLink = await AppointmentConfirmationController.getOrCreateManageLink(appointment.id);
-    const manageText = `\n\nGestiona tu cita en Qlinexa: ${manageLink}\nSi necesitas confirmar o reprogramar, usa este enlace.`;
+    const cleanNotes = stripManageLinkBlocksFromDescription(appointment.notes);
     const eventTitle = `${patientName} consulta`;
-    const eventDescription = `Cita con ${appointment.doctor.professionalTitle || ''} ${doctorName}\n\n${appointment.notes || ''}${manageText}`;
+    const eventDescription = buildCleanEventDescriptionForSync(
+      `Cita con ${appointment.doctor.professionalTitle || ''} ${doctorName}${cleanNotes ? `\n\n${cleanNotes}` : ''}`,
+      manageLink
+    );
 
     if (!calendarEvent) {
       calendarEvent = await prisma.internalCalendarEvent.create({
@@ -942,12 +1105,8 @@ export class AppointmentConfirmationController {
           fechaHoraInicio: appointment.date,
           fechaHoraFin: appointmentEnd,
           titulo: calendarEvent.titulo || eventTitle,
-          descripcion: calendarEvent.descripcion
-            ? calendarEvent.descripcion.includes(manageLink)
-              ? calendarEvent.descripcion
-              : `${calendarEvent.descripcion}${manageText}`
-            : eventDescription
-        }
+          descripcion: eventDescription,
+        },
       });
     }
 
@@ -975,6 +1134,7 @@ export class AppointmentConfirmationController {
     }
 
     let conferenceLink: string | null = null;
+    let syncOutcome: AppointmentCalendarSyncOutcome | undefined;
 
     if (syncProvider === 'google' && hasGoogleCalendar) {
       try {
@@ -989,8 +1149,14 @@ export class AppointmentConfirmationController {
               linkMeeting: null
             }
           });
-          return;
+          return { provider: 'google', success: true, patientInviteSent: false };
         }
+        const sendUpdates = resolveGoogleCalendarSendUpdates({
+          externalEventId: calendarEvent.externalEventId,
+          attendeeCount: attendees.length,
+          notifyAttendees: options.notifyAttendees,
+          responseStatus: options.responseStatus,
+        });
         const syncResult = await GoogleCalendarSyncService.upsertEvent(appointment.doctorId, {
           id: calendarEvent.id,
           title: calendarEvent.titulo,
@@ -1000,9 +1166,11 @@ export class AppointmentConfirmationController {
           attendees,
           externalEventId: calendarEvent.externalEventId ?? undefined,
           conferenceType: allowVideoConference ? 'google-meet' : null,
+          conferenceLink: allowVideoConference ? (calendarEvent.linkMeeting ?? undefined) : undefined,
           googleMeetEnabled: allowVideoConference,
           disableConference: !allowVideoConference,
-          attendeesResponseStatus: options.responseStatus
+          attendeesResponseStatus: options.responseStatus,
+          sendUpdates,
         });
         if (syncResult) {
           conferenceLink = allowVideoConference ? (syncResult.conferenceLink ?? null) : null;
@@ -1015,9 +1183,22 @@ export class AppointmentConfirmationController {
               linkMeeting: allowVideoConference ? conferenceLink : null
             }
           });
+          syncOutcome = {
+            provider: 'google',
+            success: true,
+            patientInviteSent: sendUpdates === 'all' && attendees.length > 0,
+          };
+        } else {
+          const errMsg =
+            'Google Calendar no respondió al sincronizar la cita. El paciente podría no recibir la invitación.';
+          await recordCalendarProviderSyncError(appointment.doctorId, 'google', errMsg);
+          syncOutcome = { provider: 'google', success: false, patientInviteSent: false, error: errMsg };
         }
-      } catch (syncError) {
+      } catch (syncError: any) {
+        const errMsg =
+          syncError?.message || 'Error desconocido al sincronizar con Google Calendar';
         console.error('Error sincronizando con Google Calendar:', syncError);
+        syncOutcome = { provider: 'google', success: false, patientInviteSent: false, error: errMsg };
       }
     } else if (syncProvider === 'outlook' && hasOutlookCalendar) {
       try {
@@ -1042,6 +1223,7 @@ export class AppointmentConfirmationController {
           end: calendarEvent.fechaHoraFin,
           attendees,
           externalEventId: calendarEvent.externalEventId ?? undefined,
+          conferenceLink: allowVideoConference ? (calendarEvent.linkMeeting ?? undefined) : undefined,
           teamsEnabled: allowVideoConference,
           disableConference: !allowVideoConference
         });
@@ -1103,24 +1285,32 @@ export class AppointmentConfirmationController {
     // Si es teleconsulta, crear o actualizar Teleconsultation (meetingUrl solo tras consentimiento firmado)
     if (appointment.appointmentType === 'teleconsulta') {
       const videoProvider = syncProvider === 'google' ? 'google_meet' : syncProvider === 'outlook' ? 'teams' : 'google_meet';
+      let resolvedMeetingUrl = allowVideoConference ? conferenceLink : null;
+      if (allowVideoConference && !resolvedMeetingUrl) {
+        const refreshedEvent = await prisma.internalCalendarEvent.findUnique({
+          where: { id: calendarEvent.id },
+          select: { linkMeeting: true },
+        });
+        resolvedMeetingUrl = refreshedEvent?.linkMeeting ?? null;
+      }
       await prisma.teleconsultation.upsert({
         where: { appointmentId: appointment.id },
         create: {
           appointmentId: appointment.id,
           videoProvider,
           externalEventId: calendarEvent.externalEventId,
-          meetingUrl: allowVideoConference ? conferenceLink : null
+          meetingUrl: resolvedMeetingUrl
         },
         update: {
           videoProvider,
           externalEventId: calendarEvent.externalEventId,
-          meetingUrl: allowVideoConference ? conferenceLink ?? undefined : null
+          meetingUrl: allowVideoConference ? resolvedMeetingUrl ?? undefined : null
         }
       });
     }
-  }
 
-  // Obtener slots disponibles para asignar desde la lista de espera
+    return syncOutcome;
+  }
   static async getWaitlistAvailableSlots(req: AuthRequest, res: Response) {
     try {
       const doctor = await resolveDoctorForRequest(req);
@@ -1232,6 +1422,8 @@ export class AppointmentConfirmationController {
             doctor: { include: { user: true } }
           }
         });
+
+        await refreshConfirmationTokenExpiryForAppointment(appointmentIdToUse);
 
         await prisma.internalCalendarEvent.updateMany({
           where: {
@@ -1375,7 +1567,12 @@ export class AppointmentConfirmationController {
                 externalEventId: calendarEvent.externalEventId ?? undefined,
                 conferenceType: allowVideoConferenceWl ? 'google-meet' : null,
                 googleMeetEnabled: allowVideoConferenceWl,
-                disableConference: !allowVideoConferenceWl
+                disableConference: !allowVideoConferenceWl,
+                sendUpdates: resolveGoogleCalendarSendUpdates({
+                  externalEventId: calendarEvent.externalEventId,
+                  attendeeCount: attendees.length,
+                  notifyAttendees: true,
+                }),
               });
               if (syncResult) {
                 conferenceLink = allowVideoConferenceWl ? (syncResult.conferenceLink ?? null) : null;
@@ -1449,9 +1646,23 @@ export class AppointmentConfirmationController {
           if (patientEmailForCalendar) {
             const emailService = EmailService.getInstance();
             const isTeleconsulta = updatedAppointment?.appointmentType === 'teleconsulta';
-            const teleconsultaLink = isTeleconsulta && manageLink
-              ? manageLink.replace(/\/confirm-appointment\//, '/teleconsulta/')
-              : undefined;
+            const confirmationToken = manageLink?.split('/').pop();
+            const teleconsultaLink =
+              isTeleconsulta && confirmationToken
+                ? buildTeleconsultationConsentUrl(confirmationToken)
+                : undefined;
+            let teleconsultationPaymentAmount: number | undefined;
+            let teleconsultationPaymentCurrency: string | undefined;
+            if (isTeleconsulta && updatedAppointment?.id) {
+              const payReq = await requiresTeleconsultationPayment(
+                updatedAppointment.doctorId,
+                updatedAppointment.id
+              );
+              if (payReq.required) {
+                teleconsultationPaymentAmount = payReq.amount;
+                teleconsultationPaymentCurrency = payReq.currency;
+              }
+            }
             await emailService.sendCalendarEventEmail(patientEmailForCalendar, {
               patientName,
               doctorName,
@@ -1463,6 +1674,8 @@ export class AppointmentConfirmationController {
               tipoCita: conferenceLink || calendarEvent.linkMeeting || isTeleconsulta ? 'remota' : 'presencial',
               manageLink,
               teleconsultaLink,
+              teleconsultationPaymentAmount,
+              teleconsultationPaymentCurrency,
               timezone: (updatedAppointment?.doctor as { timezone?: string | null } | undefined)?.timezone ?? 'America/Mexico_City'
             });
           }
@@ -1557,28 +1770,38 @@ export class AppointmentConfirmationController {
         try {
           const scheduleConfigApprove = await ScheduleService.getScheduleConfig(doctor.id);
 
-          // Buscar evento del calendario interno asociado a este appointment (p. ej. ya creado 9:00–10:00)
-          let calendarEvent = await prisma.internalCalendarEvent.findFirst({
-            where: {
-              doctorId: doctor.id,
-              patientId: appointment.patientId,
-              fechaHoraInicio: {
-                gte: new Date(appointment.date.getTime() - 5 * 60000), // 5 minutos antes
-                lte: new Date(appointment.date.getTime() + 5 * 60000)  // 5 minutos después
-              }
-            },
-            include: {
-              patient: {
-                select: {
-                  id: true,
-                  userId: true,
-                  firstName: true,
-                  lastName: true,
-                  email: true
-                }
+          const calendarEventInclude = {
+            patient: {
+              select: {
+                id: true,
+                userId: true,
+                firstName: true,
+                lastName: true,
+                email: true
               }
             }
+          } as const;
+
+          // Preferir el vínculo duro cita↔evento (determinístico). Si no existe, caer al match por
+          // ventana de tiempo (compatibilidad con eventos antiguos sin appointmentId).
+          let calendarEvent = await prisma.internalCalendarEvent.findUnique({
+            where: { appointmentId },
+            include: calendarEventInclude
           });
+          if (!calendarEvent) {
+            calendarEvent = await prisma.internalCalendarEvent.findFirst({
+              where: {
+                doctorId: doctor.id,
+                patientId: appointment.patientId,
+                appointmentId: null,
+                fechaHoraInicio: {
+                  gte: new Date(appointment.date.getTime() - 5 * 60000), // 5 minutos antes
+                  lte: new Date(appointment.date.getTime() + 5 * 60000)  // 5 minutos después
+                }
+              },
+              include: calendarEventInclude
+            });
+          }
 
           const durationMsApprove = AppointmentConfirmationController.resolveAppointmentDurationMs(
             calendarEvent,
@@ -1602,6 +1825,7 @@ export class AppointmentConfirmationController {
               data: {
                 doctorId: doctor.id,
                 patientId: appointment.patientId,
+                appointmentId, // Vínculo duro cita↔evento
                 fechaHoraInicio: appointment.date,
                 fechaHoraFin: appointmentEnd,
                 titulo: eventTitle,
@@ -1609,17 +1833,7 @@ export class AppointmentConfirmationController {
                 origenEvento: 'interno',
                 creadoPor: doctor.id
               },
-              include: {
-                patient: {
-                  select: {
-                    id: true,
-                    userId: true,
-                    firstName: true,
-                    lastName: true,
-                    email: true
-                  }
-                }
-              }
+              include: calendarEventInclude
             });
 
             console.log('✅ Evento del calendario interno creado:', calendarEvent.id);
@@ -1693,7 +1907,12 @@ export class AppointmentConfirmationController {
                 location: doctor.specialization || undefined,
                 conferenceType: allowVideoConferenceApprove ? 'google-meet' : null,
                 googleMeetEnabled: allowVideoConferenceApprove,
-                disableConference: !allowVideoConferenceApprove
+                disableConference: !allowVideoConferenceApprove,
+                sendUpdates: resolveGoogleCalendarSendUpdates({
+                  externalEventId: calendarEvent.externalEventId,
+                  attendeeCount: attendees.length,
+                  notifyAttendees: true,
+                }),
               });
 
               if (syncResult) {
@@ -1803,9 +2022,19 @@ export class AppointmentConfirmationController {
               }
               const manageLink = await AppointmentConfirmationController.getOrCreateManageLink(appointmentId);
               const isTeleconsulta = appointment.appointmentType === 'teleconsulta';
-              const teleconsultaLink = isTeleconsulta && manageLink
-                ? manageLink.replace(/\/confirm-appointment\//, '/teleconsulta/')
+              const confirmationToken = manageLink?.split('/').pop();
+              const teleconsultaLink = isTeleconsulta && confirmationToken
+                ? buildTeleconsultationConsentUrl(confirmationToken)
                 : undefined;
+              let teleconsultationPaymentAmount: number | undefined;
+              let teleconsultationPaymentCurrency: string | undefined;
+              if (isTeleconsulta) {
+                const payReq = await requiresTeleconsultationPayment(appointment.doctorId, appointment.id);
+                if (payReq.required) {
+                  teleconsultationPaymentAmount = payReq.amount;
+                  teleconsultationPaymentCurrency = payReq.currency;
+                }
+              }
 
               await emailService.sendCalendarEventEmail(patientEmailForNotification, {
                 patientName,
@@ -1819,6 +2048,8 @@ export class AppointmentConfirmationController {
                 preConsultationLink,
                 manageLink,
                 teleconsultaLink,
+                teleconsultationPaymentAmount,
+                teleconsultationPaymentCurrency,
                 timezone: (doctor as { timezone?: string | null }).timezone ?? 'America/Mexico_City'
               });
 
@@ -1930,8 +2161,7 @@ export class AppointmentConfirmationController {
 
         // Crear una solicitud de confirmación para que el paciente acepte el nuevo horario
         const confirmationToken = crypto.randomBytes(32).toString('hex');
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7); // Válido por 7 días
+        const expiresAt = computeConfirmationTokenExpiry(newDate);
 
         await prisma.appointmentConfirmationRequest.create({
           data: {
@@ -1944,7 +2174,9 @@ export class AppointmentConfirmationController {
           }
         });
 
-        await AppointmentConfirmationController.syncAppointmentCalendars(appointmentId);
+        await AppointmentConfirmationController.syncAppointmentCalendars(appointmentId, {
+          notifyAttendees: true,
+        });
 
         // Enviar notificación al paciente con el nuevo horario propuesto
         try {
@@ -1986,6 +2218,35 @@ export class AppointmentConfirmationController {
     } catch (error) {
       securityLogger.error('Error al actualizar estado de cita:', error);
       res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+
+  static async getRefundContextByToken(req: Request, res: Response) {
+    try {
+      const { token } = req.params;
+      const data = await getRefundRequestByToken(token);
+      return res.json({ success: true, ...data });
+    } catch (error) {
+      if (error instanceof RefundRequestError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      securityLogger.error('getRefundContextByToken failed', error);
+      return res.status(500).json({ error: 'Error al obtener reembolso' });
+    }
+  }
+
+  static async createRefundRequestByToken(req: Request, res: Response) {
+    try {
+      const { token } = req.params;
+      const { reason, requestedAmount } = req.body || {};
+      const data = await createRefundRequestByToken(token, { reason, requestedAmount });
+      return res.json({ success: true, data });
+    } catch (error) {
+      if (error instanceof RefundRequestError) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      securityLogger.error('createRefundRequestByToken failed', error);
+      return res.status(500).json({ error: 'Error al solicitar reembolso' });
     }
   }
 }

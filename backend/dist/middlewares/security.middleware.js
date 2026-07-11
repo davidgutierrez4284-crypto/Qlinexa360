@@ -44,18 +44,18 @@ const suspiciousActivityDetection = (req, res, next) => {
     const ip = req.ip || req.connection.remoteAddress;
     const userAgent = req.headers['user-agent'] || '';
     const contentType = req.headers['content-type'] || '';
-    // Detectar patrones sospechosos
+    // Detectar patrones sospechosos (RegExp → .test(userAgent); boolean → valor tal cual)
     const suspiciousPatterns = [
-        // User agents sospechosos
         /bot|crawler|spider|scraper/i,
-        // Content-Type incorrecto para uploads
         !contentType.includes('multipart/form-data') && req.path.includes('/upload'),
-        // Headers sospechosos
-        req.headers['x-forwarded-for'] && !req.headers['x-real-ip'],
-        // Tamaño de request sospechoso
-        parseInt(req.headers['content-length'] || '0') > 50 * 1024 * 1024, // 50MB
+        !!(req.headers['x-forwarded-for'] && !req.headers['x-real-ip']),
+        parseInt(req.headers['content-length'] || '0', 10) > 50 * 1024 * 1024,
     ];
-    const isSuspicious = suspiciousPatterns.some(pattern => typeof pattern === 'string' ? userAgent.includes(pattern) : pattern);
+    const isSuspicious = suspiciousPatterns.some((pattern) => {
+        if (pattern instanceof RegExp)
+            return pattern.test(userAgent);
+        return Boolean(pattern);
+    });
     if (isSuspicious) {
         console.warn(`[SECURITY] Actividad sospechosa detectada:`, {
             ip,

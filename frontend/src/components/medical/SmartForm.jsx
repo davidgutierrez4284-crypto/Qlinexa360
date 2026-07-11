@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { getFormTemplates } from '../../services/doctorService';
 import { getDoctorFormTemplates } from '../../services/doctorFormTemplateService';
 import { toast } from 'react-toastify';
-import { imc, presionArterialMedia, getNumericValueByLabel } from '../../utils/medicalCalculations';
+import {
+  applySpecialtyFormComputations,
+  getSpecialtyComputedFieldProps
+} from '../../utils/medicalCalculations';
 import { parseAgeFieldValue, ageToMonths, formatAgeFieldValue } from '../../utils/ageUtils';
 import { InformationCircleIcon } from '@heroicons/react/24/outline';
 import Tooltip from '../common/Tooltip';
@@ -330,55 +333,15 @@ const SmartForm = ({ fields = [], values = {}, onChange, onDoctorFormDataChange,
 
   const handleFieldChange = (fieldId, value) => {
     let newData = { ...formData, [fieldId]: value };
-
-    // Auto-calcular IMC cuando cambian Peso o Talla
-    selectedTemplates.forEach(template => {
-      const fields = template.fields || [];
-      const pesoVal = getNumericValueByLabel(newData, fields, 'peso');
-      const tallaVal = getNumericValueByLabel(newData, fields, 'talla');
-      const imcField = fields.find(f => f.label && /imc|índice de masa corporal/i.test(f.label));
-      if (pesoVal && tallaVal && imcField) {
-        const calculated = imc(pesoVal, tallaVal);
-        if (calculated) newData = { ...newData, [imcField.id]: calculated };
-      }
-
-      // Auto-calcular presión arterial media cuando cambian PAS o PAD
-      const pasVal = getNumericValueByLabel(newData, fields, 'sistólica');
-      const padVal = getNumericValueByLabel(newData, fields, 'diastólica');
-      const pamField = fields.find(f => f.label && /presión arterial media|pam/i.test(f.label));
-      if (pasVal != null && padVal != null && pamField) {
-        const calculated = presionArterialMedia(pasVal, padVal);
-        if (calculated) newData = { ...newData, [pamField.id]: calculated };
-      }
+    selectedTemplates.forEach((template) => {
+      newData = applySpecialtyFormComputations(newData, template.fields || []);
     });
-
     setFormData(newData);
     notifyChanges(newData);
   };
 
-  // Determinar si un campo es calculado automáticamente
-  const getComputedFieldProps = (template, field) => {
-    const fields = template.fields || [];
-    const isImc = field.label && /imc|índice de masa corporal/i.test(field.label);
-    const isPam = field.label && /presión arterial media|pam/i.test(field.label);
-    if (isImc) {
-      const pesoVal = getNumericValueByLabel(formData, fields, 'peso');
-      const tallaVal = getNumericValueByLabel(formData, fields, 'talla');
-      if (pesoVal && tallaVal) {
-        const calculated = imc(pesoVal, tallaVal);
-        return { readOnly: true, value: calculated };
-      }
-    }
-    if (isPam) {
-      const pasVal = getNumericValueByLabel(formData, fields, 'sistólica');
-      const padVal = getNumericValueByLabel(formData, fields, 'diastólica');
-      if (pasVal != null && padVal != null) {
-        const calculated = presionArterialMedia(pasVal, padVal);
-        return { readOnly: true, value: calculated };
-      }
-    }
-    return {};
-  };
+  const getComputedFieldProps = (template, field) =>
+    getSpecialtyComputedFieldProps(formData, template.fields || [], field);
 
   const availableTemplates = allTemplates.filter(
     t => !selectedTemplates.some(st => st.id === t.id)

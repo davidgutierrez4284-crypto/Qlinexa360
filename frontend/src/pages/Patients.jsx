@@ -9,13 +9,15 @@ import {
   DocumentTextIcon,
   EyeIcon,
   PlusIcon,
-  UserGroupIcon
+  UserGroupIcon,
+  BeakerIcon
 } from '@heroicons/react/24/outline';
 import { getAllMyPatients, createPatient } from '../services/doctorService';
 import axios from 'axios';
 import NewPatientModal from '../components/medical/NewPatientModal';
 import { toast } from 'react-toastify';
 import Loader from '../components/common/Loader';
+import { isSmartLabEnabled } from '../config/featureFlags';
 
 const PatientAvatar = ({ url, alt }) => {
   const [signedUrl, setSignedUrl] = React.useState('');
@@ -240,6 +242,15 @@ const Patients = () => {
                   <EyeIcon className="h-4 w-4 mr-1" />
                   Ver Historial
                 </Link>
+                {isSmartLabEnabled() && (
+                  <Link
+                    to={`/dashboard/laboratorio-inteligente?patientId=${patient.id}`}
+                    className="flex-shrink-0 inline-flex items-center px-3 py-2 text-sm font-medium rounded-md text-violet-700 bg-violet-100 hover:bg-violet-200"
+                  >
+                    <BeakerIcon className="h-4 w-4 mr-1" />
+                    Laboratorio Inteligente
+                  </Link>
+                )}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 {patient.padecimiento && (
@@ -489,6 +500,15 @@ const Patients = () => {
                         <EyeIcon className="h-3 w-3 flex-shrink-0" />
                         Ver Historial
                       </Link>
+                      {isSmartLabEnabled() && (
+                        <Link
+                          to={`/dashboard/laboratorio-inteligente?patientId=${patient.id}`}
+                          className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-800 hover:bg-violet-200 whitespace-nowrap transition-colors"
+                        >
+                          <BeakerIcon className="h-3 w-3 flex-shrink-0" />
+                          Laboratorio Inteligente
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ))

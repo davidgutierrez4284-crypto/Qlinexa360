@@ -6,6 +6,11 @@ import RegisterDoctor from './RegisterDoctor';
 import { InformationCircleIcon } from '@heroicons/react/24/outline';
 import PhoneInput from '../components/common/PhoneInput';
 import { isValidE164 } from '../constants/countries';
+import PrivacyPolicyFullBody from '../legal/PrivacyPolicyFullBody';
+import {
+  MercadoPagoContractSection,
+  MercadoPagoTermsOfUseSection,
+} from '../legal/mercadoPagoTermsOfUse';
 
 const steps = [
   'Información Personal',
@@ -610,20 +615,8 @@ const RegisterPatient = () => {
               <div className="flex items-center mb-4">
                 <span className="font-semibold text-blue-700 text-lg">Aviso de Privacidad</span>
               </div>
-              <div className="max-h-48 overflow-y-auto bg-white p-4 rounded border border-gray-100 text-sm text-gray-700 mb-4">
-                <div className="space-y-3">
-                  <p><b>AVISO DE PRIVACIDAD INTEGRAL - Qlinexa360</b></p>
-                  <p><b>1. Responsable del Tratamiento:</b> Qlinexa360, plataforma digital de gestión médica, es responsable del tratamiento de sus datos personales.</p>
-                  <p><b>2. Finalidades del Tratamiento:</b> Sus datos personales serán utilizados para: (a) Gestionar su registro en la plataforma; (b) Facilitar la comunicación entre profesionales de la salud y pacientes; (c) Mantener su historial clínico digital; (d) Enviar notificaciones relacionadas con su atención médica; (e) Cumplir con obligaciones legales y regulatorias.</p>
-                  <p><b>3. Datos Personales Recopilados:</b> Recopilamos: (a) Datos de identificación (nombre, email, teléfono); (b) Datos médicos (historial clínico, diagnósticos, tratamientos); (c) Datos de contacto de emergencia; (d) Datos fiscales (cuando aplique); (e) Datos de seguro médico (cuando aplique).</p>
-                  <p><b>4. Transferencias:</b> Sus datos pueden ser transferidos a: (a) Profesionales de la salud autorizados; (b) Autoridades sanitarias cuando sea requerido por ley; (c) Proveedores de servicios tecnológicos que nos apoyan en la operación de la plataforma.</p>
-                  <p><b>5. Medidas de Seguridad:</b> Implementamos medidas técnicas, administrativas y físicas para proteger sus datos personales, incluyendo encriptación de datos, acceso restringido y auditorías regulares de seguridad.</p>
-                  <p><b>6. Derechos ARCO:</b> Usted tiene derecho a: (a) Acceder a sus datos personales; (b) Rectificar sus datos cuando sean inexactos; (c) Cancelar el uso de sus datos; (d) Oponerse al tratamiento de sus datos para fines específicos.</p>
-                  <p><b>7. Revocación del Consentimiento:</b> Puede revocar su consentimiento en cualquier momento, sin embargo, esto puede limitar la funcionalidad de la plataforma.</p>
-                  <p><b>8. Conservación de Datos:</b> Sus datos se conservarán conforme a la normativa sanitaria mexicana (NOM-004-SSA3-2012) por un mínimo de 5 años desde el último acto médico.</p>
-                  <p><b>9. Cambios al Aviso:</b> Nos reservamos el derecho de modificar este aviso. Los cambios serán notificados a través de la plataforma.</p>
-                  <p><b>10. Contacto:</b> Para ejercer sus derechos ARCO o realizar consultas sobre este aviso, puede contactarnos a través de la plataforma o al correo electrónico de soporte.</p>
-                </div>
+              <div className="max-h-[min(70vh,28rem)] overflow-y-auto bg-white p-4 rounded border border-gray-100 text-sm mb-4">
+                <PrivacyPolicyFullBody className="space-y-4 text-gray-700 [&_h2]:text-base [&_h2]:font-bold [&_h3]:text-sm [&_h3]:font-semibold" />
               </div>
               <label className="flex items-center">
                 <input 
@@ -652,8 +645,11 @@ const RegisterPatient = () => {
                   <p><b>6. Propiedad intelectual:</b> Todos los contenidos, diseños y elementos visuales son propiedad exclusiva de Qlinexa360 y no podrán ser reproducidos sin autorización.</p>
                   <p><b>7. Suspensión y cancelación:</b> La plataforma podrá suspender el acceso a usuarios que no cumplan los presentes términos o usen la plataforma de forma inapropiada.</p>
                   <p><b>8. Limitación de responsabilidad:</b> Qlinexa360 no se hace responsable de diagnósticos clínicos ni consecuencias médicas derivadas del uso de la información registrada por los usuarios.</p>
-                  <p><b>9. Modificaciones:</b> Los términos podrán modificarse y se notificarán a los usuarios registrados. El uso continuo implicará su aceptación.</p>
-                  <p><b>10. Legislación aplicable:</b> Este documento se rige conforme a las leyes mexicanas, incluyendo la LFPDPPP y la NOM-004-SSA3-2012.</p>
+                  <MercadoPagoTermsOfUseSection sectionNumber={9} />
+                  <p><b>Naturaleza de la plataforma:</b> Qlinexa360 no presta servicios médicos, no realiza diagnósticos ni prescribe tratamientos. La plataforma actúa únicamente como intermediario tecnológico para la gestión de información clínica. Qlinexa360 es una plataforma tecnológica de gestión clínica. Las recetas, consultas, citas y seguimiento son emitidas exclusivamente por el profesional de la salud que la suscribe, quien es el único responsable del diagnóstico, tratamiento y prescripción.</p>
+                  <p>Qlinexa360 es una plataforma tecnológica de apoyo a la gestión clínica. No actúa como establecimiento médico, no sustituye el juicio profesional y no se ostenta como sistema certificado o autorizado por autoridad sanitaria salvo que expresamente se indique con el documento oficial correspondiente.</p>
+                  <p><b>10. Modificaciones:</b> Los términos podrán modificarse y se notificarán a los usuarios registrados. El uso continuo implicará su aceptación.</p>
+                  <p><b>11. Legislación aplicable:</b> Este documento se rige conforme a las leyes mexicanas, incluyendo la LFPDPPP y la NOM-004-SSA3-2012.</p>
                 </div>
                 <p className="text-gray-700 text-base leading-relaxed mt-4 font-semibold">
                   <strong>Cláusula de Comunicación:</strong> El usuario acepta recibir comunicación a través de correo electrónico, WhatsApp y a través de la misma plataforma Qlinexa360 en la sesión de usuario registrado; acepta que esta comunicación es profesional y enfocada a fomentar una buena atención Clínica y responsable entre Profesionales de la Salud, Pacientes y Asistentes de Profesionales de la Salud.
@@ -687,8 +683,11 @@ const RegisterPatient = () => {
                   <p><b>5. Consentimiento informado:</b> El paciente deberá aceptar el presente contrato y firmar de forma digital, registrando nombre completo, fecha y hora (timestamp). Este consentimiento forma parte del proceso de registro.</p>
                   <p><b>6. Responsabilidad del paciente:</b> El paciente es responsable de proporcionar información médica veraz, mantener la confidencialidad de su acceso y usar la plataforma de manera ética y conforme a la ley.</p>
                   <p><b>7. Comunicación médica:</b> La plataforma facilita la comunicación entre pacientes y profesionales de la salud, pero no sustituye la consulta médica presencial cuando sea necesaria.</p>
-                  <p><b>8. Modificaciones:</b> Este contrato podrá modificarse y se notificarán los cambios a los usuarios registrados. El uso continuo implicará su aceptación.</p>
-                  <p><b>9. Legislación aplicable:</b> Este contrato se rige conforme a las leyes mexicanas aplicables.</p>
+                  <p><b>Naturaleza de la plataforma:</b> Qlinexa360 no presta servicios médicos, no realiza diagnósticos ni prescribe tratamientos. La plataforma actúa únicamente como intermediario tecnológico para la gestión de información clínica. Qlinexa360 es una plataforma tecnológica de gestión clínica. Las recetas, consultas, citas y seguimiento son emitidas exclusivamente por el profesional de la salud que la suscribe, quien es el único responsable del diagnóstico, tratamiento y prescripción.</p>
+                  <p>Qlinexa360 es una plataforma tecnológica de apoyo a la gestión clínica. No actúa como establecimiento médico, no sustituye el juicio profesional y no se ostenta como sistema certificado o autorizado por autoridad sanitaria salvo que expresamente se indique con el documento oficial correspondiente.</p>
+                  <MercadoPagoContractSection sectionNumber={8} />
+                  <p><b>9. Modificaciones:</b> Este contrato podrá modificarse y se notificarán los cambios a los usuarios registrados. El uso continuo implicará su aceptación.</p>
+                  <p><b>10. Legislación aplicable:</b> Este contrato se rige conforme a las leyes mexicanas aplicables.</p>
                 </div>
                 <p className="text-gray-700 text-base leading-relaxed mt-4 font-semibold">
                   <strong>Cláusula de Comunicación:</strong> El usuario acepta recibir comunicación a través de correo electrónico, WhatsApp y a través de la misma plataforma Qlinexa360 en la sesión de usuario registrado; acepta que esta comunicación es profesional y enfocada a fomentar una buena atención Clínica y responsable entre Profesionales de la Salud, Pacientes y Asistentes de Profesionales de la Salud.
@@ -771,6 +770,7 @@ const RegisterPatient = () => {
         <h2 className="mt-2 text-center text-3xl font-extrabold text-gray-900">
           Registro de Paciente
         </h2>
+        <p className="text-center text-sm font-semibold text-blue-700 tracking-wide">Qlinexa360</p>
       </div>
 
       <div className="mt-8 w-full flex justify-center">
@@ -1131,20 +1131,8 @@ const RegisterAssistant = () => {
               <div className="flex items-center mb-4">
                 <span className="font-semibold text-blue-700 text-lg">Aviso de Privacidad</span>
               </div>
-              <div className="max-h-48 overflow-y-auto bg-white p-4 rounded border border-gray-100 text-sm text-gray-700 mb-4">
-                <div className="space-y-3">
-                  <p><b>AVISO DE PRIVACIDAD INTEGRAL - Qlinexa360</b></p>
-                  <p><b>1. Responsable del Tratamiento:</b> Qlinexa360, plataforma digital de gestión médica, es responsable del tratamiento de sus datos personales.</p>
-                  <p><b>2. Finalidades del Tratamiento:</b> Sus datos personales serán utilizados para: (a) Gestionar su registro como profesional de la salud; (b) Facilitar la gestión de pacientes y expedientes clínicos; (c) Mantener su perfil profesional; (d) Enviar notificaciones relacionadas con su práctica médica; (e) Cumplir con obligaciones legales y regulatorias.</p>
-                  <p><b>3. Datos Personales Recopilados:</b> Recopilamos: (a) Datos de identificación (nombre, email, teléfono); (b) Datos profesionales (cédula, especialidad, dirección de consultorio); (c) Datos fiscales (RFC, razón social, dirección fiscal); (d) Datos de pacientes bajo su cuidado (con consentimiento previo).</p>
-                  <p><b>4. Transferencias:</b> Sus datos pueden ser transferidos a: (a) Pacientes bajo su cuidado (solo información autorizada); (b) Autoridades sanitarias cuando sea requerido por ley; (c) Proveedores de servicios tecnológicos que nos apoyan en la operación de la plataforma.</p>
-                  <p><b>5. Medidas de Seguridad:</b> Implementamos medidas técnicas, administrativas y físicas para proteger sus datos personales, incluyendo encriptación de datos, acceso restringido y auditorías regulares de seguridad.</p>
-                  <p><b>6. Derechos ARCO:</b> Usted tiene derecho a: (a) Acceder a sus datos personales; (b) Rectificar sus datos cuando sean inexactos; (c) Cancelar el uso de sus datos; (d) Oponerse al tratamiento de sus datos para fines específicos.</p>
-                  <p><b>7. Revocación del Consentimiento:</b> Puede revocar su consentimiento en cualquier momento, sin embargo, esto puede limitar la funcionalidad de la plataforma.</p>
-                  <p><b>8. Conservación de Datos:</b> Sus datos se conservarán conforme a la normativa sanitaria mexicana (NOM-004-SSA3-2012) por un mínimo de 5 años desde el último acto médico.</p>
-                  <p><b>9. Cambios al Aviso:</b> Nos reservamos el derecho de modificar este aviso. Los cambios serán notificados a través de la plataforma.</p>
-                  <p><b>10. Contacto:</b> Para ejercer sus derechos ARCO o realizar consultas sobre este aviso, puede contactarnos a través de la plataforma o al correo electrónico de soporte.</p>
-                </div>
+              <div className="max-h-[min(70vh,28rem)] overflow-y-auto bg-white p-4 rounded border border-gray-100 text-sm mb-4">
+                <PrivacyPolicyFullBody className="space-y-4 text-gray-700 [&_h2]:text-base [&_h2]:font-bold [&_h3]:text-sm [&_h3]:font-semibold" />
               </div>
               <label className="flex items-center">
                 <input 
@@ -1233,11 +1221,13 @@ const RegisterAssistant = () => {
                     <li>Notificaciones internas en la plataforma</li>
                   </ul>
                   <p>Estas comunicaciones son de carácter profesional y necesarias para la operación del servicio.</p>
+
+                  <MercadoPagoTermsOfUseSection sectionNumber={12} />
                   
-                  <p><b>12. Modificaciones a los Términos</b></p>
+                  <p><b>13. Modificaciones a los Términos</b></p>
                   <p>Qlinexa360 podrá modificar estos Términos en cualquier momento. Las actualizaciones se notificarán a los usuarios y se publicarán en la página oficial. El uso continuo de la plataforma implica la aceptación de los cambios.</p>
                   
-                  <p><b>13. Legislación Aplicable y Jurisdicción</b></p>
+                  <p><b>14. Legislación Aplicable y Jurisdicción</b></p>
                   <p>Este documento se rige por las leyes de los <b>Estados Unidos Mexicanos</b>, en particular la <b>LFPDPPP</b> y la <b>NOM-004-SSA3-2012</b>. Cualquier controversia se someterá a la jurisdicción de los tribunales competentes de la Ciudad de México.</p>
                 </div>
               </div>
@@ -1322,15 +1312,17 @@ const RegisterAssistant = () => {
                   <p><b>10. Pagos y Suscripciones (si aplica a médicos)</b></p>
                   <p>El acceso del Profesional de la Salud a la Plataforma podrá estar sujeto a una <b>suscripción mensual</b>, la cual se cobrará de manera recurrente mediante el método de pago autorizado (ej. PayPal).</p>
                   <p>La falta de pago podrá derivar en la suspensión del acceso, manteniéndose el derecho del paciente a consultar sus expedientes conforme a la NOM-004-SSA3-2012.</p>
+
+                  <MercadoPagoContractSection sectionNumber={11} />
                   
-                  <p><b>11. Modificaciones al Contrato</b></p>
+                  <p><b>12. Modificaciones al Contrato</b></p>
                   <p>Qlinexa360 podrá modificar este contrato en cualquier momento. Los cambios se notificarán a los usuarios y se publicarán en la Plataforma. El uso continuado implicará aceptación de las modificaciones.</p>
                   
-                  <p><b>12. Legislación Aplicable y Jurisdicción</b></p>
+                  <p><b>13. Legislación Aplicable y Jurisdicción</b></p>
                   <p>Este contrato se rige por las leyes de los <b>Estados Unidos Mexicanos</b>, incluyendo la <b>LFPDPPP</b> y la <b>NOM-004-SSA3-2012</b>.</p>
                   <p>Las partes se someten a la jurisdicción de los tribunales competentes de la Ciudad de México, renunciando a cualquier otro fuero que pudiera corresponderles.</p>
                   
-                  <p><b>13. Cláusula de Comunicación</b></p>
+                  <p><b>14. Cláusula de Comunicación</b></p>
                   <p>El usuario acepta recibir notificaciones y comunicaciones relacionadas con la Plataforma a través de:</p>
                   <ul className="list-disc pl-5">
                     <li>Correo electrónico</li>
@@ -1492,6 +1484,7 @@ const RegisterAssistant = () => {
         <h2 className="mt-4 text-center text-4xl font-extrabold text-gray-900">
           Registro de Asistente
         </h2>
+        <p className="text-center text-sm font-semibold text-blue-700 tracking-wide">Qlinexa360</p>
         <p className="mt-2 text-center text-lg text-gray-600">
           Complete los siguientes pasos para registrarse como asistente
         </p>
@@ -1554,9 +1547,14 @@ const RegisterRouter = () => {
   const type = params.get('type');
   const navigate = useNavigate();
 
+  // Auto-registro de pacientes y asistentes deshabilitado por política de producto:
+  // ingresan únicamente por invitación del profesional (o quedan registrados vía pre-registro/pre-consulta).
+  // Para restaurar, poner SELF_REGISTRATION_ENABLED en true y descomentar los botones del selector.
+  const SELF_REGISTRATION_ENABLED = false;
+
   if (type === 'doctor' || type === 'nurse' || type === 'health_staff') return <RegisterDoctor />;
-  if (type === 'patient') return <RegisterPatient />;
-  if (type === 'assistant') return <RegisterAssistant />;
+  if (SELF_REGISTRATION_ENABLED && type === 'patient') return <RegisterPatient />;
+  if (SELF_REGISTRATION_ENABLED && type === 'assistant') return <RegisterAssistant />;
 
   return (
     <div className="flex flex-col items-center mt-24">

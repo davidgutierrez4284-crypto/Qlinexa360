@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Qlinexa360 | Medical Practice Management Platform</title>
+  <meta name="description" content="Qlinexa360 is a medical practice management platform for healthcare professionals. It supports patient management, appointment scheduling, clinical records, prescriptions, and Google Calendar synchronization." />
+  <meta property="og:title" content="Qlinexa360" />
+  <meta property="og:description" content="Medical practice management platform for healthcare professionals with appointment scheduling, patient management, clinical records, prescriptions, and Google Calendar synchronization." />
+  <meta property="og:url" content="https://www.qlinexa360.com/benefits" />
+  <meta property="og:type" content="website" />
+  <link rel="canonical" href="https://www.qlinexa360.com/benefits" />
+  <link rel="icon" href="/icon-192x192.png" sizes="192x192" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #f9fafb; color: #374151; line-height: 1.6; }
+    .header { background: #2563eb; color: #fff; padding: 0 1rem; height: 56px; display: flex; align-items: center; justify-content: space-between; }
+    .header a { color: #fff; text-decoration: none; font-weight: 600; }
+    .header a:hover { text-decoration: underline; }
+    .header-nav { display: flex; gap: 1rem; font-size: 0.875rem; flex-wrap: wrap; }
+    main { max-width: 56rem; margin: 0 auto; padding: 2rem 1rem 3rem; }
+    .card { background: #fff; border-radius: 0.75rem; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08); border: 1px solid #e5e7eb; padding: 1.5rem 2rem; margin-bottom: 1.25rem; }
+    .legal-strip { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 0.5rem; padding: 1rem 1.25rem; text-align: center; font-size: 0.9375rem; color: #1e3a8a; margin-bottom: 1.5rem; }
+    .legal-strip a { color: #1d4ed8; font-weight: 600; text-decoration: underline; }
+    .legal-strip a:hover { color: #1e40af; }
+    .nom-compliance {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      font-size: 0.9375rem;
+      line-height: 1.45;
+      color: #1e1b4b;
+      margin: 0 0 1.25rem;
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      border: 1px solid rgb(199 210 254 / 0.95);
+      background: linear-gradient(to right, #eef2ff, #f8fafc, #eef2ff);
+      box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+      font-weight: 600;
+    }
+    .demo-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1.25rem;
+      border-radius: 0.5rem;
+      background: #2563eb;
+      color: #fff;
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-decoration: none;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+      white-space: nowrap;
+    }
+    .demo-btn:hover { background: #1d4ed8; color: #fff; }
+    .demo-btn svg { width: 1.25rem; height: 1.25rem; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 2; }
+    .demo-banner {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 1rem;
+      margin: 0 0 1.75rem;
+      padding: 1.25rem 1.5rem;
+      border-radius: 0.75rem;
+      border: 2px solid #bfdbfe;
+      background: linear-gradient(to right, #eff6ff, #fff, #f0f9ff);
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.06);
+    }
+    @media (min-width: 640px) {
+      .demo-banner { flex-direction: row; align-items: center; justify-content: space-between; text-align: left; }
+    }
+    .demo-banner h3 { margin: 0; font-size: 1.125rem; color: #1e3a8a; }
+    .demo-banner p { margin: 0.35rem 0 0; color: #374151; font-size: 0.9375rem; }
+    .features-highlight {
+      max-width: 48rem;
+      margin: 0 auto 1.75rem;
+      padding: 1.1rem 1.25rem;
+      text-align: center;
+      border-radius: 0.75rem;
+      border: 1px solid rgb(191 219 254 / 0.9);
+      background: linear-gradient(135deg, #ffffff, rgb(240 249 255 / 0.85), rgb(239 246 255 / 0.75));
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.06);
+    }
+    .features-highlight-lead {
+      margin: 0;
+      font-size: 1.05rem;
+      line-height: 1.45;
+      font-weight: 600;
+      color: #0f172a;
+    }
+    .features-highlight-lead strong { color: #1d4ed8; font-weight: 700; }
+    .features-highlight-nom {
+      margin: 0.85rem 0 0;
+      padding-top: 0.85rem;
+      border-top: 1px solid rgb(199 210 254 / 0.85);
+      font-size: 0.9375rem;
+      font-weight: 600;
+      color: #1e1b4b;
+      line-height: 1.4;
+    }
+    h1 { font-size: 1.875rem; color: #1e3a8a; margin: 0 0 0.5rem; text-align: center; }
+    .subtitle { color: #6b7280; text-align: center; margin-bottom: 1.5rem; }
+    .price-banner { background: #dcfce7; border: 1px solid #86efac; border-radius: 0.75rem; padding: 1.25rem; text-align: center; font-weight: 700; color: #166534; margin-bottom: 1.5rem; }
+    .price-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-top: 1rem; }
+    .price-box { border-radius: 0.5rem; padding: 1rem; text-align: center; }
+    .price-box .amt { font-size: 1.5rem; font-weight: 800; }
+    .paypal-block { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid #bfdbfe; }
+    .paypal-inner { background: #fffbeb; border: 2px solid #fcd34d; border-radius: 0.75rem; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
+    @media (min-width: 640px) {
+      .paypal-inner { flex-direction: row; justify-content: flex-start; align-items: flex-start; text-align: left; }
+    }
+    .paypal-icon { flex-shrink: 0; width: 3.5rem; height: 3.5rem; border-radius: 0.75rem; background: linear-gradient(135deg, #f59e0b, #ea580c); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.15); }
+    .paypal-icon svg { width: 2rem; height: 2rem; color: #fff; stroke: currentColor; fill: none; stroke-width: 2; }
+    .paypal-inner h3 { margin: 0; font-size: 1.25rem; color: #1e3a8a; }
+    .paypal-inner p { margin: 0.5rem 0 0; color: #374151; max-width: 28rem; }
+    .trial-block { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 2px solid #d1fae5; }
+    .trial-inner { background: #ecfdf5; border: 2px solid #6ee7b7; border-radius: 0.75rem; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
+    @media (min-width: 640px) {
+      .trial-inner { flex-direction: row; justify-content: flex-start; align-items: flex-start; text-align: left; }
+    }
+    .trial-icon { flex-shrink: 0; width: 3.5rem; height: 3.5rem; border-radius: 0.75rem; background: linear-gradient(135deg, #10b981, #0d9488); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.12); }
+    .trial-icon svg { width: 2rem; height: 2rem; color: #fff; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .trial-inner h3 { margin: 0; font-size: 1.25rem; color: #064e3b; }
+    .trial-inner p { margin: 0.5rem 0 0; color: #374151; max-width: 36rem; }
+    h2.section-title { font-size: 1.35rem; color: #1e3a8a; text-align: center; margin: 2rem 0 1rem; }
+    .benefit-row { border: 1px solid #e5e7eb; border-radius: 0.75rem; padding: 1.25rem 1.5rem; margin-bottom: 1rem; background: linear-gradient(to right, #f9fafb, #fff, #f9fafb); display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; }
+    @media (min-width: 640px) {
+      .benefit-row { flex-direction: row; align-items: flex-start; }
+    }
+    .benefit-icon { flex-shrink: 0; width: 3.5rem; height: 3.5rem; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.12); }
+    .benefit-icon svg { width: 2rem; height: 2rem; color: #fff; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .benefit-body h2 { font-size: 1.125rem; color: #111827; margin: 0 0 0.5rem; }
+    .benefit-body p { margin: 0; color: #4b5563; }
+    .benefit-row.optional {
+      background: linear-gradient(to right, #f0f9ff, #fff, #eff6ff);
+      border: 2px dashed #7dd3fc;
+      box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(224 242 254 / 0.6);
+    }
+    .benefit-row.optional:hover { border-color: #38bdf8; }
+    .benefit-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .benefit-title-row h2 { margin: 0; }
+    .optional-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 9999px;
+      background: #fef3c7;
+      padding: 0.25rem 0.625rem;
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #78350f;
+      box-shadow: 0 0 0 2px #fcd34d;
+    }
+    .optional-footer {
+      margin-top: 0.75rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #075985;
+      background: rgb(224 242 254 / 0.8);
+      border: 1px solid #bae6fd;
+      border-radius: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      line-height: 1.45;
+    }
+    .videos-section h2, .feedback-section h2 { font-size: 1.25rem; color: #1e40af; margin-top: 0; }
+    .video-card { background: #f9fafb; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; border: 1px solid #e5e7eb; }
+    .video-card h4 { margin: 0 0 0.5rem; font-size: 1.05rem; color: #111827; }
+    .video-card video { width: 100%; border-radius: 0.375rem; margin-top: 0.5rem; background: #000; }
+    .muted { color: #6b7280; font-size: 0.9375rem; margin-bottom: 1rem; }
+    .note-app { font-size: 0.875rem; color: #6b7280; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; text-align: center; }
+    .note-app a { color: #2563eb; }
+    footer.footer { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e5e7eb; font-size: 0.9375rem; color: #4b5563; text-align: center; }
+    footer.footer a { color: #2563eb; }
+    .feedback-section label { display: block; font-weight: 600; color: #374151; margin-top: 0.75rem; font-size: 0.875rem; }
+    .feedback-section input, .feedback-section select, .feedback-section textarea { width: 100%; margin-top: 0.25rem; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 1rem; }
+    .feedback-section textarea { min-height: 6rem; resize: vertical; }
+    .feedback-section button { margin-top: 1rem; background: #2563eb; color: #fff; border: none; padding: 0.5rem 1.25rem; border-radius: 0.375rem; font-weight: 600; cursor: pointer; }
+    .feedback-section button:hover { background: #1d4ed8; }
+    .feedback-section button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .msg-ok { color: #15803d; margin-top: 0.75rem; font-weight: 500; }
+    .msg-err { color: #b91c1c; margin-top: 0.75rem; font-weight: 500; }
+    .section-sub { font-size: 1rem; font-weight: 600; color: #374151; margin: 1.25rem 0 0.5rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.35rem; }
+    .hero-oauth { margin: 0 0 1.25rem; padding-bottom: 1rem; border-bottom: 1px solid #e5e7eb; }
+    .hero-oauth .hero-title { font-size: 2rem; color: #1e3a8a; margin: 0 0 0.4rem; text-align: center; font-weight: 800; letter-spacing: -0.02em; }
+    .hero-oauth .hero-sub { font-size: 1.0625rem; color: #1e40af; text-align: center; margin: 0 0 0.75rem; font-weight: 600; line-height: 1.4; }
+    .hero-oauth .hero-desc { margin: 0.5rem 0 0; color: #374151; font-size: 0.9375rem; line-height: 1.55; }
+    .hero-oauth .hero-desc-en { margin: 0.65rem 0 0; color: #4b5563; font-size: 0.875rem; line-height: 1.5; border-left: 3px solid #93c5fd; padding-left: 0.75rem; }
+    .calendar-oauth { background: #f0fdf4; border: 1px solid #86efac; border-radius: 0.75rem; padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
+    .calendar-oauth h2 { font-size: 1.0625rem; margin: 0 0 0.65rem; color: #14532d; line-height: 1.35; }
+    .calendar-oauth p { margin: 0.45rem 0 0; color: #374151; font-size: 0.9375rem; line-height: 1.55; }
+    .calendar-oauth .en { margin-top: 0.65rem; font-size: 0.875rem; color: #4b5563; border-left: 3px solid #4ade80; padding-left: 0.75rem; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <a href="/">Qlinexa360</a>
+    <nav class="header-nav" aria-label="Enlaces públicos">
+      <a href="/benefits">Beneficios</a>
+      <a href="/aviso-privacidad">Privacidad</a>
+      <a href="/terminos">Términos</a>
+      <a href="/login">Iniciar sesión</a>
+    </nav>
+  </header>
+  <main>
+    <article class="card">
+      <header class="hero-oauth" lang="es">
+        <h1 class="hero-title">Qlinexa360</h1>
+        <p class="hero-sub">Plataforma médica para gestión médico-paciente y sincronización de agenda médica.</p>
+        <p class="hero-desc">
+          Qlinexa360 ayuda a profesionales de la salud a gestionar pacientes, agenda médica, expediente clínico, recetas, citas y comunicación operativa desde una plataforma web segura.
+        </p>
+        <p class="hero-desc-en" lang="en">
+          Qlinexa360 is a medical practice management platform for healthcare professionals, including appointment scheduling, patient management, clinical records, prescriptions, and Google Calendar synchronization.
+        </p>
+      </header>
+
+      <section class="calendar-oauth" aria-labelledby="gcal-integration-heading">
+        <h2 id="gcal-integration-heading">Integración con Google Calendar / Google Calendar Integration</h2>
+        <p>
+          Qlinexa360 utiliza la integración con Google Calendar para sincronizar citas médicas entre la plataforma y el calendario de Google del profesional de la salud. La integración permite reflejar altas, cambios o cancelaciones de citas iniciadas por el profesional dentro de Qlinexa360.
+        </p>
+        <p class="en" lang="en">
+          Qlinexa360 uses Google Calendar integration to synchronize medical appointments between the platform and the healthcare professional's Google Calendar. The integration supports appointment creation, updates, and cancellations initiated by the professional inside Qlinexa360.
+        </p>
+      </section>
+
+      <nav class="legal-strip" aria-label="Política de privacidad y términos">
+        <strong>Documentación legal:</strong>
+        <a href="/aviso-privacidad">Aviso de privacidad</a>
+        <span aria-hidden="true"> · </span>
+        <a href="/terminos">Términos de uso</a>
+      </nav>
+
+      <p class="nom-compliance" role="note">
+        <span>Plataforma Qlinexa360 alineada para cumplir con la NOM-004-SSA3-2012</span>
+        <a class="demo-btn" href="https://calendar.app.google/XTioZCzqHfEGcegG7" target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          Agendar demo
+        </a>
+      </p>
+
+      <h2 class="section-title" style="margin-top: 0.5rem">Beneficios de Qlinexa360</h2>
+      <p class="subtitle" style="margin-top: -0.25rem">Precios, funcionalidades y material informativo.</p>
+
+      <div class="price-banner">
+        Único plan: todas las funcionalidades por <strong>$499 MXN/mes IVA incluido</strong> (solo el profesional de la salud; asistentes y pacientes sin costo).
+      </div>
+
+      <section class="card" style="margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.25rem; color: #1e40af; margin-top: 0;">Precios transparentes</h2>
+        <div class="price-grid">
+          <div class="price-box" style="background:#ecfdf5;border:1px solid #a7f3d0;">
+            <div>Profesional</div>
+            <div class="amt">$499/mes</div>
+            <div style="font-size:0.75rem;">IVA incluido</div>
+          </div>
+          <div class="price-box" style="background:#eff6ff;border:1px solid #bfdbfe;">
+            <div>Asistentes</div>
+            <div class="amt">Gratis</div>
+            <div style="font-size:0.75rem;">Con profesional activo</div>
+          </div>
+          <div class="price-box" style="background:#faf5ff;border:1px solid #e9d5ff;">
+            <div>Pacientes</div>
+            <div class="amt">Gratis</div>
+            <div style="font-size:0.75rem;">Con profesional activo</div>
+          </div>
+        </div>
+        <p style="margin:1rem 0 0;font-size:0.9375rem;color:#4b5563;">La suscripción a la plataforma se paga con PayPal. El cobro de consultas es independiente: puedes usar tu propio medio o, de forma opcional, enlazar Mercado Pago en «Mi Perfil» para generar enlaces de pago a pacientes.</p>
+
+        <div class="paypal-block">
+          <div class="paypal-inner">
+            <div class="paypal-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+            </div>
+            <div>
+              <h3>Pago seguro de tu suscripción con PayPal</h3>
+              <p>El pago mensual de la plataforma se realiza con PayPal. <strong style="color:#1e40af;">Solo cubre tu suscripción</strong> — el cobro de consultas es aparte: por tu cuenta o, si lo prefieres, con la integración opcional de Mercado Pago.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="trial-block">
+          <div class="trial-inner">
+            <div class="trial-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+            </div>
+            <div>
+              <h3>15 días gratis para conocer la plataforma</h3>
+              <p>Al registrarte como profesional de la salud tienes <strong style="color:#047857;">15 días completos de acceso gratuito</strong> para comprobar que Qlinexa360 cubre tus necesidades. <strong style="color:#047857;">A partir del día 16</strong> inicia el cobro recurrente de la suscripción mediante PayPal.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <h2 class="section-title">Funcionalidades principales</h2>
+      <p class="subtitle" style="margin-top: -0.35rem; margin-bottom: 1rem;">Precios, funcionalidades y material informativo.</p>
+
+      <div class="features-highlight">
+        <p class="features-highlight-lead">
+          Un solo plan, <strong>todo incluido</strong>: lo que ves en esta lista forma parte del mismo acceso mensual — sin módulos de pago adicionales ni costos ocultos por funcionalidad.
+        </p>
+        <p class="features-highlight-nom" role="note">
+          Plataforma Qlinexa360 alineada para cumplir con la NOM-004-SSA3-2012
+        </p>
+      </div>
+
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#3b82f6,#4f46e5);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Gestión integral</h2><p>Pacientes y profesionales en un solo lugar. Administra tu consultorio de forma eficiente.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#06b6d4,#2563eb);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Telemedicina</h2><p>Videollamadas con Google Meet o Teams, consentimiento digital incluido. Expande tu consulta sin límites.</p></div>
+      </div>
+      <div class="benefit-row optional">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#38bdf8,#1d4ed8);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375a1.125 1.125 0 011.125 1.125v1.5c0 .414-.336.75-.75.75h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.375M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" /></svg>
+        </div>
+        <div class="benefit-body">
+          <div class="benefit-title-row">
+            <h2>Cobros con Mercado Pago</h2>
+            <span class="optional-badge">Opcional</span>
+          </div>
+          <p>Si lo deseas, enlaza tu cuenta de Mercado Pago en «Mi Perfil» y genera enlaces de cobro a pacientes (ideal para teleconsultas). Los fondos se acreditan en tu cuenta; Mercado Pago aplica su comisión de procesamiento y Qlinexa360 una comisión mínima de plataforma para mantener la integración. No es obligatorio: puedes seguir cobrando por tu cuenta.</p>
+          <p class="optional-footer">Actívalo solo si te conviene. Sin Mercado Pago conectado, la plataforma funciona igual; no hay cargo extra en tu mensualidad por tenerlo disponible.</p>
+        </div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#10b981,#0d9488);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Consentimientos digitales</h2><p>Firma electrónica y avisos de privacidad listos para cumplir con la normativa.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#8b5cf6,#9333ea);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Suscripciones automatizadas</h2><p>Gestiona las suscripciones de tus pacientes sin esfuerzo manual.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#f59e0b,#ea580c);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Relación de facturación</h2><p>Vincula profesional-paciente para búsquedas y trazabilidad. Distinto del cobro opcional con Mercado Pago: aquí no se procesan pagos de consultas.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#2563eb,#0ea5e9);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Pre-consultas</h2><p>Envía un formulario previo para que el paciente capture su información antes de la consulta. Llegas con contexto, reduces tiempos de captura y enfocas la consulta en lo clínico.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#0ea5e9,#2563eb);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Historial clínico</h2><p>Expediente completo de cada paciente. Acceso desde cualquier dispositivo.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#f43f5e,#db2777);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Dashboards avanzados</h2><p>Métricas clave para tomar decisiones y mejorar la operación de tu consultorio.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#84cc16,#16a34a);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M10.5 4.5a.75.75 0 00-.75.75v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5a.75.75 0 00-.75-.75z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Recetas digitales</h2><p>Genera y comparte recetas de forma rápida y profesional.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#d946ef,#9333ea);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Notificaciones por email</h2><p>Recordatorios que reducen inasistencias y mantienen a tus pacientes informados.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#64748b,#4b5563);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Panel de administración</h2><p>Control total sobre la configuración de tu práctica.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#22c55e,#059669);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Seguridad y privacidad</h2><p>Datos protegidos conforme a la normativa vigente.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#6366f1,#2563eb);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Gestión de citas</h2><p>Agenda, reprograma y confirma. Integración con Google Calendar y Outlook Calendar (OAuth).</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#06b6d4,#0d9488);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Asistentes</h2><p>Personal de apoyo con acceso controlado a las funciones que necesiten.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#3b82f6,#0891b2);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Colaboración entre profesionales</h2><p>Comparte y consulta historiales clínicos con otros colegas.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#0d9488,#047857);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Laboratorio Inteligente</h2><p>PDF de laboratorio → indicadores listos en segundos. Semáforos, tendencias y comparativos en una vista profesional — interpretación del profesional.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#f59e0b,#e11d48);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Beneficios en mensualidad por plan de referidos</h2><p>Invita colegas con tu código: acumulas beneficio aplicable a tu mensualidad y ellos pueden obtener tiempo extra al activar la suscripción, según las reglas vigentes del programa en tu perfil.</p></div>
+      </div>
+      <div class="benefit-row">
+        <div class="benefit-icon" style="background:linear-gradient(135deg,#ef4444,#e11d48);" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" /></svg>
+        </div>
+        <div class="benefit-body"><h2>Compromiso Qlinexa360</h2><p>Mejoras constantes para ser la mejor plataforma de gestión al mismo precio ($499 mxn/mes IVA incluido).</p></div>
+      </div>
+
+      <div class="demo-banner" role="region" aria-label="Agendar demostración">
+        <div>
+          <h3>¿Quieres ver Qlinexa360 en acción?</h3>
+          <p>Reserva una demo personalizada en mi calendario y te muestro la plataforma en vivo.</p>
+        </div>
+        <a class="demo-btn" href="https://calendar.app.google/XTioZCzqHfEGcegG7" target="_blank" rel="noopener noreferrer" style="align-self: center;">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          Agendar demo
+        </a>
+      </div>
+
+      <section class="card videos-section" aria-labelledby="videos-heading">
+        <h2 id="videos-heading">Videos y tutoriales</h2>
+        <p class="muted">Videos promocionales y generales (sin iniciar sesión). La reproducción usa el mismo servidor seguro que la aplicación.</p>
+        <div id="public-videos-root">
+          <p id="public-videos-loading">Cargando videos…</p>
+          <p id="public-videos-error" class="msg-err" style="display:none;"></p>
+        </div>
+      </section>
+
+      <section class="card feedback-section" aria-labelledby="feedback-heading">
+        <h2 id="feedback-heading">¿Tienes sugerencias o quejas?</h2>
+        <p class="muted">Puedes escribirnos sin cuenta. Te pedimos un correo de contacto para poder responderte.</p>
+        <label for="fb-email">Correo electrónico</label>
+        <input type="email" id="fb-email" name="email" autocomplete="email" placeholder="tu@correo.com" required maxlength="200" />
+        <label for="fb-type">Tipo</label>
+        <select id="fb-type" name="type">
+          <option value="sugerencia">Sugerencias o recomendaciones</option>
+          <option value="queja">Quejas</option>
+        </select>
+        <label for="fb-message">Mensaje (máx. 500 caracteres)</label>
+        <textarea id="fb-message" name="message" maxlength="500" rows="4" placeholder="Describe tu comentario…" required></textarea>
+        <button type="button" id="fb-send">Enviar</button>
+        <p id="fb-status" role="status" aria-live="polite"></p>
+      </section>
+
+      <p class="note-app">Tras <a href="/login">iniciar sesión</a> encontrarás tutoriales adicionales por sección y herramientas de administración de videos (según tu rol).</p>
+
+      <footer class="footer">
+        <p><strong>Legal:</strong> <a href="/aviso-privacidad">Aviso de privacidad</a> · <a href="/terminos">Términos de uso</a></p>
+        <p><strong>Contacto:</strong> <a href="mailto:admin@qlinexa360.com">admin@qlinexa360.com</a> · <a href="mailto:legal@qlinexa360.com">legal@qlinexa360.com</a></p>
+      </footer>
+    </article>
+  </main>
+  <script>
+(function () {
+  function apiBase() {
+    var h = window.location.hostname || '';
+    if (h === 'localhost' || h === '127.0.0.1') return '';
+    if (h.indexOf('qlinexa360.com') !== -1 && h.indexOf('api.') !== 0) return 'https://api.qlinexa360.com';
+    return 'https://api.qlinexa360.com';
+  }
+  function apiUrl(path) {
+    var b = apiBase();
+    return b ? b.replace(/\/$/, '') + (path.indexOf('/') === 0 ? path : '/' + path) : path;
+  }
+  function videoMime(url) {
+    if (!url) return 'video/mp4';
+    var ext = (url.split('.').pop() || 'mp4').split('?')[0].toLowerCase();
+    var m = { mp4: 'video/mp4', webm: 'video/webm', ogg: 'video/ogg', mov: 'video/quicktime', avi: 'video/x-msvideo' };
+    return m[ext] || 'video/mp4';
+  }
+  var SECTION_NAMES = { general: 'General', sales: 'Videos de ventas', dashboard: 'Dashboard', patients: 'Mis Pacientes', calendar: 'Calendario', 'medical-records': 'Historial clínico', prescriptions: 'Recetas', documents: 'Zona de estudio', billing: 'Relación de facturación', profile: 'Mi perfil', help: 'Ayuda y tutoriales' };
+
+  var root = document.getElementById('public-videos-root');
+  var loading = document.getElementById('public-videos-loading');
+  var errEl = document.getElementById('public-videos-error');
+
+  fetch(apiUrl('/api/tutorial-videos/public'), { credentials: 'omit' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('No se pudieron cargar los videos (' + r.status + ')');
+      return r.json();
+    })
+    .then(function (videos) {
+      if (loading) loading.style.display = 'none';
+      if (!videos || !videos.length) {
+        var p = document.createElement('p');
+        p.className = 'muted';
+        p.textContent = 'No hay videos públicos por el momento.';
+        root.appendChild(p);
+        return;
+      }
+      var by = {};
+      videos.forEach(function (v) {
+        var s = v.section || 'general';
+        if (!by[s]) by[s] = [];
+        by[s].push(v);
+      });
+      Object.keys(by).sort().forEach(function (section) {
+        var h = document.createElement('h3');
+        h.className = 'section-sub';
+        h.textContent = SECTION_NAMES[section] || section;
+        root.appendChild(h);
+        by[section].forEach(function (video) {
+          var card = document.createElement('div');
+          card.className = 'video-card';
+          var t = document.createElement('h4');
+          t.textContent = video.title || 'Video';
+          card.appendChild(t);
+          if (video.description) {
+            var d = document.createElement('p');
+            d.className = 'muted';
+            d.style.marginTop = '0.25rem';
+            d.textContent = video.description;
+            card.appendChild(d);
+          }
+          var vid = document.createElement('video');
+          vid.setAttribute('controls', '');
+          vid.setAttribute('playsinline', '');
+          vid.setAttribute('preload', 'metadata');
+          vid.style.width = '100%';
+          var src = document.createElement('source');
+          src.src = video.videoUrl || video.streamUrl;
+          src.type = videoMime(src.src);
+          vid.appendChild(src);
+          vid.appendChild(document.createTextNode('Tu navegador no soporta video HTML5.'));
+          card.appendChild(vid);
+          root.appendChild(card);
+        });
+      });
+    })
+    .catch(function (e) {
+      if (loading) loading.style.display = 'none';
+      errEl.style.display = 'block';
+      errEl.textContent = e.message || 'Error al cargar videos.';
+    });
+
+  document.getElementById('fb-send').addEventListener('click', function () {
+    var status = document.getElementById('fb-status');
+    var email = document.getElementById('fb-email').value.trim();
+    var message = document.getElementById('fb-message').value.trim();
+    var type = document.getElementById('fb-type').value;
+    status.textContent = '';
+    status.className = '';
+    if (!email || email.indexOf('@') === -1) {
+      status.className = 'msg-err';
+      status.textContent = 'Ingresa un correo electrónico válido.';
+      return;
+    }
+    if (!message) {
+      status.className = 'msg-err';
+      status.textContent = 'Escribe un mensaje.';
+      return;
+    }
+    var btn = document.getElementById('fb-send');
+    btn.disabled = true;
+    fetch(apiUrl('/api/feedback'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'omit',
+      body: JSON.stringify({ type: type, message: message, email: email })
+    })
+      .then(function (r) {
+        return r.text().then(function (t) {
+          var j = {};
+          try {
+            j = t ? JSON.parse(t) : {};
+          } catch (_) {}
+          if (!r.ok) throw new Error(j.message || t || 'Error al enviar');
+          return j;
+        });
+      })
+      .then(function () {
+        status.className = 'msg-ok';
+        status.textContent = '¡Tu mensaje ha sido enviado!';
+        document.getElementById('fb-message').value = '';
+      })
+      .catch(function (e) {
+        status.className = 'msg-err';
+        status.textContent = e.message || 'No se pudo enviar. Intenta más tarde.';
+      })
+      .finally(function () {
+        btn.disabled = false;
+      });
+  });
+})();
+  </script>
+</body>
+</html>

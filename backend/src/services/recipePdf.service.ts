@@ -97,9 +97,15 @@ export class RecipePdfService {
           certificadoProfesional: recipe.doctor.certificadoProfesional || 'No especificado',
           certificadoEspecialidad: recipe.doctor.certificadoEspecialidad || 'No especificado',
           certificadoMaestria: recipe.doctor.certificadoMaestria || 'No especificado',
+          universidad: recipe.doctor.universidad || null,
           logoUrl: logoBase64,
           primaryColor: recipe.doctor.primaryColor || '#2563eb',
-          secondaryColor: recipe.doctor.secondaryColor || '#1e40af'
+          secondaryColor: recipe.doctor.secondaryColor || '#1e40af',
+          socialMediaFacebook: recipe.doctor.socialMediaFacebook || null,
+          socialMediaInstagram: recipe.doctor.socialMediaInstagram || null,
+          socialMediaX: recipe.doctor.socialMediaX || null,
+          socialMediaOther: recipe.doctor.socialMediaOther || null,
+          hasSocialMedia: !!(recipe.doctor.socialMediaFacebook || recipe.doctor.socialMediaInstagram || recipe.doctor.socialMediaX || recipe.doctor.socialMediaOther)
         },
         patient: {
           firstName: recipe.paciente.user.firstName,
@@ -251,6 +257,17 @@ export class RecipePdfService {
       hash = hash & hash;
     }
     return Math.abs(hash).toString(16);
+  }
+
+  /** URL pública estable para ver/descargar PDF (sin caducidad por timestamp). */
+  static buildPdfViewUrl(recipeId: string, doctorId: string, emissionDate: Date): string {
+    const hash = this.generateProductionHash(recipeId, doctorId, emissionDate);
+    const baseUrl = (
+      process.env.RECIPE_PUBLIC_BASE_URL ||
+      process.env.BASE_URL ||
+      'https://api.qlinexa360.com'
+    ).replace(/\/$/, '');
+    return `${baseUrl}/api/recipes/${recipeId}/pdf-view?temp=${hash}`;
   }
 
   /**

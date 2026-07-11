@@ -17,6 +17,12 @@ export const getApiHeaders = () => {
 };
 
 export const getApiUrl = (path) => {
+  if (typeof window !== 'undefined') {
+    const h = window.location?.hostname || '';
+    if (h === 'localhost' || h === '127.0.0.1') {
+      return path.startsWith('/') ? path : `/${path}`;
+    }
+  }
   let base = import.meta.env.VITE_API_URL;
   if (!base && typeof window !== 'undefined') {
     const h = window.location?.hostname || '';

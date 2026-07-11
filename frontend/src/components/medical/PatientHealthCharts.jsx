@@ -16,18 +16,32 @@ import {
 } from 'recharts';
 import { getMedicalRecords } from '../../services/medicalService';
 import { getFormTemplates, getPatientDetails } from '../../services/doctorService';
-import { getNormalRange, isOutOfRange, getAlertLevel, getAlertColor, getPersonalizedNormalRange, calculateAge } from '../../utils/normalRanges';
+import { getMyConsultations, getMyProfile } from '../../services/patientService';
+import { getNormalRange, getAlertColor, getPersonalizedNormalRange, calculateAge } from '../../utils/normalRanges';
 import { calculateAge as formatAgeDisplay, getAgeInYearsFromFieldValue, formatAgeFieldValue } from '../../utils/ageUtils';
-import { getWeightPercentiles, getHeightPercentiles, getBMIPercentiles, getPercentileForValue, getPercentileColor, getPercentileZoneColor } from '../../utils/omsPercentiles';
+import { getWeightPercentiles, getHeightPercentiles, getBMIPercentiles, getPercentileForValue, getPercentileZoneColor } from '../../utils/omsPercentiles';
 import { toast } from 'react-toastify';
 
-const PatientHealthCharts = ({ patientId }) => {
+function isAgeLikeField(fieldIdToLabel, fieldId) {
+  const label = fieldIdToLabel[fieldId];
+  if (!label) return false;
+  const n = label
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/\(/g, '')
+    .replace(/\)/g, '');
+  return n.includes('edad');
+}
+
+const MULTI_LINE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#ec4899'];
+
+const PatientHealthCharts = ({ patientId, isPatientView = false }) => {
   const [consultations, setConsultations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedParameter, setSelectedParameter] = useState(null);
+  const [selectedParameters, setSelectedParameters] = useState([]);
   const [alertData, setAlertData] = useState([]);
   const [fieldIdToLabel, setFieldIdToLabel] = useState({});
-  const [labelToId, setLabelToId] = useState({});
   const [patientInfo, setPatientInfo] = useState(null); // Información del paciente para rangos personalizados
   const [formTemplates, setFormTemplates] = useState([]); // Plantillas de formulario
 
@@ -39,7 +53,7 @@ const PatientHealthCharts = ({ patientId }) => {
   }, [formTemplates]);
 
   // Detectar si el parámetro seleccionado es "Esquema de vacunación"
-  const isVaccinationSchedule = selectedParameter === 'VACCINATION_SCHEDULE';
+  const isVaccinationSchedule = selectedParameters.includes('VACCINATION_SCHEDULE');
 
   // Cargar plantillas de formulario para mapear IDs a labels
   useEffect(() => {
@@ -47,21 +61,14 @@ const PatientHealthCharts = ({ patientId }) => {
       try {
         const templates = await getFormTemplates();
         const idToLabel = {};
-        const lblToId = {};
-        
+
         templates.forEach(template => {
           template.fields.forEach(field => {
             idToLabel[field.id] = field.label;
-            // Crear clave normalizada del label para búsqueda
-            const normalizedLabel = field.label.toLowerCase()
-              .replace(/\s+/g, '_')
-              .replace(/[^a-z0-9_]/g, '');
-            lblToId[normalizedLabel] = field.id;
           });
         });
-        
+
         setFieldIdToLabel(idToLabel);
-        setLabelToId(lblToId);
         setFormTemplates(templates);
       } catch (error) {
         console.error('Error cargando plantillas:', error);
@@ -74,11 +81,13 @@ const PatientHealthCharts = ({ patientId }) => {
   // Cargar información del paciente para rangos personalizados
   // Debe ejecutarse después de cargar consultas y templates
   useEffect(() => {
-    if (!patientId || !fieldIdToLabel || Object.keys(fieldIdToLabel).length === 0) return;
+    if ((!patientId && !isPatientView) || !fieldIdToLabel || Object.keys(fieldIdToLabel).length === 0) return;
     
     const fetchPatientInfo = async () => {
       try {
-        const patient = await getPatientDetails(patientId);
+        const patient = isPatientView
+          ? await getMyProfile()
+          : await getPatientDetails(patientId);
         // Buscar la altura, peso, sexo biológico, edad y embarazo más recientes en las consultas
         let latestHeight = null;
         let latestWeight = null;
@@ -133,12 +142,12 @@ const PatientHealthCharts = ({ patientId }) => {
         }
         
         setPatientInfo({
-          dateOfBirth: patient.dateOfBirth,
-          gender: patient.gender,
-          biologicalSex: latestBiologicalSex || patient.gender, // Usar sexo biológico del formData si está, sino del paciente
+          dateOfBirth: patient?.dateOfBirth ?? null,
+          gender: patient?.gender ?? null,
+          biologicalSex: latestBiologicalSex || patient?.gender || null,
           height: latestHeight,
           weight: latestWeight,
-          age: latestAge, // Edad del formData si está
+          age: latestAge,
           isPregnant: latestIsPregnant
         });
       } catch (error) {
@@ -157,16 +166,21 @@ const PatientHealthCharts = ({ patientId }) => {
     };
 
     fetchPatientInfo();
-  }, [patientId, consultations, fieldIdToLabel]);
+  }, [patientId, isPatientView, consultations, fieldIdToLabel]);
 
   useEffect(() => {
-    if (!patientId) return;
-    
     const fetchData = async () => {
       try {
         setLoading(true);
-        const records = await getMedicalRecords(patientId);
-        setConsultations(records);
+        if (isPatientView) {
+          const records = await getMyConsultations();
+          setConsultations(Array.isArray(records) ? records : []);
+        } else if (patientId) {
+          const records = await getMedicalRecords(patientId);
+          setConsultations(records);
+        } else {
+          setConsultations([]);
+        }
       } catch (error) {
         console.error('Error cargando consultas:', error);
         toast.error('Error al cargar datos del paciente');
@@ -176,7 +190,7 @@ const PatientHealthCharts = ({ patientId }) => {
     };
 
     fetchData();
-  }, [patientId]);
+  }, [patientId, isPatientView]);
 
   // Función para obtener la fecha de aplicación de una vacuna
   // Para vacunas, busca el campo de fecha correspondiente en el formData
@@ -313,80 +327,82 @@ const PatientHealthCharts = ({ patientId }) => {
     return consultationDate;
   }, [getVaccinationDate]);
 
-  // Determinar alertas fuera de rango
+  // Determinar alertas fuera de rango (todos los parámetros numéricos seleccionados)
   useEffect(() => {
-    if (!selectedParameter) {
+    const numericSelected = selectedParameters.filter((id) => id !== 'VACCINATION_SCHEDULE');
+    if (numericSelected.length === 0) {
       setAlertData([]);
       return;
     }
-    
-    const alerts = consultations
-      .filter(consultation => {
-        if (!consultation.formData || !consultation.formData[selectedParameter]) return false;
-        const value = parseFloat(consultation.formData[selectedParameter]);
-        if (isNaN(value)) return false;
-        
-        // Normalizar el label del campo para buscar en normalRanges
-        const label = fieldIdToLabel[selectedParameter];
-        if (!label) return false;
-        
-        const normalizedLabel = label.toLowerCase()
-          .replace(/\s+/g, '_')
-          .replace(/[^a-z0-9_]/g, '')
-          .replace(/\(/g, '')
-          .replace(/\)/g, '');
-        
-        // Usar rango personalizado si está disponible (pasar formData de la consulta actual)
-        const personalizedRange = patientInfo ? getPersonalizedNormalRange(normalizedLabel, patientInfo, consultation.formData) : null;
-        const range = personalizedRange || getNormalRange(normalizedLabel);
-        
-        if (!range || isNaN(value)) return false;
-        return value < range.min || value > range.max;
-      })
-      .map(consultation => {
-        const value = parseFloat(consultation.formData[selectedParameter]);
-        const label = fieldIdToLabel[selectedParameter];
-        const normalizedLabel = label.toLowerCase()
-          .replace(/\s+/g, '_')
-          .replace(/[^a-z0-9_]/g, '')
-          .replace(/\(/g, '')
-          .replace(/\)/g, '');
-        
-        // Usar rango personalizado para calcular alerta (pasar formData de la consulta actual)
-        const personalizedRange = patientInfo ? getPersonalizedNormalRange(normalizedLabel, patientInfo, consultation.formData) : null;
-        const range = personalizedRange || getNormalRange(normalizedLabel);
-        
-        let alertLevel = 0;
-        if (range && !isNaN(value)) {
-          const isOutOfRangeValue = value < range.min || value > range.max;
-          if (isOutOfRangeValue) {
-            const mean = (range.min + range.max) / 2;
-            if (mean !== 0) {
-              const deviation = Math.abs(value - mean) / mean;
-              alertLevel = deviation > 0.3 ? 2 : 1;
-            } else {
-              alertLevel = 1;
+
+    const alerts = [];
+    numericSelected.forEach((fieldId) => {
+      if (isAgeLikeField(fieldIdToLabel, fieldId)) return;
+
+      const batch = consultations
+        .filter((consultation) => {
+          if (!consultation.formData || !consultation.formData[fieldId]) return false;
+          const value = parseFloat(consultation.formData[fieldId]);
+          if (isNaN(value)) return false;
+          const label = fieldIdToLabel[fieldId];
+          if (!label) return false;
+          const normalizedLabel = label
+            .toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9_]/g, '')
+            .replace(/\(/g, '')
+            .replace(/\)/g, '');
+          const personalizedRange = patientInfo
+            ? getPersonalizedNormalRange(normalizedLabel, patientInfo, consultation.formData)
+            : null;
+          const range = personalizedRange || getNormalRange(normalizedLabel);
+          if (!range || isNaN(value)) return false;
+          return value < range.min || value > range.max;
+        })
+        .map((consultation) => {
+          const value = parseFloat(consultation.formData[fieldId]);
+          const label = fieldIdToLabel[fieldId];
+          const normalizedLabel = label
+            .toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9_]/g, '')
+            .replace(/\(/g, '')
+            .replace(/\)/g, '');
+          const personalizedRange = patientInfo
+            ? getPersonalizedNormalRange(normalizedLabel, patientInfo, consultation.formData)
+            : null;
+          const range = personalizedRange || getNormalRange(normalizedLabel);
+          let alertLevel = 0;
+          if (range && !isNaN(value)) {
+            const isOutOfRangeValue = value < range.min || value > range.max;
+            if (isOutOfRangeValue) {
+              const mean = (range.min + range.max) / 2;
+              if (mean !== 0) {
+                const deviation = Math.abs(value - mean) / mean;
+                alertLevel = deviation > 0.3 ? 2 : 1;
+              } else {
+                alertLevel = 1;
+              }
             }
           }
-        }
-        
-        // Para vacunas, usar la fecha de aplicación; para otros campos, usar la fecha de consulta
-        const chartDate = getChartDate(selectedParameter, consultation);
-        let alertDate = chartDate;
-        if (alertDate && typeof alertDate === 'string') {
-          alertDate = new Date(alertDate);
-        }
-        
-        return {
-          date: alertDate,
-          value: value,
-          alertLevel: alertLevel,
-          consultationId: consultation.id
-        };
-      });
-    
+          const chartDate = getChartDate(fieldId, consultation);
+          let alertDate = chartDate;
+          if (alertDate && typeof alertDate === 'string') {
+            alertDate = new Date(alertDate);
+          }
+          return {
+            date: alertDate,
+            value,
+            alertLevel,
+            consultationId: consultation.id,
+            fieldId
+          };
+        });
+      alerts.push(...batch);
+    });
+
     setAlertData(alerts);
-  }, [consultations, selectedParameter, fieldIdToLabel, patientInfo, getChartDate]);
+  }, [consultations, selectedParameters, fieldIdToLabel, patientInfo, getChartDate]);
 
   // Lista de parámetros disponibles basados en los datos (calculado dentro de un useMemo)
   // Solo incluir parámetros que tengan un label válido (no UUID)
@@ -416,12 +432,14 @@ const PatientHealthCharts = ({ patientId }) => {
     return params;
   }, [consultations, fieldIdToLabel, isVaccinationTemplate]);
 
-  // Establecer el primer parámetro disponible por defecto - MOVER ANTES DE RETURNS
   useEffect(() => {
-    if (!selectedParameter && availableParameters.length > 0) {
-      setSelectedParameter(availableParameters[0]);
-    }
-  }, [availableParameters, selectedParameter]);
+    if (availableParameters.length === 0) return;
+    setSelectedParameters((prev) => {
+      const kept = prev.filter((id) => availableParameters.includes(id));
+      if (kept.length > 0) return kept;
+      return [availableParameters[0]];
+    });
+  }, [availableParameters]);
 
   // Obtener el nombre legible del parámetro
   const getParameterName = (fieldId) => {
@@ -496,45 +514,301 @@ const PatientHealthCharts = ({ patientId }) => {
     if (normalizedLabel.includes('hematocrito') || normalizedLabel.includes('hematocrit') || normalizedLabel.includes('hct')) {
       return '%';
     }
-    
+    if (normalizedLabel.includes('edad')) {
+      if (
+        normalizedLabel.includes('mes') ||
+        normalizedLabel.includes('años_y_meses') ||
+        normalizedLabel.includes('anos_y_meses')
+      ) {
+        return 'años y meses';
+      }
+      if (normalizedLabel.includes('año') && !normalizedLabel.includes('mes')) {
+        return 'años';
+      }
+      return 'años y meses';
+    }
+
     // Si no se encuentra ninguna coincidencia, retornar string vacío
     return '';
   };
 
   // Obtener rango normal basado en el label normalizado (con personalización)
-  const getNormalRangeForField = (fieldId) => {
-    if (!fieldId) return null;
-    const label = fieldIdToLabel[fieldId];
-    if (!label) return null;
-    
-    const normalizedLabel = label.toLowerCase()
-      .replace(/\s+/g, '_')
-      .replace(/[^a-z0-9_]/g, '')
-      .replace(/\(/g, '')
-      .replace(/\)/g, '');
-    
-    // Pasar TODAS las consultas para buscar en todo el historial clínico
-    // Esto permite usar múltiples variables (edad, género, altura, peso, etc.) para acotar mejor los rangos
-    const personalizedRange = getPersonalizedNormalRange(
-      normalizedLabel, 
-      patientInfo, 
-      null, // formData individual ya no se usa, se busca en todas las consultas
-      consultations // Pasar todas las consultas para búsqueda completa
-    );
-    
-    if (personalizedRange) return personalizedRange;
-    
-    // Para peso y talla, si no hay rango personalizado, no usar genérico erróneo
-    if (normalizedLabel.includes('peso') || normalizedLabel === 'peso' || 
-        normalizedLabel.includes('talla') || normalizedLabel.includes('altura')) {
-      return null;
-    }
-    
-    // Para otros parámetros, usar rango genérico como respaldo
-    return getNormalRange(normalizedLabel);
+  const getNormalRangeForField = React.useCallback(
+    (fieldId) => {
+      if (!fieldId) return null;
+      const label = fieldIdToLabel[fieldId];
+      if (!label) return null;
+
+      const normalizedLabel = label
+        .toLowerCase()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-z0-9_]/g, '')
+        .replace(/\(/g, '')
+        .replace(/\)/g, '');
+
+      const personalizedRange = getPersonalizedNormalRange(
+        normalizedLabel,
+        patientInfo,
+        null,
+        consultations
+      );
+
+      if (personalizedRange) return personalizedRange;
+
+      if (
+        normalizedLabel.includes('peso') ||
+        normalizedLabel === 'peso' ||
+        normalizedLabel.includes('talla') ||
+        normalizedLabel.includes('altura')
+      ) {
+        return null;
+      }
+
+      return getNormalRange(normalizedLabel);
+    },
+    [fieldIdToLabel, patientInfo, consultations]
+  );
+
+  const shouldShowPercentilesForField = React.useCallback(
+    (fieldId) => {
+      if (!fieldId || !patientInfo) return false;
+      const label = fieldIdToLabel[fieldId];
+      if (!label) return false;
+      const normalizedLabel = label
+        .toLowerCase()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-z0-9_]/g, '');
+      const isWeight = normalizedLabel.includes('peso') && !normalizedLabel.includes('peso_ideal');
+      const isHeight = normalizedLabel.includes('talla') || normalizedLabel.includes('altura');
+      const isBMI =
+        normalizedLabel.includes('imc') || normalizedLabel.includes('indice_de_masa_corporal');
+      if (!isWeight && !isHeight && !isBMI) return false;
+      let age = null;
+      if (patientInfo.dateOfBirth) age = calculateAge(patientInfo.dateOfBirth);
+      else if (patientInfo.age != null) age = patientInfo.age;
+      return age !== null && age !== undefined && age < 19;
+    },
+    [patientInfo, fieldIdToLabel]
+  );
+
+  const chartBundleByField = React.useMemo(() => {
+    const bundles = {};
+    selectedParameters.forEach((fieldId) => {
+      if (fieldId === 'VACCINATION_SCHEDULE') return;
+      const normalRange = getNormalRangeForField(fieldId);
+      const showP = shouldShowPercentilesForField(fieldId);
+
+      const chartData = consultations
+        .filter((consultation) => consultation.formData && consultation.formData[fieldId])
+        .map((consultation) => {
+          const value = parseFloat(consultation.formData[fieldId]);
+          if (isNaN(value)) return null;
+          const chartDate = getChartDate(fieldId, consultation);
+          let consultationDate = chartDate;
+          if (consultationDate && typeof consultationDate === 'string') {
+            consultationDate = new Date(consultationDate);
+          }
+          let ageAtConsultation = null;
+          if (patientInfo && patientInfo.dateOfBirth) {
+            const birthDate = new Date(patientInfo.dateOfBirth);
+            const consultationDateObj = new Date(consultationDate);
+            const ageInYears =
+              (consultationDateObj - birthDate) / (1000 * 60 * 60 * 24 * 365.25);
+            ageAtConsultation = Math.max(0, Math.min(ageInYears, 19));
+          } else if (patientInfo && patientInfo.age) {
+            ageAtConsultation = patientInfo.age;
+          }
+          const label = fieldIdToLabel[fieldId];
+          if (!label) return null;
+          const normalizedLabel = label
+            .toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9_]/g, '');
+          const ageField = isAgeLikeField(fieldIdToLabel, fieldId);
+          const isOut =
+            !ageField &&
+            normalRange &&
+            (value < normalRange.min || value > normalRange.max);
+          let percentile = null;
+          if (showP && ageAtConsultation !== null && patientInfo) {
+            const gender = patientInfo.biologicalSex || patientInfo.gender || '';
+            let percentiles = null;
+            if (normalizedLabel.includes('peso') && !normalizedLabel.includes('peso_ideal')) {
+              percentiles = getWeightPercentiles(ageAtConsultation, gender);
+            } else if (normalizedLabel.includes('talla') || normalizedLabel.includes('altura')) {
+              percentiles = getHeightPercentiles(ageAtConsultation, gender);
+            } else if (
+              normalizedLabel.includes('imc') ||
+              normalizedLabel.includes('indice_de_masa_corporal')
+            ) {
+              percentiles = getBMIPercentiles(ageAtConsultation, gender);
+            }
+            if (percentiles) percentile = getPercentileForValue(value, percentiles);
+          }
+          return {
+            date: consultationDate,
+            value,
+            consultationId: consultation.id,
+            isOutOfRange: isOut || false,
+            age: ageAtConsultation,
+            percentile
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      let chartDataWithPercentiles = [];
+      if (showP && chartData.length > 0) {
+        const label = fieldIdToLabel[fieldId];
+        const normalizedLabel = label
+          .toLowerCase()
+          .replace(/\s+/g, '_')
+          .replace(/[^a-z0-9_]/g, '');
+        const gender = patientInfo?.biologicalSex || patientInfo?.gender || '';
+        chartDataWithPercentiles = chartData.map((dataPoint) => {
+          if (dataPoint.age === null) {
+            return {
+              ...dataPoint,
+              p3: null,
+              p10: null,
+              p25: null,
+              p50: null,
+              p75: null,
+              p90: null,
+              p97: null
+            };
+          }
+          let percentiles = null;
+          if (normalizedLabel.includes('peso') && !normalizedLabel.includes('peso_ideal')) {
+            percentiles = getWeightPercentiles(dataPoint.age, gender);
+          } else if (normalizedLabel.includes('talla') || normalizedLabel.includes('altura')) {
+            percentiles = getHeightPercentiles(dataPoint.age, gender);
+          } else if (
+            normalizedLabel.includes('imc') ||
+            normalizedLabel.includes('indice_de_masa_corporal')
+          ) {
+            percentiles = getBMIPercentiles(dataPoint.age, gender);
+          }
+          return {
+            ...dataPoint,
+            p3: percentiles?.p3 ?? null,
+            p10: percentiles?.p10 ?? null,
+            p25: percentiles?.p25 ?? null,
+            p50: percentiles?.p50 ?? null,
+            p75: percentiles?.p75 ?? null,
+            p90: percentiles?.p90 ?? null,
+            p97: percentiles?.p97 ?? null
+          };
+        });
+      }
+
+      bundles[fieldId] = {
+        normalRange,
+        shouldShowPercentiles: showP,
+        chartData,
+        chartDataWithPercentiles
+      };
+    });
+    return bundles;
+  }, [
+    selectedParameters,
+    consultations,
+    patientInfo,
+    fieldIdToLabel,
+    getChartDate,
+    shouldShowPercentilesForField,
+    getNormalRangeForField
+  ]);
+
+  const toggleParameter = (id) => {
+    setSelectedParameters((prev) => {
+      if (prev.includes(id)) {
+        const next = prev.filter((x) => x !== id);
+        return next.length > 0 ? next : prev;
+      }
+      return [...prev, id];
+    });
   };
 
-  const normalRange = getNormalRangeForField(selectedParameter);
+  const getCheckboxLabel = (param) => {
+    if (param === 'VACCINATION_SCHEDULE') return 'Esquema de vacunación';
+    const name = getParameterName(param);
+    if (!name || name === param) return param;
+    const u = getParameterUnit(param);
+    return u ? `${name} (${u})` : name;
+  };
+
+  /** Una sola gráfica con 1 o 2 ejes Y según unidades; no aplica con percentiles OMS ni con >2 unidades distintas. */
+  const multiSeriesEvolutionModel = React.useMemo(() => {
+    const numericIds = selectedParameters.filter((id) => id !== 'VACCINATION_SCHEDULE');
+    const withData = numericIds.filter((id) => {
+      const b = chartBundleByField[id];
+      return b && b.chartData.length > 0;
+    });
+    if (withData.length < 2) return null;
+
+    const anyPercentiles = withData.some((id) => chartBundleByField[id]?.shouldShowPercentiles);
+    if (anyPercentiles) return null;
+
+    const unitKeyFor = (fieldId) => {
+      const b = chartBundleByField[fieldId];
+      const u = getParameterUnit(fieldId) || (b?.normalRange?.unit ?? '') || '';
+      return u.trim() || '__sin_unidad';
+    };
+
+    const distinctUnits = [...new Set(withData.map(unitKeyFor))];
+    if (distinctUnits.length > 2) return null;
+
+    const rowByTime = new Map();
+    withData.forEach((fieldId) => {
+      chartBundleByField[fieldId].chartData.forEach((pt) => {
+        const t = new Date(pt.date).getTime();
+        if (!rowByTime.has(t)) {
+          rowByTime.set(t, { date: pt.date });
+        }
+        const row = rowByTime.get(t);
+        row[`val_${fieldId}`] = pt.value;
+        row[`oor_${fieldId}`] = pt.isOutOfRange;
+      });
+    });
+
+    const mergedData = Array.from(rowByTime.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([, row]) => row);
+
+    const unitOrder = distinctUnits;
+    const unitToAxisId =
+      unitOrder.length === 1
+        ? Object.fromEntries(unitOrder.map((u) => [u, 'left']))
+        : { [unitOrder[0]]: 'left', [unitOrder[1]]: 'right' };
+
+    const series = withData.map((fieldId, i) => ({
+      fieldId,
+      dataKey: `val_${fieldId}`,
+      name: getParameterName(fieldId),
+      unitKey: unitKeyFor(fieldId),
+      yAxisId: unitToAxisId[unitKeyFor(fieldId)],
+      ageLike: isAgeLikeField(fieldIdToLabel, fieldId),
+      color: MULTI_LINE_COLORS[i % MULTI_LINE_COLORS.length]
+    }));
+
+    return {
+      mergedData,
+      series,
+      distinctUnits,
+      unitToAxisId,
+      fieldIds: withData
+    };
+    // getParameterName / getParameterUnit dependen solo de fieldIdToLabel (ya en deps)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- evitar re-memo por identidad de funciones
+  }, [selectedParameters, chartBundleByField, fieldIdToLabel]);
+
+  const formatYTickWithUnit = (value, unitKey, ageLike) => {
+    if (value == null || Number.isNaN(value)) return '';
+    if (unitKey === '__sin_unidad') return String(value);
+    if (ageLike) return formatAgeFieldValue(value);
+    return `${value} ${unitKey}`;
+  };
 
   // Función para formatear fecha al formato "D-Mon-YY"
   const formatDateShort = (dateString) => {
@@ -799,141 +1073,7 @@ const PatientHealthCharts = ({ patientId }) => {
     });
 
     return { pending, boosters };
-  }, [isVaccinationSchedule, vaccinationData, patientInfo, isVaccinationTemplate]);
-
-  // Determinar si se deben mostrar percentiles OMS (para peso, talla, IMC en pacientes menores de 19 años)
-  const shouldShowPercentiles = React.useMemo(() => {
-    if (!selectedParameter || !patientInfo) return false;
-    
-    const label = fieldIdToLabel[selectedParameter];
-    if (!label) return false;
-    
-    const normalizedLabel = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-    const isWeight = normalizedLabel.includes('peso');
-    const isHeight = normalizedLabel.includes('talla') || normalizedLabel.includes('altura');
-    const isBMI = normalizedLabel.includes('imc') || normalizedLabel.includes('indice_de_masa_corporal');
-    
-    if (!isWeight && !isHeight && !isBMI) return false;
-    
-    // Calcular edad del paciente
-    let age = null;
-    if (patientInfo.dateOfBirth) {
-      age = calculateAge(patientInfo.dateOfBirth);
-    } else if (patientInfo.age) {
-      age = patientInfo.age;
-    }
-    
-    // Mostrar percentiles solo para pacientes menores de 19 años
-    return age !== null && age < 19;
-  }, [selectedParameter, patientInfo, fieldIdToLabel]);
-
-  // Extraer datos numéricos de formData con información de edad para percentiles
-  const chartData = React.useMemo(() => {
-    if (!selectedParameter) return [];
-    
-    return consultations
-      .filter(consultation => consultation.formData && consultation.formData[selectedParameter])
-      .map(consultation => {
-        const value = parseFloat(consultation.formData[selectedParameter]);
-        if (isNaN(value)) return null;
-        
-        // Para vacunas, usar la fecha de aplicación; para otros campos, usar la fecha de consulta
-        const chartDate = getChartDate(selectedParameter, consultation);
-        let consultationDate = chartDate;
-        if (consultationDate && typeof consultationDate === 'string') {
-          consultationDate = new Date(consultationDate);
-        }
-        
-        // Calcular edad en el momento de la consulta para percentiles
-        // Para vacunas, usar la fecha de aplicación; para otros, usar la fecha de consulta
-        let ageAtConsultation = null;
-        if (patientInfo && patientInfo.dateOfBirth) {
-          const birthDate = new Date(patientInfo.dateOfBirth);
-          const consultationDateObj = new Date(consultationDate);
-          const ageInMs = consultationDateObj - birthDate;
-          const ageInYears = ageInMs / (1000 * 60 * 60 * 24 * 365.25);
-          ageAtConsultation = Math.max(0, Math.min(ageInYears, 19)); // Limitar a 19 años
-        } else if (patientInfo && patientInfo.age) {
-          // Usar edad actual como aproximación
-          ageAtConsultation = patientInfo.age;
-        }
-        
-        // Verificar si el valor está fuera del rango normal
-        const isOutOfRange = normalRange && (value < normalRange.min || value > normalRange.max);
-        
-        // Calcular percentil si aplica
-        let percentile = null;
-        if (shouldShowPercentiles && ageAtConsultation !== null && patientInfo) {
-          const label = fieldIdToLabel[selectedParameter];
-          const normalizedLabel = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-          const gender = patientInfo.biologicalSex || patientInfo.gender || '';
-          
-          let percentiles = null;
-          if (normalizedLabel.includes('peso')) {
-            percentiles = getWeightPercentiles(ageAtConsultation, gender);
-          } else if (normalizedLabel.includes('talla') || normalizedLabel.includes('altura')) {
-            percentiles = getHeightPercentiles(ageAtConsultation, gender);
-          } else if (normalizedLabel.includes('imc') || normalizedLabel.includes('indice_de_masa_corporal')) {
-            percentiles = getBMIPercentiles(ageAtConsultation, gender);
-          }
-          
-          if (percentiles) {
-            percentile = getPercentileForValue(value, percentiles);
-          }
-        }
-        
-        return {
-          date: consultationDate,
-          value: value,
-          consultationId: consultation.id,
-          isOutOfRange: isOutOfRange || false,
-          age: ageAtConsultation,
-          percentile: percentile
-        };
-      })
-      .filter(item => item !== null)
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-  }, [consultations, selectedParameter, normalRange, patientInfo, fieldIdToLabel, shouldShowPercentiles, getChartDate]);
-
-  // Calcular datos con percentiles si aplica
-  const chartDataWithPercentiles = React.useMemo(() => {
-    if (!shouldShowPercentiles || !chartData || chartData.length === 0) return [];
-    
-    const label = fieldIdToLabel[selectedParameter];
-    if (!label) return [];
-    
-    const normalizedLabel = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-    const gender = patientInfo?.biologicalSex || patientInfo?.gender || '';
-    
-    return chartData.map(dataPoint => {
-      if (dataPoint.age === null) {
-        return {
-          ...dataPoint,
-          p3: null, p10: null, p25: null, p50: null, p75: null, p90: null, p97: null
-        };
-      }
-      
-      let percentiles = null;
-      if (normalizedLabel.includes('peso')) {
-        percentiles = getWeightPercentiles(dataPoint.age, gender);
-      } else if (normalizedLabel.includes('talla') || normalizedLabel.includes('altura')) {
-        percentiles = getHeightPercentiles(dataPoint.age, gender);
-      } else if (normalizedLabel.includes('imc') || normalizedLabel.includes('indice_de_masa_corporal')) {
-        percentiles = getBMIPercentiles(dataPoint.age, gender);
-      }
-      
-      return {
-        ...dataPoint,
-        p3: percentiles?.p3 || null,
-        p10: percentiles?.p10 || null,
-        p25: percentiles?.p25 || null,
-        p50: percentiles?.p50 || null,
-        p75: percentiles?.p75 || null,
-        p90: percentiles?.p90 || null,
-        p97: percentiles?.p97 || null
-      };
-    });
-  }, [chartData, shouldShowPercentiles, selectedParameter, fieldIdToLabel, patientInfo]);
+  }, [isVaccinationSchedule, vaccinationData, patientInfo]);
 
   if (loading) {
     return (
@@ -943,7 +1083,7 @@ const PatientHealthCharts = ({ patientId }) => {
     );
   }
 
-  if (chartData.length === 0 && availableParameters.length === 0) {
+  if (availableParameters.length === 0) {
     return (
       <div className="text-center p-8 text-gray-500">
         No hay datos numéricos disponibles para graficar
@@ -951,36 +1091,34 @@ const PatientHealthCharts = ({ patientId }) => {
     );
   }
 
+  const numericSelectedIds = selectedParameters.filter((id) => id !== 'VACCINATION_SCHEDULE');
+
   return (
     <div className="space-y-6">
-      {/* Selector de parámetro */}
       <div className="bg-white p-4 rounded-lg shadow">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Seleccionar parámetro a visualizar
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Seleccionar parámetros a visualizar
         </label>
-        <select
-          value={selectedParameter || ''}
-          onChange={(e) => setSelectedParameter(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {availableParameters.map(param => {
-            if (param === 'VACCINATION_SCHEDULE') {
-              return (
-                <option key={param} value={param}>
-                  Esquema de vacunación
-                </option>
-              );
-            }
-            const label = getParameterName(param);
-            // Solo mostrar parámetros que tengan un label válido (no UUID)
-            if (!label || label === param) return null;
-            return (
-              <option key={param} value={param}>
-                {label}
-              </option>
-            );
-          })}
-        </select>
+        <p className="text-sm text-gray-600 mb-3">
+          Puedes elegir uno o más parámetros para comparar su evolución. Las opciones son los campos numéricos
+          capturados en consultas anteriores.
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          {availableParameters.map((param) => (
+            <label
+              key={param}
+              className="inline-flex items-center gap-2 cursor-pointer text-sm text-gray-800"
+            >
+              <input
+                type="checkbox"
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                checked={selectedParameters.includes(param)}
+                onChange={() => toggleParameter(param)}
+              />
+              <span>{getCheckboxLabel(param)}</span>
+            </label>
+          ))}
+        </div>
       </div>
 
       {/* Resumen con alertas */}
@@ -997,21 +1135,19 @@ const PatientHealthCharts = ({ patientId }) => {
                 Alertas detectadas ({alertData.length})
               </h3>
               <div className="mt-2 text-sm text-yellow-700">
-                <p>Se han detectado valores fuera del rango normal para este parámetro.</p>
+                <p>
+                  Se han detectado valores fuera del rango normal en uno o más de los parámetros seleccionados.
+                </p>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Gráfica */}
-      <div className={`bg-white rounded-lg shadow ${isVaccinationSchedule ? 'p-4' : 'p-6'}`}>
-        <h3 className={`font-semibold text-gray-900 mb-4 ${isVaccinationSchedule ? 'text-xl' : 'text-lg'}`}>
-          {isVaccinationSchedule ? 'Esquema de vacunación' : `Evolución: ${getParameterName(selectedParameter)}`}
-        </h3>
-        
-        {isVaccinationSchedule && vaccinationData ? (
-          vaccinationData.chartData && vaccinationData.chartData.length > 0 ? (
+      {isVaccinationSchedule && vaccinationData && (
+        <div className="bg-white rounded-lg shadow p-4">
+          <h3 className="font-semibold text-gray-900 mb-4 text-xl">Esquema de vacunación</h3>
+          {vaccinationData.chartData && vaccinationData.chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={Math.max(600, Math.min(800, vaccinationData.vaccineNames.length * 55))}>
               <ScatterChart 
                 data={vaccinationData.chartData}
@@ -1077,13 +1213,235 @@ const PatientHealthCharts = ({ patientId }) => {
               <p className="mb-2">No hay vacunas aplicadas registradas.</p>
               <p className="text-sm">Las vacunas aplicadas aparecerán como puntos en el gráfico cuando se registren.</p>
             </div>
-          )
-        ) : (
-          <ResponsiveContainer width="100%" height={400}>
-            <LineChart 
-              data={shouldShowPercentiles ? chartDataWithPercentiles : chartData}
-              margin={{ top: 30, right: 30, bottom: 30, left: 30 }}
+          )}
+        </div>
+      )}
+
+      {multiSeriesEvolutionModel && (() => {
+        const {
+          mergedData,
+          series: multiSeries,
+          distinctUnits,
+          fieldIds: multiFieldIds
+        } = multiSeriesEvolutionModel;
+        const repLeft = multiSeries.find((s) => s.yAxisId === 'left');
+        const repRight = multiSeries.find((s) => s.yAxisId === 'right');
+        const leftLabel =
+          repLeft && repLeft.unitKey !== '__sin_unidad' ? repLeft.unitKey : '';
+        const rightLabel =
+          repRight && repRight.unitKey !== '__sin_unidad' ? repRight.unitKey : '';
+
+        return (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="font-semibold text-gray-900 mb-4 text-lg">
+              Evolución: {multiSeries.map((s) => s.name).join(', ')}
+            </h3>
+            <ResponsiveContainer
+              width="100%"
+              height={400}
             >
+              <LineChart
+                data={mergedData}
+                margin={{
+                  top: 30,
+                  right: distinctUnits.length > 1 ? 56 : 28,
+                  bottom: 30,
+                  left: 16
+                }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={(date) => formatDateShort(date)}
+                />
+                <YAxis
+                  yAxisId="left"
+                  orientation="left"
+                  label={
+                    leftLabel
+                      ? {
+                          value: leftLabel,
+                          angle: -90,
+                          position: 'insideLeft',
+                          style: { fontWeight: 'bold' }
+                        }
+                      : undefined
+                  }
+                  tickFormatter={(v) =>
+                    repLeft
+                      ? formatYTickWithUnit(v, repLeft.unitKey, repLeft.ageLike)
+                      : v
+                  }
+                />
+                {distinctUnits.length > 1 && repRight && (
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    label={
+                      rightLabel
+                        ? {
+                            value: rightLabel,
+                            angle: 90,
+                            position: 'insideRight',
+                            style: { fontWeight: 'bold' }
+                          }
+                        : undefined
+                    }
+                    tickFormatter={(v) =>
+                      formatYTickWithUnit(v, repRight.unitKey, repRight.ageLike)
+                    }
+                  />
+                )}
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload || !payload.length) return null;
+                    const row = payload[0].payload;
+                    const d = row.date;
+                    return (
+                      <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+                        <p className="font-semibold text-gray-900 mb-1">
+                          Fecha: {new Date(d).toLocaleDateString('es-ES')}
+                        </p>
+                        {multiSeries.map((s) => {
+                          const v = row[s.dataKey];
+                          if (v == null || Number.isNaN(v)) return null;
+                          const display = s.ageLike
+                            ? formatAgeFieldValue(v)
+                            : `${v}${
+                                s.unitKey && s.unitKey !== '__sin_unidad' ? ` ${s.unitKey}` : ''
+                              }`;
+                          return (
+                            <p key={s.fieldId} className="text-sm" style={{ color: s.color }}>
+                              {s.name}: {display}
+                            </p>
+                          );
+                        })}
+                      </div>
+                    );
+                  }}
+                />
+                <Legend />
+                {multiSeries.map((s) => (
+                  <Line
+                    key={s.fieldId}
+                    yAxisId={s.yAxisId}
+                    type="monotone"
+                    dataKey={s.dataKey}
+                    name={s.name}
+                    stroke={s.color}
+                    strokeWidth={2}
+                    connectNulls
+                    dot={(props) => {
+                      const { cx, cy, payload } = props;
+                      const isOut = payload[`oor_${s.fieldId}`];
+                      const raw = payload[s.dataKey];
+                      const isNearTop = cy < 100;
+                      return (
+                        <g>
+                          <circle
+                            cx={cx}
+                            cy={cy}
+                            r={isOut ? 8 : 6}
+                            fill={isOut ? '#ef4444' : s.color}
+                            stroke={isOut ? '#dc2626' : s.color}
+                            strokeWidth={isOut ? 2 : 1}
+                          />
+                          {isOut && raw != null && (
+                            <text
+                              x={cx}
+                              y={isNearTop ? cy + 28 : cy - 15}
+                              textAnchor="middle"
+                              fill="#dc2626"
+                              fontSize="11"
+                              fontWeight="bold"
+                              style={{ pointerEvents: 'none' }}
+                            >
+                              {s.ageLike ? formatAgeFieldValue(raw) : raw}
+                            </text>
+                          )}
+                        </g>
+                      );
+                    }}
+                    activeDot={{ r: 8 }}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+
+            <div className="mt-4 space-y-3">
+              {multiFieldIds.map((fid) => {
+                const bundle = chartBundleByField[fid];
+                if (!bundle?.normalRange) return null;
+                const ageLike = isAgeLikeField(fieldIdToLabel, fid);
+                const u =
+                  getParameterUnit(fid) || bundle.normalRange.unit || '';
+                if (ageLike) {
+                  return (
+                    <div key={fid} className="text-sm text-gray-600">
+                      <span className="font-semibold">{getParameterName(fid)}:</span> unidad en gráfico{' '}
+                      <span className="font-medium">{u || 'años y meses'}</span>.
+                    </div>
+                  );
+                }
+                return (
+                  <div key={fid} className="text-sm text-gray-600">
+                    <span className="font-semibold">{getParameterName(fid)} — Rango normal:</span>{' '}
+                    {bundle.normalRange.min} - {bundle.normalRange.max}{' '}
+                    {bundle.normalRange.unit || u}
+                  </div>
+                );
+              })}
+              {patientInfo &&
+                (patientInfo.dateOfBirth ||
+                  patientInfo.age ||
+                  patientInfo.biologicalSex) && (
+                  <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded">
+                    <p className="font-medium text-blue-800 mb-1">Rango personalizado según OMS</p>
+                    <p>
+                      {patientInfo.biologicalSex &&
+                        `Sexo biológico: ${patientInfo.biologicalSex}`}
+                      {(patientInfo.age != null ||
+                        (patientInfo.dateOfBirth &&
+                          formatAgeDisplay(patientInfo.dateOfBirth))) &&
+                        ` • Edad: ${
+                          patientInfo.dateOfBirth
+                            ? formatAgeDisplay(patientInfo.dateOfBirth)
+                            : formatAgeFieldValue(Math.round(patientInfo.age * 12))
+                        }`}
+                      {patientInfo.height && ` • Altura: ${patientInfo.height} cm`}
+                      {patientInfo.isPregnant && ' • Embarazo: Sí'}
+                    </p>
+                  </div>
+                )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {!multiSeriesEvolutionModel &&
+        numericSelectedIds.map((fieldId) => {
+        const bundle = chartBundleByField[fieldId];
+        if (!bundle) return null;
+        const { normalRange, shouldShowPercentiles, chartData, chartDataWithPercentiles } = bundle;
+        const ageLike = isAgeLikeField(fieldIdToLabel, fieldId);
+        const unitLabel = getParameterUnit(fieldId) || (normalRange ? normalRange.unit : '') || '';
+        const lineData =
+          shouldShowPercentiles && chartDataWithPercentiles && chartDataWithPercentiles.length > 0
+            ? chartDataWithPercentiles
+            : chartData;
+
+        return (
+          <div key={fieldId} className="bg-white rounded-lg shadow p-6">
+            <h3 className="font-semibold text-gray-900 mb-4 text-lg">
+              Evolución: {getCheckboxLabel(fieldId)}
+            </h3>
+            {chartData.length === 0 ? (
+              <div className="text-center p-8 text-gray-500 text-sm">
+                No hay puntos registrados para este parámetro en el historial de consultas.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={lineData} margin={{ top: 30, right: 30, bottom: 30, left: 30 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 dataKey="date" 
@@ -1091,11 +1449,12 @@ const PatientHealthCharts = ({ patientId }) => {
               />
               <YAxis 
                 label={{ 
-                  value: getParameterUnit(selectedParameter) || (normalRange ? normalRange.unit : ''), 
+                  value: unitLabel, 
                   angle: -90, 
                   position: 'insideLeft',
                   style: { fontWeight: 'bold' }
                 }}
+                tickFormatter={(v) => (ageLike ? formatAgeFieldValue(v) : v)}
               />
               <Tooltip 
                 labelFormatter={(date) => {
@@ -1103,8 +1462,10 @@ const PatientHealthCharts = ({ patientId }) => {
                   return `Fecha: ${d.toLocaleDateString('es-ES')}`;
                 }}
                 formatter={(value) => {
-                  const unit = getParameterUnit(selectedParameter) || (normalRange ? normalRange.unit : '');
-                  return [`${value} ${unit}`, 'Valor'];
+                  const display = ageLike
+                    ? formatAgeFieldValue(value)
+                    : `${value}${unitLabel ? ` ${unitLabel}` : ''}`;
+                  return [display, getParameterName(fieldId)];
                 }}
               />
               <Legend />
@@ -1270,8 +1631,8 @@ const PatientHealthCharts = ({ patientId }) => {
               );
             })()}
             
-            {/* Zonas de rango: verde para normal, rojo para fuera de rango (solo si no hay percentiles) */}
-            {normalRange && !shouldShowPercentiles && (() => {
+            {/* Zonas de rango: verde para normal, rojo para fuera de rango (solo si no hay percentiles). Edad: datos en meses, no mezclar con rangos en años. */}
+            {normalRange && !shouldShowPercentiles && !ageLike && (() => {
               // Calcular el rango de valores en los datos
               const dataValues = chartData.map(d => d.value);
               const minDataValue = dataValues.length > 0 ? Math.min(...dataValues) : normalRange.min;
@@ -1377,7 +1738,7 @@ const PatientHealthCharts = ({ patientId }) => {
                         fontWeight="bold"
                         style={{ pointerEvents: 'none' }}
                       >
-                        {payload.value}
+                        {ageLike ? formatAgeFieldValue(payload.value) : payload.value}
                       </text>
                     )}
                   </g>
@@ -1387,32 +1748,40 @@ const PatientHealthCharts = ({ patientId }) => {
             />
           </LineChart>
         </ResponsiveContainer>
-        )}
+            )}
 
-        {/* Información de rango normal */}
-        {normalRange && !isVaccinationSchedule && (
-          <div className="mt-4 space-y-2">
-            <div className="text-sm text-gray-600">
-              <p>
-                <span className="font-semibold">Rango normal:</span>{' '}
-                {normalRange.min} - {normalRange.max} {normalRange.unit || getParameterUnit(selectedParameter)}
-              </p>
-            </div>
-            {patientInfo && (patientInfo.dateOfBirth || patientInfo.age || patientInfo.biologicalSex) && (
-              <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded">
-                <p className="font-medium text-blue-800 mb-1">Rango personalizado según OMS</p>
-                <p>
-                  {patientInfo.biologicalSex && `Sexo biológico: ${patientInfo.biologicalSex}`}
-                  {(patientInfo.age != null || (patientInfo.dateOfBirth && formatAgeDisplay(patientInfo.dateOfBirth))) && 
-                    ` • Edad: ${patientInfo.dateOfBirth ? formatAgeDisplay(patientInfo.dateOfBirth) : formatAgeFieldValue(Math.round(patientInfo.age * 12))}`}
-                  {patientInfo.height && ` • Altura: ${patientInfo.height} cm`}
-                  {patientInfo.isPregnant && ' • Embarazo: Sí'}
-                </p>
+            {normalRange && (
+              <div className="mt-4 space-y-2">
+                <div className="text-sm text-gray-600">
+                  {ageLike ? (
+                    <p>
+                      <span className="font-semibold">Unidad en gráfico:</span> {unitLabel}. El eje Y y las etiquetas
+                      muestran la edad como en consulta (años y meses), aunque el valor guardado sea meses totales.
+                    </p>
+                  ) : (
+                    <p>
+                      <span className="font-semibold">Rango normal:</span>{' '}
+                      {normalRange.min} - {normalRange.max} {normalRange.unit || unitLabel}
+                    </p>
+                  )}
+                </div>
+                {patientInfo && (patientInfo.dateOfBirth || patientInfo.age || patientInfo.biologicalSex) && (
+                  <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded">
+                    <p className="font-medium text-blue-800 mb-1">Rango personalizado según OMS</p>
+                    <p>
+                      {patientInfo.biologicalSex && `Sexo biológico: ${patientInfo.biologicalSex}`}
+                      {(patientInfo.age != null || (patientInfo.dateOfBirth && formatAgeDisplay(patientInfo.dateOfBirth))) && 
+                        ` • Edad: ${patientInfo.dateOfBirth ? formatAgeDisplay(patientInfo.dateOfBirth) : formatAgeFieldValue(Math.round(patientInfo.age * 12))}`}
+                      {patientInfo.height && ` • Altura: ${patientInfo.height} cm`}
+                      {patientInfo.isPregnant && ' • Embarazo: Sí'}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
-      </div>
+        );
+      })}
 
       {/* Lista de vacunas pendientes y refuerzos */}
       {isVaccinationSchedule && vaccinationRecommendations && (
@@ -1518,7 +1887,13 @@ const PatientHealthCharts = ({ patientId }) => {
                         {formattedDate}
                       </p>
                       <p className="text-sm text-gray-600">
-                        Valor: {alert.value} {normalRange?.unit || getParameterUnit(selectedParameter)}
+                        {getParameterName(alert.fieldId)}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Valor:{' '}
+                        {alert.fieldId && isAgeLikeField(fieldIdToLabel, alert.fieldId)
+                          ? formatAgeFieldValue(alert.value)
+                          : `${alert.value} ${getNormalRangeForField(alert.fieldId)?.unit || getParameterUnit(alert.fieldId) || ''}`.trim()}
                       </p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${

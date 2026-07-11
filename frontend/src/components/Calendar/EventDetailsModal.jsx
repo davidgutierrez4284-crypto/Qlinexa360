@@ -16,11 +16,14 @@ import {
   EnvelopeIcon,
   ArrowPathIcon,
   CalendarDaysIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  BanknotesIcon,
 } from '@heroicons/react/24/outline';
 import { toast } from 'react-toastify';
 import axios from 'axios';
 import { CALENDAR_SYNC_CONFIG } from '../../config/calendarSync';
+import { getApiUrl, getApiHeaders } from '../../utils/api';
+import InPersonPaymentModal from '../payments/InPersonPaymentModal';
 
 const EventDetailsModal = ({
   open,
@@ -37,6 +40,7 @@ const EventDetailsModal = ({
   const [connectedCalendars, setConnectedCalendars] = useState([]);
   const [isLoadingCalendars, setIsLoadingCalendars] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [isResendingCalendarInvite, setIsResendingCalendarInvite] = useState(false);
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
@@ -50,14 +54,23 @@ const EventDetailsModal = ({
     linkMeeting: '',
     origenEvento: '',
     tipoCita: 'presencial',
-    meetingPlatform: ''
+    meetingPlatform: '',
+    teleconsultationAmount: '',
   });
   const [rescheduleData, setRescheduleData] = useState({
     fecha: '',
-    horaInicio: '09',
-    minutosInicio: '00',
-    horaFin: '10',
-    minutosFin: '00'
+    selectedSlot: ''
+  });
+  const [rescheduleSlots, setRescheduleSlots] = useState([]);
+  const [loadingRescheduleSlots, setLoadingRescheduleSlots] = useState(false);
+  const [showMpModal, setShowMpModal] = useState(false);
+  const [mpPaymentCtx, setMpPaymentCtx] = useState(null);
+  const [teleconsultMeetingUrl, setTeleconsultMeetingUrl] = useState(null);
+  const [mpChargePolicy, setMpChargePolicy] = useState({
+    showAmountField: false,
+    amountRequired: false,
+    defaultAmount: 0,
+    currency: 'MXN',
   });
 
   // Cargar calendarios conectados
@@ -84,9 +97,6 @@ const EventDetailsModal = ({
           if (data.apple?.connected) {
             connected.push({ id: 'apple', name: CALENDAR_SYNC_CONFIG.apple.name });
           }
-          if (data.notion?.connected) {
-            connected.push({ id: 'notion', name: CALENDAR_SYNC_CONFIG.notion.name });
-          }
           
           setConnectedCalendars(connected);
         }
@@ -99,6 +109,61 @@ const EventDetailsModal = ({
 
     fetchConnectedCalendars();
   }, [open]);
+
+  useEffect(() => {
+    const loadMpPolicy = async () => {
+      if (!open) return;
+      try {
+        const res = await axios.get(getApiUrl('/api/payments/mercadopago/teleconsultation-settings'), {
+          headers: getApiHeaders(),
+        });
+        if (res.data?.success && res.data.chargePolicy) {
+          setMpChargePolicy(res.data.chargePolicy);
+        }
+      } catch {
+        setMpChargePolicy({
+          showAmountField: false,
+          amountRequired: false,
+          defaultAmount: 0,
+          currency: 'MXN',
+        });
+      }
+    };
+    loadMpPolicy();
+  }, [open]);
+
+  useEffect(() => {
+    const loadPaymentStatus = async () => {
+      if (!open || !event) return;
+      const eventData = event.extendedProps || {};
+      const appointmentId = eventData.appointmentId;
+      if (!appointmentId || eventData.appointmentType !== 'teleconsulta') {
+        setMpPaymentCtx(null);
+        setTeleconsultMeetingUrl(null);
+        return;
+      }
+      try {
+        const res = await axios.get(
+          getApiUrl(`/api/payments/mercadopago/appointment/${appointmentId}/payment-status`),
+          { headers: getApiHeaders() }
+        );
+        if (res.data?.success) {
+          setMpPaymentCtx(res.data);
+          setTeleconsultMeetingUrl(res.data.meetingUrl || null);
+        }
+      } catch {
+        setMpPaymentCtx(null);
+        setTeleconsultMeetingUrl(null);
+      }
+    };
+    loadPaymentStatus();
+  }, [open, event]);
+
+  useEffect(() => {
+    if (showRescheduleModal && rescheduleData.fecha) {
+      fetchRescheduleSlots(rescheduleData.fecha);
+    }
+  }, [showRescheduleModal]);
 
   // Cargar datos del evento cuando se abre el modal o cambia el evento
   useEffect(() => {
@@ -128,17 +193,22 @@ const EventDetailsModal = ({
         tituloOriginal = tituloOriginal.replace('❌ Cita rechazada: ', '');
       }
 
+      const isTeleconsultaAppointment = eventData.appointmentType === 'teleconsulta';
       setFormData({
         titulo: tituloOriginal,
         descripcion: eventData.descripcion || '',
         fechaHoraInicio: formattedStart,
         fechaHoraFin: formattedEnd,
         patientId: eventData.patient?.id || '',
-        linkMeeting: eventData.linkMeeting || '',
+        linkMeeting: isTeleconsultaAppointment ? (eventData.linkMeeting || '') : '',
         origenEvento: eventData.origenEvento || '',
-        tipoCita: eventData.linkMeeting ? 'remota' : 'presencial',
+        tipoCita: isTeleconsultaAppointment ? 'remota' : 'presencial',
         meetingPlatform: eventData.linkMeeting?.includes('meet.google.com') ? 'google-meet' : 
-                        eventData.linkMeeting?.includes('teams.microsoft.com') ? 'teams' : ''
+                        eventData.linkMeeting?.includes('teams.microsoft.com') ? 'teams' : '',
+        teleconsultationAmount:
+          eventData.teleconsultationAmount != null && eventData.teleconsultationAmount !== ''
+            ? String(eventData.teleconsultationAmount)
+            : '',
       });
 
       // Inicializar datos de reagendar con las fechas actuales
@@ -146,20 +216,12 @@ const EventDetailsModal = ({
         const year = startDate.getFullYear();
         const month = String(startDate.getMonth() + 1).padStart(2, '0');
         const day = String(startDate.getDate()).padStart(2, '0');
-        const horaInicio = String(startDate.getHours()).padStart(2, '0');
-        const minutosInicio = String(Math.floor(startDate.getMinutes() / 15) * 15).padStart(2, '0');
-        
-        const endDateObj = endDate || startDate;
-        const horaFin = String(endDateObj.getHours()).padStart(2, '0');
-        const minutosFin = String(Math.floor(endDateObj.getMinutes() / 15) * 15).padStart(2, '0');
-        
+
         setRescheduleData({
           fecha: `${year}-${month}-${day}`,
-          horaInicio: horaInicio,
-          minutosInicio: minutosInicio,
-          horaFin: horaFin,
-          minutosFin: minutosFin
+          selectedSlot: ''
         });
+        setRescheduleSlots([]);
       }
     }
   }, [event, open]);
@@ -170,11 +232,39 @@ const EventDetailsModal = ({
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData((prev) => {
+      const next = { ...prev, [name]: value };
+      if (name === 'tipoCita') {
+        if (
+          value === 'remota' &&
+          mpChargePolicy.showAmountField &&
+          !prev.teleconsultationAmount &&
+          mpChargePolicy.defaultAmount > 0
+        ) {
+          next.teleconsultationAmount = String(mpChargePolicy.defaultAmount);
+        }
+        if (value === 'presencial') {
+          next.teleconsultationAmount = '';
+        }
+      }
+      return next;
+    });
   };
+
+  const eventData = event?.extendedProps || {};
+  const resolvedMeetingLink =
+    teleconsultMeetingUrl || eventData.meetingUrl || eventData.linkMeeting || '';
+  const teleconsultVideoAllowed =
+    eventData.appointmentType === 'teleconsulta' &&
+    mpPaymentCtx?.consentSigned === true &&
+    (!mpPaymentCtx?.paymentRequired || mpPaymentCtx?.paymentStatus === 'approved');
+  const showTeleconsultVideoLink =
+    eventData.appointmentType === 'teleconsulta' &&
+    !!resolvedMeetingLink &&
+    teleconsultVideoAllowed;
+
+  const requiresTeleconsultationAmount =
+    formData.tipoCita === 'remota' && mpChargePolicy.showAmountField;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -189,8 +279,26 @@ const EventDetailsModal = ({
       return;
     }
 
+    if (requiresTeleconsultationAmount) {
+      if (!formData.patientId) {
+        toast.error('Selecciona un paciente para teleconsulta con cobro obligatorio');
+        return;
+      }
+      const amount = parseFloat(formData.teleconsultationAmount);
+      if (!formData.teleconsultationAmount || !Number.isFinite(amount) || amount <= 0) {
+        toast.error('Indica el monto de teleconsulta (MXN)');
+        return;
+      }
+    }
+
     try {
-      await onUpdate(event.id, formData);
+      await onUpdate(event.id, {
+        ...formData,
+        modalidadConsulta: formData.tipoCita === 'remota' ? 'virtual' : 'presencial',
+        teleconsultationAmount: requiresTeleconsultationAmount
+          ? parseFloat(formData.teleconsultationAmount)
+          : null,
+      });
       setIsEditing(false);
     } catch (error) {
       console.error('Error al actualizar evento:', error);
@@ -205,6 +313,33 @@ const EventDetailsModal = ({
 
   const handleShare = () => {
     onShare(event);
+  };
+
+  const handleResendCalendarInvite = async () => {
+    if (!event?.id) {
+      toast.error('No se puede reenviar la invitación: evento no válido');
+      return;
+    }
+
+    setIsResendingCalendarInvite(true);
+    try {
+      const response = await axios.post(
+        `/api/calendar/events/${event.id}/resend-calendar-invite`,
+        {},
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        }
+      );
+
+      if (response.data?.success) {
+        toast.success('Invitación de calendario reenviada al paciente');
+      }
+    } catch (error) {
+      console.error('Error al reenviar invitación de calendario:', error);
+      toast.error(error.response?.data?.message || 'Error al reenviar la invitación de calendario');
+    } finally {
+      setIsResendingCalendarInvite(false);
+    }
   };
 
   const handleResendAppointment = async () => {
@@ -314,76 +449,81 @@ const EventDetailsModal = ({
     }
   };
 
-  // Generar opciones de horas (0-23) y minutos (00, 15, 30, 45)
-  const hourOptions = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
-  const minuteOptions = ['00', '15', '30', '45'];
+  const fetchRescheduleSlots = async (date) => {
+    if (!date) {
+      setRescheduleSlots([]);
+      return;
+    }
+    setLoadingRescheduleSlots(true);
+    try {
+      const eventData = event?.extendedProps || {};
+      const params = { date };
+      if (eventData.appointmentId) params.excludeAppointmentId = eventData.appointmentId;
+      if (event?.id) params.excludeEventId = event.id;
 
-  const handleRescheduleChange = (e) => {
-    const { name, value } = e.target;
-    
-    // Si cambia la hora de inicio, actualizar también la hora de fin con el mismo valor
-    if (name === 'horaInicio' || name === 'minutosInicio') {
-      setRescheduleData(prev => ({
-        ...prev,
-        [name]: value,
-        // Si cambia la hora de inicio, actualizar la hora de fin con el mismo valor
-        horaFin: name === 'horaInicio' ? value : prev.horaFin,
-        minutosFin: name === 'minutosInicio' ? value : prev.minutosFin
-      }));
-    } else {
-      setRescheduleData(prev => ({
-        ...prev,
-        [name]: value
-      }));
+      const response = await axios.get('/api/calendar/reschedule-slots', {
+        params,
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.data?.success) {
+        setRescheduleSlots(response.data.data || []);
+      } else {
+        setRescheduleSlots([]);
+        toast.error(response.data?.message || 'No hay horarios disponibles');
+      }
+    } catch (error) {
+      console.error('Error al cargar slots de reagendar:', error);
+      setRescheduleSlots([]);
+      toast.error(error.response?.data?.message || 'Error al cargar horarios disponibles');
+    } finally {
+      setLoadingRescheduleSlots(false);
     }
   };
 
-  const handleQuickDuration = (minutes) => {
-    const startHour = parseInt(rescheduleData.horaInicio);
-    const startMinutes = parseInt(rescheduleData.minutosInicio);
-    
-    const startTotalMinutes = startHour * 60 + startMinutes;
-    const endTotalMinutes = startTotalMinutes + minutes;
-    
-    const endHour = Math.floor(endTotalMinutes / 60) % 24;
-    const endMinutes = endTotalMinutes % 60;
-    
-    setRescheduleData(prev => ({
-      ...prev,
-      horaFin: String(endHour).padStart(2, '0'),
-      minutosFin: String(Math.floor(endMinutes / 15) * 15).padStart(2, '0')
-    }));
+  const handleOpenMpModal = () => {
+    const props = event?.extendedProps || {};
+    if (!props.appointmentId) {
+      toast.error('No se puede cobrar: falta el ID de la cita');
+      return;
+    }
+    if (!props.patient?.id && !props.patientId) {
+      toast.error('No se puede cobrar: falta el paciente asociado');
+      return;
+    }
+    setShowMpModal(true);
+  };
+
+  const handleRescheduleDateChange = (date) => {
+    setRescheduleData({ fecha: date, selectedSlot: '' });
+    fetchRescheduleSlots(date);
   };
 
   const handleReschedule = async () => {
-    if (!rescheduleData.fecha || !rescheduleData.horaInicio || !rescheduleData.minutosInicio || 
-        !rescheduleData.horaFin || !rescheduleData.minutosFin) {
-      toast.error('Por favor completa todos los campos');
+    if (!rescheduleData.fecha) {
+      toast.error('Selecciona una fecha');
+      return;
+    }
+    if (!rescheduleData.selectedSlot) {
+      toast.error('Selecciona un horario disponible');
       return;
     }
 
-    // Validar que la hora de fin sea posterior a la de inicio
-    const startTotalMinutes = parseInt(rescheduleData.horaInicio) * 60 + parseInt(rescheduleData.minutosInicio);
-    const endTotalMinutes = parseInt(rescheduleData.horaFin) * 60 + parseInt(rescheduleData.minutosFin);
-    
-    if (endTotalMinutes <= startTotalMinutes) {
-      toast.error('La hora de fin debe ser posterior a la de inicio');
+    const slot = rescheduleSlots.find((s) => s.startTime === rescheduleData.selectedSlot);
+    if (!slot) {
+      toast.error('Horario no válido');
       return;
     }
 
     setIsRescheduling(true);
     try {
-      // Construir fechas completas
-      const fechaHoraInicio = new Date(`${rescheduleData.fecha}T${rescheduleData.horaInicio}:${rescheduleData.minutosInicio}:00`);
-      const fechaHoraFin = new Date(`${rescheduleData.fecha}T${rescheduleData.horaFin}:${rescheduleData.minutosFin}:00`);
-
       const updateData = {
         ...formData,
-        fechaHoraInicio: fechaHoraInicio.toISOString(),
-        fechaHoraFin: fechaHoraFin.toISOString()
+        fechaHoraInicio: slot.startTime,
+        fechaHoraFin: slot.endTime,
+        modalidadConsulta: formData.tipoCita === 'remota' ? 'virtual' : 'presencial'
       };
 
-      await axios.put(
+      const response = await axios.put(
         `/api/calendar/events/${event.id}`,
         updateData,
         {
@@ -391,7 +531,13 @@ const EventDetailsModal = ({
         }
       );
 
-      toast.success('Cita reagendada exitosamente');
+      toast.success('Cita reagendada. Se actualizó en tu calendario y en la agenda del paciente.');
+      if (response.data?.calendarSyncWarning) {
+        toast.warn(response.data.calendarSyncWarning, { autoClose: 10000 });
+      }
+      if (response.data?.calendarSyncWarning) {
+        toast.warn(response.data.calendarSyncWarning, { autoClose: 10000 });
+      }
       setShowRescheduleModal(false);
       if (onUpdate) {
         onUpdate(event.id, updateData);
@@ -419,8 +565,7 @@ const EventDetailsModal = ({
     const colors = {
       google: 'bg-red-100 text-red-800',
       outlook: 'bg-blue-100 text-blue-800',
-      apple: 'bg-gray-100 text-gray-800',
-      notion: 'bg-gray-100 text-gray-800'
+      apple: 'bg-gray-100 text-gray-800'
     };
     return colors[origenEvento] || 'bg-gray-100 text-gray-800';
   };
@@ -429,15 +574,13 @@ const EventDetailsModal = ({
     const names = {
       google: 'Google Calendar',
       outlook: 'Outlook',
-      apple: 'Apple Calendar',
-      notion: 'Notion'
+      apple: 'Apple Calendar'
     };
     return names[origenEvento] || origenEvento || 'Desconocido';
   };
 
   if (!event) return null;
 
-  const eventData = event.extendedProps || {};
   const hasPatient = !!(eventData.patientId || eventData.patient);
   const confirmationStatus = eventData.confirmationStatus;
   const eventColor = getEventColor(hasPatient, confirmationStatus);
@@ -604,6 +747,28 @@ const EventDetailsModal = ({
                     className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Pega el enlace de la reunión"
                   />
+                </div>
+              )}
+
+              {requiresTeleconsultationAmount && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                    <BanknotesIcon className="h-4 w-4 text-sky-600" />
+                    Monto teleconsulta (MXN) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    name="teleconsultationAmount"
+                    min="0"
+                    step="0.01"
+                    value={formData.teleconsultationAmount}
+                    onChange={handleChange}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Ej. 500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Cobro obligatorio antes de generar el enlace de videollamada (Mercado Pago).
+                  </p>
                 </div>
               )}
 
@@ -794,24 +959,26 @@ const EventDetailsModal = ({
                 <div>
                   <p className="text-sm font-medium text-gray-700">Tipo de cita</p>
                   <p className="text-sm text-gray-600">
-                    {formData.tipoCita === 'remota' ? 'Remota' : 'Presencial'}
+                    {(eventData.appointmentType === 'teleconsulta')
+                      ? 'Teleconsulta'
+                      : (formData.tipoCita === 'remota' ? 'Remota' : 'Presencial')}
                   </p>
                 </div>
               </div>
 
-              {/* Link de reunión */}
-              {eventData.linkMeeting && (
+              {/* Link de reunión (teleconsulta con pago+consentimiento, o presencial/remota con linkMeeting) */}
+              {showTeleconsultVideoLink && (
                 <div className="flex items-start space-x-2">
                   <LinkIcon className="h-5 w-5 text-gray-400 mt-0.5" />
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-700">Link de reunión</p>
+                    <p className="text-sm font-medium text-gray-700">Link de videollamada</p>
                     <a
-                      href={eventData.linkMeeting}
+                      href={resolvedMeetingLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm text-blue-600 hover:text-blue-800 break-all"
                     >
-                      {eventData.linkMeeting}
+                      {resolvedMeetingLink}
                     </a>
                   </div>
                 </div>
@@ -847,6 +1014,70 @@ const EventDetailsModal = ({
                 </div>
               )}
 
+              {hasPatient && eventData.paymentLabel && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-1">
+                    Estado de pago (Mercado Pago)
+                  </p>
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      eventData.calendarHighlight === 'refund_pending'
+                        ? 'bg-amber-100 text-amber-800'
+                        : eventData.calendarHighlight === 'refunded' ||
+                            eventData.mpPaymentStatus === 'refunded'
+                          ? 'bg-gray-100 text-gray-800'
+                          : eventData.mpPaymentStatus === 'approved'
+                            ? 'bg-green-100 text-green-800'
+                            : eventData.mpPaymentStatus === 'pending'
+                              ? 'bg-violet-100 text-violet-800'
+                              : 'bg-gray-100 text-gray-800'
+                    }`}
+                  >
+                    {eventData.paymentLabel}
+                  </span>
+                </div>
+              )}
+
+              {hasPatient && eventData.appointmentType === 'teleconsulta' && mpPaymentCtx?.paymentRequired && !eventData.paymentLabel && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-1">Estado de pago (teleconsulta)</p>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    mpPaymentCtx.paymentStatus === 'approved'
+                      ? 'bg-green-100 text-green-800'
+                      : mpPaymentCtx.paymentStatus === 'refunded'
+                        ? 'bg-gray-100 text-gray-800'
+                        : mpPaymentCtx.refundRequest?.status === 'pending'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-violet-100 text-violet-800'
+                  }`}>
+                    {mpPaymentCtx.paymentStatus === 'approved'
+                      ? mpPaymentCtx.refundRequest?.status === 'pending'
+                        ? 'Pagado · reembolso pendiente'
+                        : 'Pagado'
+                      : mpPaymentCtx.paymentStatus === 'refunded'
+                        ? 'Reembolsado'
+                        : 'Pendiente de pago'}
+                  </span>
+                  {mpPaymentCtx.amount > 0 && (
+                    <p className="mt-1 text-xs text-gray-600">
+                      Monto: ${Number(mpPaymentCtx.amount).toLocaleString('es-MX')} {mpPaymentCtx.currency || 'MXN'}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {hasPatient &&
+                eventData.appointmentType === 'teleconsulta' &&
+                eventData.teleconsultationAmount != null &&
+                !mpPaymentCtx?.paymentRequired && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Monto teleconsulta</p>
+                    <p className="text-sm text-gray-600">
+                      ${Number(eventData.teleconsultationAmount).toLocaleString('es-MX')} MXN
+                    </p>
+                  </div>
+                )}
+
               {/* Botones de acción para citas con paciente (no canceladas) */}
               {hasPatient && confirmationStatus !== 'CANCELLED' && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 space-y-3">
@@ -865,6 +1096,16 @@ const EventDetailsModal = ({
                       </button>
                     )}
                     <button
+                      onClick={handleResendCalendarInvite}
+                      disabled={isResendingCalendarInvite}
+                      className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ArrowPathIcon className="h-4 w-4" />
+                      <span>
+                        {isResendingCalendarInvite ? 'Reenviando...' : 'Reenviar invitación calendario'}
+                      </span>
+                    </button>
+                    <button
                       onClick={() => setShowRescheduleModal(true)}
                       disabled={isRescheduling}
                       className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -880,6 +1121,16 @@ const EventDetailsModal = ({
                       <XMarkIcon className="h-4 w-4" />
                       <span>{isCancelling ? 'Cancelando...' : 'Cancelar cita'}</span>
                     </button>
+                    {eventData.appointmentType !== 'teleconsulta' && (
+                      <button
+                        type="button"
+                        onClick={handleOpenMpModal}
+                        className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-sky-600 text-white rounded-md text-sm font-medium hover:bg-sky-700"
+                      >
+                        <BanknotesIcon className="h-4 w-4" />
+                        <span>Cobrar con Mercado Pago</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -957,10 +1208,10 @@ const EventDetailsModal = ({
 
           <div className="p-6 space-y-4">
             <p className="text-sm text-gray-600 mb-4">
-              Selecciona la nueva fecha y hora para esta cita:
+              Elige un día y un horario disponible según la agenda compartida. La cita se actualizará
+              en tu calendario y en la agenda del paciente.
             </p>
 
-            {/* Fecha */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
                 <CalendarIcon className="h-4 w-4 mr-1" />
@@ -970,102 +1221,49 @@ const EventDetailsModal = ({
                 type="date"
                 name="fecha"
                 value={rescheduleData.fecha}
-                onChange={handleRescheduleChange}
+                min={new Date().toISOString().split('T')[0]}
+                onChange={(e) => handleRescheduleDateChange(e.target.value)}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
               />
             </div>
 
-            {/* Hora de inicio */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
                 <ClockIcon className="h-4 w-4 mr-1" />
-                Hora de inicio <span className="text-red-500">*</span>
+                Horarios disponibles <span className="text-red-500">*</span>
               </label>
-              <div className="flex space-x-2">
-                <select
-                  name="horaInicio"
-                  value={rescheduleData.horaInicio}
-                  onChange={handleRescheduleChange}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {hourOptions.map(hour => (
-                    <option key={hour} value={hour}>{hour}</option>
+              {loadingRescheduleSlots ? (
+                <div className="flex items-center justify-center py-6 text-sm text-gray-500">
+                  <ArrowPathIcon className="h-5 w-5 animate-spin mr-2" />
+                  Cargando horarios…
+                </div>
+              ) : !rescheduleData.fecha ? (
+                <p className="text-sm text-gray-500 py-2">Selecciona primero una fecha.</p>
+              ) : rescheduleSlots.length === 0 ? (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                  No hay horarios disponibles este día. Prueba otra fecha.
+                </p>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                  {rescheduleSlots.map((slot) => (
+                    <button
+                      key={slot.id}
+                      type="button"
+                      onClick={() =>
+                        setRescheduleData((prev) => ({ ...prev, selectedSlot: slot.startTime }))
+                      }
+                      className={`px-2 py-2 text-sm rounded-md border transition-colors ${
+                        rescheduleData.selectedSlot === slot.startTime
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white text-gray-800 border-gray-300 hover:border-blue-400'
+                      }`}
+                    >
+                      {slot.displayTime}
+                    </button>
                   ))}
-                </select>
-                <span className="self-center text-gray-500">:</span>
-                <select
-                  name="minutosInicio"
-                  value={rescheduleData.minutosInicio}
-                  onChange={handleRescheduleChange}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {minuteOptions.map(minute => (
-                    <option key={minute} value={minute}>{minute}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Hora de fin con opciones rápidas */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Hora de fin <span className="text-red-500">*</span>
-              </label>
-              <div className="flex space-x-2 mb-2">
-                <select
-                  name="horaFin"
-                  value={rescheduleData.horaFin}
-                  onChange={handleRescheduleChange}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {hourOptions.map(hour => (
-                    <option key={hour} value={hour}>{hour}</option>
-                  ))}
-                </select>
-                <span className="self-center text-gray-500">:</span>
-                <select
-                  name="minutosFin"
-                  value={rescheduleData.minutosFin}
-                  onChange={handleRescheduleChange}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {minuteOptions.map(minute => (
-                    <option key={minute} value={minute}>{minute}</option>
-                  ))}
-                </select>
-              </div>
-              {/* Opciones rápidas de duración */}
-              <div className="flex space-x-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickDuration(15)}
-                  className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  15 min
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickDuration(30)}
-                  className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  30 min
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickDuration(45)}
-                  className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  45 min
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickDuration(60)}
-                  className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  1 hora
-                </button>
-              </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end space-x-3 pt-4">
@@ -1088,6 +1286,19 @@ const EventDetailsModal = ({
           </div>
         </div>
       </div>,
+      document.body
+    )}
+    {showMpModal && createPortal(
+      <InPersonPaymentModal
+        appointment={{
+          id: eventData.appointmentId,
+          patientId: eventData.patient?.id,
+          patientName: eventData.patient
+            ? `${eventData.patient.firstName || ''} ${eventData.patient.lastName || ''}`.trim()
+            : event.title,
+        }}
+        onClose={() => setShowMpModal(false)}
+      />,
       document.body
     )}
     </>

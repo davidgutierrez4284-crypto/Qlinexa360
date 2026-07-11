@@ -1,11 +1,16 @@
 import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import path from 'path';
-import fs from 'fs';
 import { NotificationService } from '../services/notification.service';
 import { securityLogger } from '../utils/logger.utils';
 import { AuthRequest } from '../middlewares/auth.middleware';
 import { AppError } from '../utils/error.utils';
+import {
+  deleteStoredInvoiceFile,
+  readInvoiceFile,
+  resolveInvoiceDownloadTarget,
+  uploadInvoiceFileToStorage,
+} from '../utils/invoiceFile.utils';
 
 const prisma = new PrismaClient();
 
@@ -69,15 +74,8 @@ export const uploadInvoice = async (req: AuthRequest, res: Response) => {
     const pdfFile = (req.files as any).pdf[0];
     const xmlFile = (req.files as any).xml[0];
 
-    // Guardar archivos localmente (puedes adaptar a S3 si lo usas)
-    const uploadsDir = path.join(__dirname, '../../uploads/invoices');
-    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-    const pdfPath = path.join(uploadsDir, `${Date.now()}-${pdfFile.originalname}`);
-    const xmlPath = path.join(uploadsDir, `${Date.now()}-${xmlFile.originalname}`);
-    fs.writeFileSync(pdfPath, pdfFile.buffer);
-    fs.writeFileSync(xmlPath, xmlFile.buffer);
-    const pdfUrl = `/uploads/invoices/${path.basename(pdfPath)}`;
-    const xmlUrl = `/uploads/invoices/${path.basename(xmlPath)}`;
+    const pdfUrl = await uploadInvoiceFileToStorage(pdfFile, doctorId, 'pdf');
+    const xmlUrl = await uploadInvoiceFileToStorage(xmlFile, doctorId, 'xml');
 
     const invoice = await prisma.invoice.create({
       data: {
@@ -163,17 +161,11 @@ export const deleteInvoice = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ message: 'No tienes permiso para eliminar esta factura' });
     }
     
-    // Elimina archivos locales (opcional)
     try {
-      if (invoice.pdfUrl && invoice.pdfUrl.startsWith('/uploads/')) {
-        fs.unlinkSync(path.join(__dirname, '../../', invoice.pdfUrl));
-      }
-      if (invoice.xmlUrl && invoice.xmlUrl.startsWith('/uploads/')) {
-        fs.unlinkSync(path.join(__dirname, '../../', invoice.xmlUrl));
-      }
-    } catch (e) { 
-      console.log('Error al eliminar archivos locales:', e);
-      // Continuar aunque falle la eliminación de archivos
+      await deleteStoredInvoiceFile(invoice.pdfUrl);
+      await deleteStoredInvoiceFile(invoice.xmlUrl);
+    } catch (e) {
+      console.log('Error al eliminar archivos de factura:', e);
     }
     
     await prisma.invoice.delete({ where: { id } });
@@ -248,33 +240,33 @@ export const sendInvoiceByEmail = async (req: AuthRequest, res: Response) => {
       day: 'numeric'
     });
 
-    // Construir rutas completas de los archivos
-    const pdfPath = invoice.pdfUrl.startsWith('/uploads/')
-      ? path.join(__dirname, '../../', invoice.pdfUrl)
-      : invoice.pdfUrl;
-    
-    const xmlPath = invoice.xmlUrl.startsWith('/uploads/')
-      ? path.join(__dirname, '../../', invoice.xmlUrl)
-      : invoice.xmlUrl;
+    const pdfFile = await readInvoiceFile(invoice.pdfUrl);
+    const xmlFile = await readInvoiceFile(invoice.xmlUrl);
 
-    // Verificar que los archivos existan
-    if (!fs.existsSync(pdfPath)) {
-      return res.status(404).json({ success: false, message: 'El archivo PDF no se encuentra en el servidor' });
-    }
-    
-    if (!fs.existsSync(xmlPath)) {
-      return res.status(404).json({ success: false, message: 'El archivo XML no se encuentra en el servidor' });
+    if (!pdfFile) {
+      return res.status(404).json({
+        success: false,
+        message:
+          'El archivo PDF no se encuentra en el servidor. Vuelve a subir la factura (archivos antiguos en disco local no persisten en producción).',
+      });
     }
 
-    // Enviar correo con archivos adjuntos
+    if (!xmlFile) {
+      return res.status(404).json({
+        success: false,
+        message:
+          'El archivo XML no se encuentra en el servidor. Vuelve a subir la factura (archivos antiguos en disco local no persisten en producción).',
+      });
+    }
+
     const notificationService = NotificationService.getInstance();
     const sent = await notificationService.sendInvoiceToPatientEmail({
       toEmail: patientEmail,
       patientName: `${invoice.patient.firstName} ${invoice.patient.lastName}`,
       doctorName: `${invoice.doctor?.user?.firstName || ''} ${invoice.doctor?.user?.lastName || ''}`.trim(),
       invoiceDate,
-      pdfPath,
-      xmlPath
+      pdfAttachment: { filename: pdfFile.filename, content: pdfFile.buffer },
+      xmlAttachment: { filename: xmlFile.filename, content: xmlFile.buffer },
     });
 
     if (!sent) {
@@ -285,6 +277,60 @@ export const sendInvoiceByEmail = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     securityLogger.error('Error al enviar factura por email:', error);
     const handled = error instanceof AppError ? error : new AppError('Error interno del servidor', 500);
+    res.status(handled.statusCode).json({ success: false, message: handled.message });
+  }
+};
+
+async function assertInvoiceAccess(req: AuthRequest, invoice: { doctorId: string; patientId: string }) {
+  if (!req.user) throw new AppError('Autenticación requerida', 401);
+
+  if (req.user.role?.toUpperCase() === 'PATIENT') {
+    const patient = await prisma.patient.findUnique({ where: { userId: req.user.userId } });
+    if (!patient || patient.id !== invoice.patientId) {
+      throw new AppError('No autorizado', 403);
+    }
+    return;
+  }
+
+  const doctorId = await resolveDoctorId(req);
+  if (doctorId !== invoice.doctorId) {
+    throw new AppError('No autorizado', 403);
+  }
+}
+
+export const downloadInvoiceFile = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id, type } = req.params;
+    if (type !== 'pdf' && type !== 'xml') {
+      return res.status(400).json({ success: false, message: 'Tipo de archivo inválido' });
+    }
+
+    const invoice = await prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: 'Factura no encontrada' });
+    }
+
+    await assertInvoiceAccess(req, invoice);
+
+    const storedUrl = type === 'pdf' ? invoice.pdfUrl : invoice.xmlUrl;
+    const target = await resolveInvoiceDownloadTarget(storedUrl);
+    if (!target) {
+      return res.status(404).json({
+        success: false,
+        message:
+          'Archivo no encontrado. Si la factura es antigua, vuelve a subir el PDF y XML (los archivos locales no se conservan en el servidor de producción).',
+      });
+    }
+
+    if (target.type === 'redirect') {
+      return res.redirect(302, target.url);
+    }
+
+    res.setHeader('Content-Type', target.contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${path.basename(target.path)}"`);
+    return res.sendFile(target.path);
+  } catch (error: any) {
+    const handled = error instanceof AppError ? error : new AppError('Error al descargar factura', 500);
     res.status(handled.statusCode).json({ success: false, message: handled.message });
   }
 }; 

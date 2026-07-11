@@ -65,3 +65,56 @@ export function getNumericValueByLabel(formData, fields, labelMatch) {
   const num = parseFloat(val);
   return isNaN(num) ? null : num;
 }
+
+/**
+ * Aplica campos calculados (IMC, PAM) sobre datos de plantilla de especialidad.
+ * Misma lógica que SmartForm en consultas.
+ */
+export function applySpecialtyFormComputations(formData, fields = []) {
+  if (!formData || !Array.isArray(fields) || fields.length === 0) return formData || {};
+  let newData = { ...formData };
+
+  const pesoVal = getNumericValueByLabel(newData, fields, 'peso');
+  const tallaVal = getNumericValueByLabel(newData, fields, 'talla');
+  const imcField = fields.find((f) => f.label && /imc|índice de masa corporal/i.test(f.label));
+  if (pesoVal && tallaVal && imcField) {
+    const calculated = imc(pesoVal, tallaVal);
+    if (calculated) newData = { ...newData, [imcField.id]: calculated };
+  }
+
+  const pasVal = getNumericValueByLabel(newData, fields, 'sistólica');
+  const padVal = getNumericValueByLabel(newData, fields, 'diastólica');
+  const pamField = fields.find((f) => f.label && /presión arterial media|pam/i.test(f.label));
+  if (pasVal != null && padVal != null && pamField) {
+    const calculated = presionArterialMedia(pasVal, padVal);
+    if (calculated) newData = { ...newData, [pamField.id]: calculated };
+  }
+
+  return newData;
+}
+
+/**
+ * Props de solo lectura / valor calculado para un campo de plantilla.
+ */
+export function getSpecialtyComputedFieldProps(formData, fields, field) {
+  if (!field?.label || !Array.isArray(fields)) return {};
+  const isImc = /imc|índice de masa corporal/i.test(field.label);
+  const isPam = /presión arterial media|pam/i.test(field.label);
+  if (isImc) {
+    const pesoVal = getNumericValueByLabel(formData, fields, 'peso');
+    const tallaVal = getNumericValueByLabel(formData, fields, 'talla');
+    if (pesoVal && tallaVal) {
+      const calculated = imc(pesoVal, tallaVal);
+      return { readOnly: true, value: calculated };
+    }
+  }
+  if (isPam) {
+    const pasVal = getNumericValueByLabel(formData, fields, 'sistólica');
+    const padVal = getNumericValueByLabel(formData, fields, 'diastólica');
+    if (pasVal != null && padVal != null) {
+      const calculated = presionArterialMedia(pasVal, padVal);
+      return { readOnly: true, value: calculated };
+    }
+  }
+  return {};
+}

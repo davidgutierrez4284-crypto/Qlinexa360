@@ -12,6 +12,8 @@ router.post('/cancel/:token', appointmentConfirmation_controller_1.AppointmentCo
 // Obtener horarios disponibles para reprogramación (público, basado en token)
 router.get('/reschedule/:token/available-slots', appointmentConfirmation_controller_1.AppointmentConfirmationController.getAvailableRescheduleSlots);
 router.post('/reschedule/:token', appointmentConfirmation_controller_1.AppointmentConfirmationController.requestReschedule);
+router.get('/refund-request/:token', appointmentConfirmation_controller_1.AppointmentConfirmationController.getRefundContextByToken);
+router.post('/refund-request/:token', appointmentConfirmation_controller_1.AppointmentConfirmationController.createRefundRequestByToken);
 // Rutas protegidas (DOCTOR y ASISTENTE con permiso de citas)
 const doctorOrAssistantAppointments = [(0, auth_middleware_1.authMiddleware)(['DOCTOR', 'ASISTENTE']), assistant_middleware_1.AssistantMiddleware.checkAssistantModulePermission('appointments')];
 // Obtener estado de confirmaciones para un doctor

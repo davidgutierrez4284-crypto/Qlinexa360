@@ -197,8 +197,8 @@ const Header = ({ onMenuClick }) => {
     return DEFAULT_AVATAR_URL;
   }, [user?.profilePictureUrl, signedProfileUrl]);
 
-  return (
-    <div className="bg-blue-600 h-14 sm:h-16 shadow-md flex items-center justify-between gap-1 sm:gap-2 px-2 sm:px-4 md:px-6 w-full fixed top-0 left-0 right-0 z-50 min-w-0 overflow-hidden">
+  const topBarInner = (
+    <>
       {/* Izquierda: menú + logo */}
       <div className="flex items-center gap-1 sm:gap-3 min-w-0 flex-shrink-0">
         {user && (
@@ -215,19 +215,19 @@ const Header = ({ onMenuClick }) => {
             <span className="text-white text-sm sm:text-xl font-semibold hidden sm:inline whitespace-nowrap">Qlinexa360</span>
           </button>
         ) : (
-          <Link
-            to="/benefits"
+          <a
+            href="/benefits"
             className="flex items-center gap-2 sm:gap-2.5 bg-transparent flex-shrink-0 min-w-0 hover:opacity-90 transition-opacity"
             title="Ver beneficios y tutoriales de Qlinexa360"
           >
-            <img src="/logo.svg" alt="Qlinexa360 - Ver beneficios y tutoriales" className="h-10 w-10 sm:h-8 sm:w-8 flex-shrink-0" />
+            <img src="/logo.svg" alt="Qlinexa360" className="h-10 w-10 sm:h-8 sm:w-8 flex-shrink-0" />
             <span className="text-white text-base sm:text-xl font-semibold whitespace-nowrap">Qlinexa360</span>
-          </Link>
+          </a>
         )}
       </div>
 
-      {/* Derecha: selector doctor (asistente) + notificaciones + usuario + logout */}
-      <div className="flex items-center gap-1 sm:gap-3 md:gap-4 min-w-0 flex-shrink overflow-hidden">
+      {/* Derecha: selector doctor (asistente) + notificaciones + usuario + logout — o acceso público */}
+      <div className="flex items-center gap-1 sm:gap-2 md:gap-4 min-w-0 flex-shrink overflow-hidden">
         {user ? (
           <>
             {user.role === 'ASISTENTE' && (
@@ -271,11 +271,46 @@ const Header = ({ onMenuClick }) => {
           </>
         ) : (
           <>
-            <button onClick={() => navigate('/login')} className="text-white text-sm font-medium hover:underline bg-transparent border-none py-2">Iniciar sesión</button>
-            <button onClick={() => navigate('/register')} className="text-white text-sm font-medium hover:underline bg-transparent border-none py-2">Registrarse</button>
+            <button type="button" onClick={() => navigate('/login')} className="text-white text-xs sm:text-sm font-medium hover:underline bg-transparent border-none py-2 whitespace-nowrap">
+              Iniciar sesión
+            </button>
+            <button type="button" onClick={() => navigate('/register')} className="text-white text-xs sm:text-sm font-medium hover:underline bg-transparent border-none py-2 whitespace-nowrap">
+              Registrarse
+            </button>
           </>
         )}
       </div>
+    </>
+  );
+
+  const topBarBlueClass =
+    'bg-blue-600 h-14 sm:h-16 flex items-center justify-between gap-1 sm:gap-2 px-2 sm:px-4 md:px-6 w-full min-w-0 overflow-hidden';
+
+  if (!user) {
+    return (
+      <header className="fixed top-0 left-0 right-0 z-50 shadow-md flex flex-col">
+        <div className={topBarBlueClass}>{topBarInner}</div>
+        <nav
+          className="bg-gray-50 border-b border-gray-200 py-1.5 sm:py-2 px-3 sm:px-6 flex flex-wrap justify-end items-center gap-x-1 gap-y-0.5 text-xs sm:text-sm"
+          aria-label="Aviso de privacidad y términos de uso"
+        >
+          <a href="/aviso-privacidad" className="text-blue-700 hover:text-blue-900 font-medium hover:underline">
+            Aviso de privacidad
+          </a>
+          <span className="text-gray-400 select-none px-0.5" aria-hidden>
+            |
+          </span>
+          <a href="/terminos" className="text-blue-700 hover:text-blue-900 font-medium hover:underline">
+            Términos de Uso
+          </a>
+        </nav>
+      </header>
+    );
+  }
+
+  return (
+    <div className={`${topBarBlueClass} shadow-md fixed top-0 left-0 right-0 z-50`}>
+      {topBarInner}
     </div>
   );
 };

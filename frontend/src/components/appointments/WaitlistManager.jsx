@@ -276,7 +276,12 @@ const WaitlistManager = () => {
                           }`}
                           type="button"
                         >
-                          {new Date(slot.startTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                          {slot.displayTime ||
+                            new Date(slot.startTime).toLocaleTimeString('es-ES', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: false
+                            })}
                         </button>
                       ))}
                       {(selectedDates[entry.id] && (availableSlots[entry.id] || []).length === 0) && (

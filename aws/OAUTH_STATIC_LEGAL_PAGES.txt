@@ -1,0 +1,29 @@
+STATIC PUBLIC PAGES (Google OAuth / view-source / homepage quality)
+===================================================================
+
+Goal: GET https://www.qlinexa360.com/benefits, /aviso-privacidad and /terminos must return
+full HTML in the response body (no dependency on React hydration). Same for view-source: URLs.
+
+1) Deploy frontend (uploads MPA HTML + exact S3 keys benefits, aviso-privacidad, terminos):
+   .\scripts\deploy-frontend-s3.ps1
+
+2) Verify S3 objects exist (AWS CLI):
+   aws s3api head-object --bucket qlinexa360 --key benefits --region us-east-2
+   aws s3api head-object --bucket qlinexa360 --key aviso-privacidad --region us-east-2
+   aws s3api head-object --bucket qlinexa360 --key terminos --region us-east-2
+
+3) Verify origin HTML (first line should be <!DOCTYPE html> and body contains real content):
+   curl -sS "https://www.qlinexa360.com/benefits" | findstr /i "Beneficios de Qlinexa360"
+
+If step 2 OK but step 3 still shows SPA shell (title Qlinexa360, main-*.js):
+   Your CloudFront distribution likely rewrites paths to /index.html before S3.
+
+   Fix: CloudFront -> Functions -> create/publish function using
+   aws/cloudfront-function-viewer-request-spa-except-legal.js
+   Then attach it to the DEFAULT behavior as VIEWER REQUEST.
+
+   Adjust the SPA rewrite block if your app uses other extensionless paths that must
+   map to real S3 objects (not index.html).
+
+4) Invalidate cache after changes:
+   aws cloudfront create-invalidation --distribution-id E2Z7077D2HRTFW --paths "/benefits" "/aviso-privacidad" "/terminos" "/*"

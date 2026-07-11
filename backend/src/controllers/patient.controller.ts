@@ -8,6 +8,24 @@ import { AuthRequest } from "../middlewares/auth.middleware";
 import { NotificationService } from "../services/notification.service";
 import { ConsentPdfService } from "../services/consentPdf.service";
 import { AppError } from "../utils/error.utils";
+import { formatAppointmentDate, formatAppointmentTime } from "../utils/date.utils";
+import {
+  finalizeTeleconsultationAfterPayment,
+  getTeleconsultationPaymentContext,
+  isTeleconsultationPaymentApproved,
+} from "../payments/mercadopago/mercadopago.teleconsultation.service";
+import {
+  ensureInPersonCheckoutUrl,
+  finalizeInPersonAfterPayment,
+  getInPersonPaymentContext,
+} from "../payments/mercadopago/mercadopago.inperson.service";
+import { getRefundContextForAppointment } from "../payments/mercadopago/mercadopago.refund.service";
+import {
+  getVisibleDoctorPatientIdsForPatient,
+  patientHasClinicalHistoryPortalAccess,
+} from "../utils/patientPortal.utils";
+import { RecipePdfService } from "../services/recipePdf.service";
+import { securityLogger } from "../utils/logger.utils";
 
 const prisma = new PrismaClient();
 
@@ -18,20 +36,38 @@ export const registerPatient = async (req: Request, res: Response) => {
   try {
     const { email, password, firstName, lastName, phone, dateOfBirth } = req.body;
 
+    // Validación de campos obligatorios (responde 400 en vez de fallar con 500)
+    if (!email || !password || !firstName || !lastName) {
+      return res.status(400).json({
+        message: "Faltan campos obligatorios: email, contraseña, nombre y apellidos son requeridos",
+      });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return res.status(400).json({ message: "El email no es válido" });
+    }
+    if (String(password).length < 6) {
+      return res.status(400).json({ message: "La contraseña debe tener al menos 6 caracteres" });
+    }
+
     // Verificar si el usuario ya existe
     const existingUser = await prisma.user.findUnique({
-      where: { email }
+      where: { email: normalizedEmail }
     });
 
     if (existingUser) {
       return res.status(400).json({ message: "El email ya está registrado" });
     }
 
+    // Encriptar la contraseña (login usa bcrypt.compare; almacenar en texto plano impedía iniciar sesión)
+    const hashedPassword = await hashPassword(String(password));
+
     // Crear el nuevo usuario y perfil de paciente
     const newUser = await prisma.user.create({
       data: {
-        email,
-        password,
+        email: normalizedEmail,
+        password: hashedPassword,
         firstName,
         lastName,
         phone,
@@ -40,7 +76,7 @@ export const registerPatient = async (req: Request, res: Response) => {
           create: {
             firstName,
             lastName,
-            email,
+            email: normalizedEmail,
             phone: phone || null, // Guardar el teléfono en el modelo Patient
             dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : new Date(),
             gender: 'No especificado',
@@ -71,6 +107,43 @@ export const registerPatient = async (req: Request, res: Response) => {
 };
 
 // =================================================================
+// OBTENER EXPEDIENTE DEL PACIENTE (mismos datos que registra el profesional; solo lectura en la app)
+// =================================================================
+export const getMyProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Usuario no autenticado' });
+    }
+
+    if (req.user.role !== 'PATIENT') {
+      return res.status(403).json({ message: 'Acceso denegado. Solo para pacientes.' });
+    }
+
+    const patient = await prisma.patient.findUnique({
+      where: { userId: req.user.userId },
+      include: {
+        user: true,
+        emergencyContacts: true
+      }
+    });
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Perfil de paciente no encontrado' });
+    }
+
+    const clinicalHistoryPortalEnabled = await patientHasClinicalHistoryPortalAccess(patient.id);
+
+    res.json({
+      ...patient,
+      clinicalHistoryPortalEnabled,
+    });
+  } catch (error) {
+    console.error('Error al obtener perfil del paciente:', error);
+    res.status(500).json({ message: 'Error al obtener perfil' });
+  }
+};
+
+// =================================================================
 // OBTENER CASOS CLÍNICOS DEL PACIENTE (VISTA DEL PACIENTE)
 // =================================================================
 export const getMyClinicalCases = async (req: AuthRequest, res: Response) => {
@@ -86,10 +159,25 @@ export const getMyClinicalCases = async (req: AuthRequest, res: Response) => {
     // Buscar el paciente
     const patient = await prisma.patient.findUnique({
       where: { userId: req.user.userId },
+      select: { id: true },
+    });
+
+    if (!patient) {
+      return res.status(404).json({ message: 'Perfil de paciente no encontrado' });
+    }
+
+    const visibleDoctorPatientIds = await getVisibleDoctorPatientIdsForPatient(patient.id);
+    if (visibleDoctorPatientIds.length === 0) {
+      return res.json([]);
+    }
+
+    const patientWithCases = await prisma.patient.findUnique({
+      where: { userId: req.user.userId },
       include: {
         clinicalCases: {
           include: {
             medicalRecords: {
+              where: { doctorPatientId: { in: visibleDoctorPatientIds } },
               orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
               select: {
                 id: true,
@@ -124,12 +212,13 @@ export const getMyClinicalCases = async (req: AuthRequest, res: Response) => {
       }
     });
 
-    if (!patient) {
+    if (!patientWithCases) {
       return res.status(404).json({ message: 'Perfil de paciente no encontrado' });
     }
 
     // Procesar los casos clínicos para el paciente
-    const processedCases = patient.clinicalCases.map(clinicalCase => {
+    const processedCases = patientWithCases.clinicalCases
+      .map(clinicalCase => {
       // Procesar las consultas según la visibilidad
       const processedConsultations = clinicalCase.medicalRecords.map(consultation => {
         const baseConsultation = {
@@ -175,12 +264,245 @@ export const getMyClinicalCases = async (req: AuthRequest, res: Response) => {
           role: colab.rol
         }))
       };
-    });
+    })
+      .filter((clinicalCase) => clinicalCase.consultations.length > 0);
 
     res.json(processedCases);
   } catch (error) {
     console.error('Error al obtener casos clínicos del paciente:', error);
     res.status(500).json({ message: 'Error al obtener casos clínicos' });
+  }
+};
+
+// =================================================================
+// CITAS DEL PACIENTE (agenda / mis citas)
+// =================================================================
+export const getMyAppointments = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Usuario no autenticado' });
+    }
+    if (req.user.role !== 'PATIENT') {
+      return res.status(403).json({ message: 'Acceso denegado. Solo para pacientes.' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { email: true },
+    });
+    const patient = await prisma.patient.findUnique({
+      where: { userId: req.user.userId }
+    });
+    if (!patient && !user?.email) {
+      return res.status(404).json({ message: 'Perfil de paciente no encontrado' });
+    }
+
+    const normalizedEmail = user?.email?.trim().toLowerCase();
+    const relatedPatients = await prisma.patient.findMany({
+      where: {
+        OR: [
+          { userId: req.user.userId },
+          ...(normalizedEmail
+            ? [{ email: { equals: normalizedEmail, mode: 'insensitive' as const } }]
+            : []),
+        ],
+      },
+      select: { id: true },
+    });
+    const patientIds = [...new Set(relatedPatients.map((p) => p.id))];
+    if (patient?.id && !patientIds.includes(patient.id)) {
+      patientIds.push(patient.id);
+    }
+
+    const from = new Date();
+    from.setDate(from.getDate() - 30);
+    const to = new Date();
+    to.setDate(to.getDate() + 365);
+
+    const appointments = await prisma.appointment.findMany({
+      where: {
+        date: { gte: from, lte: to },
+        OR: [
+          { userId: req.user.userId },
+          ...(patientIds.length > 0 ? [{ patientId: { in: patientIds } }] : []),
+          { patient: { userId: req.user.userId } },
+          ...(normalizedEmail
+            ? [{ patient: { email: { equals: normalizedEmail, mode: 'insensitive' as const } } }]
+            : []),
+        ],
+        AND: [
+          {
+            OR: [
+              { confirmationStatus: { in: ['PENDING', 'CONFIRMED', 'RESCHEDULED'] } },
+              {
+                confirmationStatus: 'CANCELLED',
+                mercadoPagoRefundRequests: { some: { status: { in: ['pending', 'completed', 'failed'] } } },
+              },
+            ],
+          },
+        ],
+      },
+      include: {
+        doctor: { include: { user: true } },
+        teleconsultation: {
+          select: { meetingUrl: true, consentSigned: true }
+        }
+      },
+      orderBy: { date: 'asc' },
+      take: 100
+    });
+
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+    const data = await Promise.all(
+      appointments.map(async (apt) => {
+        const pendingReq = await prisma.appointmentConfirmationRequest.findFirst({
+          where: {
+            appointmentId: apt.id,
+            status: 'PENDING',
+            expiresAt: { gt: new Date() }
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+        const fallbackReq =
+          pendingReq ||
+          (await prisma.appointmentConfirmationRequest.findFirst({
+            where: { appointmentId: apt.id },
+            orderBy: { createdAt: 'desc' }
+          }));
+
+        const tz = apt.doctor.timezone || 'America/Mexico_City';
+        const doctorName = apt.doctor.user
+          ? `${apt.doctor.professionalTitle || ''} ${apt.doctor.user.firstName} ${apt.doctor.user.lastName}`.trim()
+          : apt.doctor.professionalTitle || 'Profesional';
+
+        const confirmationLabels: Record<string, string> = {
+          PENDING: 'Pendiente de confirmación',
+          CONFIRMED: 'Confirmada',
+          RESCHEDULED: 'Reprogramada',
+          CANCELLED: 'Cancelada'
+        };
+
+        const token = fallbackReq?.confirmationToken;
+        const manageLink = token
+          ? apt.appointmentType === 'teleconsulta'
+            ? `${baseUrl}/teleconsulta/${token}`
+            : `${baseUrl}/confirm-appointment/${token}`
+          : null;
+
+        let paymentCtx = await getTeleconsultationPaymentContext(apt.doctorId, apt.id);
+        let inPersonCtx =
+          apt.appointmentType === 'presencial'
+            ? await getInPersonPaymentContext(apt.doctorId, apt.id)
+            : null;
+
+        if (
+          inPersonCtx?.paymentOffered &&
+          inPersonCtx.paymentStatus === 'pending' &&
+          !inPersonCtx.checkoutUrl &&
+          token
+        ) {
+          try {
+            const checkoutUrl = await ensureInPersonCheckoutUrl(apt.id, token);
+            if (checkoutUrl) {
+              inPersonCtx = { ...inPersonCtx, checkoutUrl };
+            }
+          } catch {
+            /* checkout opcional */
+          }
+        } else if (
+          apt.appointmentType === 'presencial' &&
+          inPersonCtx?.paymentOffered &&
+          inPersonCtx.paymentStatus === 'approved'
+        ) {
+          try {
+            await finalizeInPersonAfterPayment(apt.id);
+          } catch (syncErr) {
+            securityLogger.warn('getMyAppointments: no se pudo reconciliar calendario presencial MP', {
+              appointmentId: apt.id,
+              syncErr,
+            });
+          }
+        }
+
+        const refundCtx = await getRefundContextForAppointment(apt.id);
+
+        let meetingUrl = apt.teleconsultation?.meetingUrl ?? null;
+        if (
+          apt.appointmentType === 'teleconsulta' &&
+          apt.teleconsultation?.consentSigned &&
+          paymentCtx.paymentRequired &&
+          paymentCtx.paymentStatus === 'approved' &&
+          !meetingUrl
+        ) {
+          try {
+            await finalizeTeleconsultationAfterPayment(apt.id);
+            const refreshedTc = await prisma.teleconsultation.findUnique({
+              where: { appointmentId: apt.id },
+              select: { meetingUrl: true },
+            });
+            meetingUrl = refreshedTc?.meetingUrl ?? null;
+          } catch (syncErr) {
+            securityLogger.warn('getMyAppointments: no se pudo reconciliar enlace teleconsulta', {
+              appointmentId: apt.id,
+              syncErr,
+            });
+          }
+        } else if (
+          apt.appointmentType === 'teleconsulta' &&
+          paymentCtx.paymentRequired &&
+          paymentCtx.paymentStatus !== 'approved' &&
+          (await isTeleconsultationPaymentApproved(apt.id))
+        ) {
+          paymentCtx = {
+            ...paymentCtx,
+            paymentStatus: 'approved',
+            checkoutUrl: null,
+          };
+        }
+
+        return {
+          id: apt.id,
+          date: apt.date,
+          dateLabel: formatAppointmentDate(apt.date, tz),
+          timeLabel: formatAppointmentTime(apt.date, tz),
+          status: apt.status,
+          confirmationStatus: apt.confirmationStatus,
+          confirmationLabel: confirmationLabels[apt.confirmationStatus] || apt.confirmationStatus,
+          appointmentType: apt.appointmentType,
+          notes: apt.notes,
+          doctorName,
+          manageLink,
+          meetingUrl:
+            !paymentCtx.paymentRequired || paymentCtx.paymentStatus === 'approved'
+              ? meetingUrl
+              : null,
+          consentSigned: apt.teleconsultation?.consentSigned ?? false,
+          paymentRequired: paymentCtx.paymentRequired,
+          paymentStatus: paymentCtx.paymentStatus,
+          checkoutUrl:
+            apt.teleconsultation?.consentSigned &&
+            paymentCtx.paymentRequired &&
+            paymentCtx.paymentStatus === 'pending'
+              ? paymentCtx.checkoutUrl
+              : null,
+          inPersonPaymentOffered: inPersonCtx?.paymentOffered ?? false,
+          inPersonPaymentStatus: inPersonCtx?.paymentStatus ?? 'not_required',
+          inPersonCheckoutUrl: inPersonCtx?.checkoutUrl ?? null,
+          inPersonPaymentAmount: inPersonCtx?.amount ?? 0,
+          canRequestRefund: refundCtx.canRequestRefund,
+          refundableAmount: refundCtx.refundableAmount,
+          refundRequest: refundCtx.refundRequest,
+          rescheduledFrom: apt.rescheduledFrom,
+          rescheduledTo: apt.rescheduledTo
+        };
+      })
+    );
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error al obtener citas del paciente:', error);
+    res.status(500).json({ message: 'Error al obtener citas' });
   }
 };
 
@@ -216,8 +538,16 @@ export const getMyConsultations = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ message: 'Perfil de paciente no encontrado' });
     }
 
+    const visibleDoctorPatientIds = await getVisibleDoctorPatientIdsForPatient(patient.id);
+    if (visibleDoctorPatientIds.length === 0) {
+      return res.json([]);
+    }
+
     // Construir filtros
-    const whereClause: any = { patientId: patient.id };
+    const whereClause: any = {
+      patientId: patient.id,
+      doctorPatientId: { in: visibleDoctorPatientIds },
+    };
     if (clinicalCaseId) {
       whereClause.clinicalCaseId = clinicalCaseId;
     }
@@ -321,8 +651,16 @@ export const getMyPhotoHistory = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ message: 'Perfil de paciente no encontrado' });
     }
 
+    const visibleDoctorPatientIds = await getVisibleDoctorPatientIdsForPatient(patient.id);
+    if (visibleDoctorPatientIds.length === 0) {
+      return res.json([]);
+    }
+
     // Construir la condición where para filtrar por caso clínico si se proporciona
-    const whereClause: any = { patientId: patient.id };
+    const whereClause: any = {
+      patientId: patient.id,
+      doctorPatientId: { in: visibleDoctorPatientIds },
+    };
     if (clinicalCaseId) {
       whereClause.clinicalCaseId = clinicalCaseId;
     }
@@ -524,387 +862,6 @@ export const getDoctorPatients = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Registro de paciente desde el frontend (nuevo método)
-export const registerPatientFromFrontend = async (req: Request, res: Response) => {
-  try {
-    console.log('=== INICIO REGISTRO PACIENTE FRONTEND ===');
-    console.log('Body recibido:', req.body);
-    console.log('Archivos recibidos:', req.files);
-    
-    const {
-      firstName, lastName, email, password, phone, doctorId,
-      // Contactos de emergencia 1
-      emergencyContact1Name, emergencyContact1LastName, emergencyContact1Phone, 
-      emergencyContact1Email, emergencyContact1Relationship,
-      // Contactos de emergencia 2
-      emergencyContact2Name, emergencyContact2LastName, emergencyContact2Phone, 
-      emergencyContact2Email, emergencyContact2Relationship,
-      gender, birthDate, bloodType, allergies, chronicDiseases,
-      // Datos fiscales
-      taxName, taxId, taxAddress,
-      acceptPrivacy, acceptTerms, acceptContract, signature,
-      // Seguro de Gastos Médicos
-      insuranceCompany, insurancePolicyNumber, insurancePolicyHolder,
-      insuranceStartDate, insuranceEndDate
-    } = req.body;
-
-    // Validaciones básicas
-    console.log('Validando campos obligatorios...');
-    console.log('firstName:', firstName);
-    console.log('lastName:', lastName);
-    console.log('email:', email);
-    console.log('password:', password ? 'PROVIDED' : 'MISSING');
-    console.log('phone:', phone);
-    console.log('doctorId:', doctorId);
-    
-    if (!firstName || !lastName || !email || !password || !phone || !doctorId) {
-      console.log('ERROR: Campos obligatorios faltantes');
-      console.log('Campos faltantes:', { firstName, lastName, email, password: '***', phone, doctorId });
-      return res.status(400).json({ message: 'Todos los campos obligatorios son requeridos' });
-    }
-    console.log('Validaciones básicas pasadas');
-
-    // Validar consentimientos legales
-    console.log('Validando consentimientos legales...');
-    console.log('acceptPrivacy:', acceptPrivacy);
-    console.log('acceptTerms:', acceptTerms);
-    console.log('acceptContract:', acceptContract);
-    console.log('signature:', signature ? 'PROVIDED' : 'MISSING');
-    
-    if (!acceptPrivacy || !acceptTerms || !acceptContract || !signature) {
-      console.log('ERROR: Faltan consentimientos legales');
-      return res.status(400).json({ message: 'Debes aceptar todos los consentimientos legales y firmar digitalmente' });
-    }
-    console.log('Consentimientos legales validados correctamente');
-
-    // Verificar que el doctor existe
-    const doctor = await prisma.doctor.findUnique({
-      where: { id: doctorId },
-      include: { user: { select: { firstName: true, lastName: true, email: true } } }
-    });
-
-    if (!doctor) {
-      return res.status(404).json({ message: 'Profesional de la salud no encontrado' });
-    }
-
-    // Verificar si existe un usuario con ese email
-    console.log('Verificando si existe usuario con email:', email.toLowerCase());
-    const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-      include: { patientProfile: true }
-    });
-    console.log('Usuario existente encontrado:', existingUser ? 'SÍ' : 'NO');
-    if (existingUser) {
-      console.log('Rol del usuario existente:', existingUser.role);
-      console.log('Tiene perfil de paciente:', existingUser.patientProfile ? 'SÍ' : 'NO');
-    }
-
-    // Verificar si existe una invitación válida para este email y doctor
-    console.log('Verificando si existe invitación válida para este email y doctor...');
-    const validInvitation = await prisma.patientInvitation.findFirst({
-      where: {
-        email: email.toLowerCase(),
-        doctorId: doctorId,
-        status: 'PENDING',
-        expiresAt: { gt: new Date() }
-      }
-    });
-
-    if (!validInvitation) {
-      console.log('ERROR: No se encontró invitación válida para este email y doctor');
-      return res.status(400).json({ 
-        message: 'No tienes una invitación válida para registrarte con este profesional de la salud. Debes recibir una invitación por email antes de poder completar tu registro.' 
-      });
-    }
-
-    console.log('Invitación válida encontrada:', validInvitation.id);
-    console.log('Invitación expira:', validInvitation.expiresAt);
-
-    let user;
-
-    if (existingUser) {
-      // Verificar si es un usuario pre-registrado por doctor que puede completar su registro
-      console.log('Usuario existente encontrado, verificando si puede completar registro...');
-      
-      // Si ya tiene contraseña y perfil completo, no permitir registro duplicado
-      if (existingUser.password && existingUser.patientProfile) {
-        console.log('ERROR: Usuario ya tiene registro completo');
-        return res.status(400).json({ 
-          message: 'Ya existe un usuario registrado con ese email. Si olvidaste tu contraseña, puedes usar la opción "¿Olvidaste tu contraseña?"' 
-        });
-      }
-      
-      // Si es un usuario pre-registrado sin contraseña, permitir completar el registro
-      if (!existingUser.password) {
-        console.log('Usuario pre-registrado sin contraseña, permitiendo completar registro...');
-        user = existingUser;
-      } else {
-        console.log('ERROR: Usuario existente con contraseña pero sin perfil completo');
-        return res.status(400).json({ 
-          message: 'Ya existe un usuario registrado con ese email. Si olvidaste tu contraseña, puedes usar la opción "¿Olvidaste tu contraseña?"' 
-        });
-      }
-    } else {
-      // Crear nuevo usuario paciente
-      console.log('Creando nuevo usuario paciente...');
-      const hashedPassword = await hashPassword(password);
-      
-      user = await prisma.user.create({
-        data: {
-          email: email.toLowerCase(),
-          password: hashedPassword,
-          firstName,
-          lastName,
-          phone,
-          role: 'PATIENT'
-        }
-      });
-      console.log('Usuario paciente creado exitosamente:', user.id);
-    }
-
-    // Si es un usuario existente, actualizar con nueva contraseña
-    if (existingUser && !existingUser.password) {
-      console.log('Actualizando usuario existente con nueva contraseña...');
-      const hashedPassword = await hashPassword(password);
-      
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          password: hashedPassword,
-          firstName,
-          lastName,
-          phone
-        }
-      });
-      console.log('Usuario existente actualizado exitosamente:', user.id);
-    }
-
-    // Crear el perfil de paciente
-    console.log('Creando perfil de paciente...');
-    const patient = await prisma.patient.create({
-      data: {
-        userId: user.id,
-        gender: gender || '',
-        dateOfBirth: birthDate ? new Date(birthDate) : new Date(),
-        bloodType: bloodType || null,
-        allergies: allergies || null,
-        chronicDiseases: chronicDiseases || null,
-        // Datos fiscales
-        taxName: taxName || null,
-        taxId: taxId || null,
-        taxAddress: taxAddress || null,
-        // Seguro de Gastos Médicos
-        insuranceCompany: insuranceCompany || null,
-        insurancePolicyNumber: insurancePolicyNumber || null,
-        insurancePolicyHolder: insurancePolicyHolder || null,
-        insuranceStartDate: insuranceStartDate ? new Date(insuranceStartDate) : null,
-        insuranceEndDate: insuranceEndDate ? new Date(insuranceEndDate) : null,
-        dataConsent: true,
-        firstName,
-        lastName,
-        phone: phone || null, // Guardar el teléfono en el modelo Patient
-        email: email || null, // También guardar el email en Patient para consistencia
-      }
-    });
-    console.log('Perfil de paciente creado exitosamente:', patient.id);
-
-    // Manejo de archivos
-    console.log('Manejando archivos...');
-    let taxCertificateUrl: string | null = null;
-    let profilePhotoUrl: string | null = null;
-    
-    if (req.files) {
-      const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-      
-      // Manejar archivo de constancia fiscal
-      if (files.taxCertificate && files.taxCertificate[0]) {
-        console.log('Archivo de constancia fiscal encontrado, subiendo a S3...');
-        try {
-          const { url } = await uploadToS3(files.taxCertificate[0], 'patient-tax-certificates', user.id);
-          taxCertificateUrl = url;
-          console.log('Archivo de constancia fiscal subido exitosamente a S3:', url);
-          
-          // Actualizar el paciente con la URL del certificado
-          await prisma.patient.update({
-            where: { id: patient.id },
-            data: { taxCertificateUrl }
-          });
-          console.log('Paciente actualizado con URL del certificado fiscal');
-        } catch (error) {
-          console.error('Error subiendo archivo de constancia fiscal a S3:', error);
-          // Continuar sin el archivo
-        }
-      } else {
-        console.log('No se recibió archivo de constancia fiscal');
-      }
-      
-      // Manejar foto de perfil
-      if (files.profilePhoto && files.profilePhoto[0]) {
-        console.log('Foto de perfil encontrada, subiendo a S3...');
-        try {
-          const { url } = await uploadToS3(files.profilePhoto[0], 'patient-profile-photos', user.id);
-          profilePhotoUrl = url;
-          console.log('Foto de perfil subida exitosamente a S3:', url);
-          
-          // Actualizar el paciente con la URL de la foto de perfil
-          await prisma.patient.update({
-            where: { id: patient.id },
-            data: { profilePictureUrl: profilePhotoUrl }
-          });
-          console.log('Paciente actualizado con URL de foto de perfil');
-        } catch (error) {
-          console.error('Error subiendo foto de perfil a S3:', error);
-          // Continuar sin el archivo
-        }
-      } else {
-        console.log('No se recibió foto de perfil');
-      }
-    } else {
-      console.log('No se recibieron archivos');
-    }
-
-    // Crear contactos de emergencia si se proporcionan
-    console.log('Creando contactos de emergencia...');
-    if (emergencyContact1Name && emergencyContact1LastName && emergencyContact1Phone) {
-      console.log('Creando contacto de emergencia 1...');
-      await prisma.emergencyContact.create({
-        data: {
-          patientId: patient.id,
-          firstName: emergencyContact1Name,
-          lastName: emergencyContact1LastName,
-          phone: emergencyContact1Phone,
-          email: emergencyContact1Email || '',
-          relationship: emergencyContact1Relationship || ''
-        }
-      });
-      console.log('Contacto de emergencia 1 creado exitosamente');
-    }
-
-    if (emergencyContact2Name && emergencyContact2LastName && emergencyContact2Phone) {
-      console.log('Creando contacto de emergencia 2...');
-      await prisma.emergencyContact.create({
-        data: {
-          patientId: patient.id,
-          firstName: emergencyContact2Name,
-          lastName: emergencyContact2LastName,
-          phone: emergencyContact2Phone,
-          email: emergencyContact2Email || '',
-          relationship: emergencyContact2Relationship || ''
-        }
-      });
-      console.log('Contacto de emergencia 2 creado exitosamente');
-    }
-
-    // Crear el vínculo con el doctor
-    console.log('Creando vínculo con el doctor...');
-    await prisma.doctorPatient.create({
-      data: {
-        doctorId,
-        patientId: patient.id,
-        status: 'active',
-        context: 'primary',
-        specialization: 'general',
-        startDate: new Date()
-      }
-    });
-    console.log('Vínculo con el doctor creado exitosamente');
-
-    // Generar PDFs de consentimiento, registrar en BD y enviar a legal y al doctor
-    console.log('Generando PDFs de consentimiento y registrando...');
-    const consentDate = new Date();
-    const fullName = `${user.firstName} ${user.lastName}`.trim();
-    try {
-      const pdfResults = await ConsentPdfService.generateConsentPdfs({
-        userId: user.id,
-        email: user.email,
-        fullName,
-        signature: signature.trim()
-      });
-
-      await prisma.consentHistory.createMany({
-        data: [
-          { userId: user.id, type: 'PRIVACY_POLICY', version: '1.0', content: 'Aviso de Privacidad de Qlinexa360', acceptedAt: consentDate, pdfUrl: pdfResults.PRIVACY_POLICY.url },
-          { userId: user.id, type: 'TERMS_OF_SERVICE', version: '1.0', content: 'Términos de Uso de Qlinexa360', acceptedAt: consentDate, pdfUrl: pdfResults.TERMS_OF_SERVICE.url },
-          { userId: user.id, type: 'PLATFORM_CONTRACT', version: '1.0', content: 'Contrato de Uso de Plataforma de Qlinexa360', acceptedAt: consentDate, pdfUrl: pdfResults.PLATFORM_CONTRACT.url },
-          { userId: user.id, type: 'DIGITAL_SIGNATURE', version: '1.0', content: `Firma digital: ${signature}`, acceptedAt: consentDate }
-        ]
-      });
-      console.log('Consentimientos legales registrados exitosamente');
-
-      // Enviar 3 PDFs a legal@qlinexa360.com (igual que para DOCTOR y ASISTENTE)
-      await NotificationService.sendNewUserConsentToLegal({
-        fullName,
-        email: user.email,
-        role: 'PATIENT',
-        pdfBuffers: {
-          aviso: pdfResults.PRIVACY_POLICY.buffer,
-          terminos: pdfResults.TERMS_OF_SERVICE.buffer,
-          contrato: pdfResults.PLATFORM_CONTRACT.buffer
-        }
-      });
-
-      // Enviar solo Aviso de Privacidad al doctor que registró al paciente
-      const doctorEmail = doctor.user?.email;
-      if (doctorEmail) {
-        await NotificationService.sendPatientAvisoPrivacidadToDoctor({
-          doctorEmail,
-          patientName: fullName,
-          patientEmail: user.email,
-          avisoPdfBuffer: pdfResults.PRIVACY_POLICY.buffer
-        });
-      } else {
-        console.warn('No se pudo enviar Aviso de Privacidad al doctor: email no encontrado');
-      }
-    } catch (consentError) {
-      console.error('Error generando consentimientos o enviando emails:', consentError);
-      // No fallar el registro si falla la generación de PDFs o envío de emails
-    }
-
-    // Marcar la invitación como completada
-    console.log('Marcando invitación como completada...');
-    await prisma.patientInvitation.update({
-      where: { id: validInvitation.id },
-      data: { 
-        status: 'COMPLETED',
-        completedAt: new Date()
-      }
-    });
-    console.log('Invitación marcada como completada');
-
-    console.log(`Paciente registrado desde frontend: ${user.id} para doctor ${doctorId} con consentimientos legales`);
-    console.log('=== REGISTRO COMPLETADO EXITOSAMENTE ===');
-
-    // Enviar correo de bienvenida
-    try {
-      await NotificationService.sendWelcomeEmail(user.email, user.firstName, user.lastName, 'PATIENT');
-    } catch (emailError) {
-      console.error('Error enviando correo de bienvenida:', emailError);
-      // No fallar el registro si el correo falla
-    }
-
-    res.status(201).json({
-      message: 'Paciente registrado exitosamente',
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role
-      }
-    });
-
-  } catch (error) {
-    console.error('=== ERROR EN REGISTRO PACIENTE FRONTEND ===');
-    console.error('Tipo de error:', typeof error);
-    if (error instanceof Error) {
-      console.error('Mensaje de error:', error.message);
-      console.error('Stack trace:', error.stack);
-    }
-    console.error('Error completo:', error);
-    res.status(500).json({ message: 'Error interno del servidor' });
-  }
-};
-
 // Obtener datos completos del paciente para doctores/asistentes
 export const getPatientCompleteData = async (req: Request, res: Response) => {
   try {
@@ -973,6 +930,8 @@ export const getPatientCompleteData = async (req: Request, res: Response) => {
       taxName: patient.taxName,
       taxId: patient.taxId,
       taxAddress: patient.taxAddress,
+      taxPostalCode: patient.taxPostalCode,
+      taxRegime: patient.taxRegime,
       taxCertificateUrl: patient.taxCertificateUrl,
       // Doctores vinculados
       doctors: patient.doctors.map(dv => ({
@@ -1118,5 +1077,157 @@ export const deactivatePatientInsurancePolicy = async (req: Request, res: Respon
   } catch (error) {
     console.error('Error desactivando póliza de seguro:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
+  }
+};
+
+const myRecipeInclude = {
+  detalleMedicamentos: true,
+  estudiosSolicitados: true,
+  doctor: {
+    select: {
+      id: true,
+      professionalTitle: true,
+      user: {
+        select: {
+          firstName: true,
+          lastName: true,
+        },
+      },
+    },
+  },
+  consulta: {
+    select: {
+      id: true,
+      createdAt: true,
+      clinicalCase: {
+        select: {
+          padecimiento: true,
+        },
+      },
+    },
+  },
+} as const;
+
+async function getAuthenticatedPatientProfile(req: AuthRequest) {
+  if (!req.user || req.user.role !== 'PATIENT') {
+    return null;
+  }
+  return prisma.patient.findUnique({ where: { userId: req.user.userId } });
+}
+
+// =================================================================
+// RECETAS DEL PACIENTE (solo lectura, solo las propias)
+// =================================================================
+export const getMyRecipes = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user || req.user.role !== 'PATIENT') {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Solo para pacientes.' });
+    }
+
+    const patient = await getAuthenticatedPatientProfile(req);
+    if (!patient) {
+      return res.status(404).json({ success: false, message: 'Perfil de paciente no encontrado' });
+    }
+
+    const { limit = 100, offset = 0 } = req.query;
+
+    const recetas = await prisma.recetaMedica.findMany({
+      where: { pacienteId: patient.id },
+      include: myRecipeInclude,
+      orderBy: { fechaEmision: 'desc' },
+      take: Number(limit),
+      skip: Number(offset),
+    });
+
+    const total = await prisma.recetaMedica.count({
+      where: { pacienteId: patient.id },
+    });
+
+    res.json({
+      success: true,
+      data: recetas.map((r) => ({
+        ...r,
+        padecimiento: r.consulta?.clinicalCase?.padecimiento || '',
+      })),
+      pagination: { total, limit: Number(limit), offset: Number(offset) },
+    });
+  } catch (error) {
+    console.error('Error al obtener recetas del paciente autenticado:', error);
+    res.status(500).json({ success: false, message: 'Error al obtener recetas' });
+  }
+};
+
+export const getMyRecipeById = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user || req.user.role !== 'PATIENT') {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Solo para pacientes.' });
+    }
+
+    const patient = await getAuthenticatedPatientProfile(req);
+    if (!patient) {
+      return res.status(404).json({ success: false, message: 'Perfil de paciente no encontrado' });
+    }
+
+    const receta = await prisma.recetaMedica.findFirst({
+      where: { id: req.params.id, pacienteId: patient.id },
+      include: myRecipeInclude,
+    });
+
+    if (!receta) {
+      return res.status(404).json({ success: false, message: 'Receta no encontrada' });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...receta,
+        padecimiento: receta.consulta?.clinicalCase?.padecimiento || '',
+      },
+    });
+  } catch (error) {
+    console.error('Error al obtener receta del paciente:', error);
+    res.status(500).json({ success: false, message: 'Error al obtener receta' });
+  }
+};
+
+export const getMyRecipePdfViewUrl = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user || req.user.role !== 'PATIENT') {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Solo para pacientes.' });
+    }
+
+    const patient = await getAuthenticatedPatientProfile(req);
+    if (!patient) {
+      return res.status(404).json({ success: false, message: 'Perfil de paciente no encontrado' });
+    }
+
+    const receta = await prisma.recetaMedica.findFirst({
+      where: { id: req.params.id, pacienteId: patient.id },
+      select: {
+        id: true,
+        archivoPdf: true,
+        doctorId: true,
+        pacienteId: true,
+        fechaEmision: true,
+      },
+    });
+
+    if (!receta || !receta.archivoPdf) {
+      return res.status(404).json({ success: false, message: 'Receta no encontrada' });
+    }
+
+    const emissionDate = receta.fechaEmision || new Date('2025-08-11');
+    const viewUrl = RecipePdfService.buildPdfViewUrl(receta.id, receta.doctorId, emissionDate);
+
+    res.json({
+      success: true,
+      data: {
+        viewUrl,
+        expiresIn: 'permanente (enlace con verificación segura)',
+      },
+    });
+  } catch (error) {
+    securityLogger.error('Error al generar URL de receta para paciente:', error);
+    res.status(500).json({ success: false, message: 'Error al abrir la receta' });
   }
 };

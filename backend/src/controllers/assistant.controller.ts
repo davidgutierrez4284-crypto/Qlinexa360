@@ -8,6 +8,26 @@ import { NotificationService } from '../services/notification.service';
 
 const prisma = new PrismaClient();
 
+function assistantErrorResponse(
+  res: Response,
+  error: unknown,
+  logLabel: string,
+  fallbackMessage: string,
+) {
+  console.error(logLabel, error);
+  if (error instanceof AppError) {
+    return res.status(error.statusCode).json({ message: error.message });
+  }
+  const prismaCode = error && typeof error === 'object' && 'code' in error ? (error as { code: string }).code : '';
+  if (prismaCode === 'P1001') {
+    return res.status(503).json({
+      message:
+        'No hay conexión con la base de datos. Comprueba que PostgreSQL esté en marcha y que DATABASE_URL apunte al puerto correcto.',
+    });
+  }
+  return res.status(500).json({ message: fallbackMessage });
+}
+
 export class AssistantController {
   // Buscar asistentes por nombre o correo
   static async searchAssistants(req: AuthRequest, res: Response) {
@@ -112,8 +132,7 @@ export class AssistantController {
 
       res.json(formattedAssistants);
     } catch (error) {
-      console.error('Error obteniendo asistentes vinculados:', error);
-      throw new AppError('Error al obtener asistentes vinculados', 500);
+      assistantErrorResponse(res, error, 'Error obteniendo asistentes vinculados:', 'Error al obtener asistentes vinculados');
     }
   }
 
@@ -226,11 +245,7 @@ export class AssistantController {
         link
       });
     } catch (error) {
-      console.error('Error vinculando asistente:', error);
-      if (error instanceof AppError) {
-        throw error;
-      }
-      throw new AppError('Error al vincular asistente', 500);
+      assistantErrorResponse(res, error, 'Error vinculando asistente:', 'Error al vincular asistente');
     }
   }
 
@@ -293,8 +308,7 @@ export class AssistantController {
 
       res.json({ message: 'Acceso del asistente revocado correctamente' });
     } catch (error) {
-      console.error('Error revocando acceso del asistente:', error);
-      throw new AppError('Error al revocar acceso del asistente', 500);
+      assistantErrorResponse(res, error, 'Error revocando acceso del asistente:', 'Error al revocar acceso del asistente');
     }
   }
 
@@ -348,8 +362,7 @@ export class AssistantController {
 
       res.json({ hasPermission });
     } catch (error) {
-      console.error('Error verificando permisos del asistente:', error);
-      throw new AppError('Error al verificar permisos del asistente', 500);
+      assistantErrorResponse(res, error, 'Error verificando permisos del asistente:', 'Error al verificar permisos del asistente');
     }
   }
 
@@ -399,8 +412,12 @@ export class AssistantController {
         assignmentDate: link.fechaAsignacion
       });
     } catch (error) {
-      console.error('Error obteniendo información del asistente:', error);
-      throw new AppError('Error al obtener información del asistente', 500);
+      assistantErrorResponse(
+        res,
+        error,
+        'Error obteniendo información del asistente:',
+        'Error al obtener información del asistente',
+      );
     }
   }
 

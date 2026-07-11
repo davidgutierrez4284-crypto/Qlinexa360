@@ -1,5 +1,86 @@
 # Despliegue Backend y Base de Datos a PROD
 
+## Regla de oro (OBLIGATORIA — todos los deploys PROD)
+
+**PROD contiene usuarios reales, pacientes y datos clínicos. Nunca se borran ni se reinician.**
+
+| Permitido | Prohibido (nunca en PROD) |
+|-----------|---------------------------|
+| `npx prisma migrate deploy` | `prisma migrate reset` |
+| Despliegue ECS rolling (`force-new-deployment`) | `prisma db push --force-reset` |
+| Seed **solo catálogo** Smart Lab (upsert, ver abajo) | `npm run db:seed` completo |
+| Build + push ECR + S3 sync **sin** `--delete` | `npm run db:seed:forms` / endpoint `seed-form-templates` |
+| | `npm run seed:referral-demo`, `seed-test-users.js`, `migrate:dev-to-prod` sin revisión |
+
+### Comandos seguros (copiar/pegar)
+
+**Despliegue completo recomendado** (migraciones vía arranque ECS, sin seeds):
+
+```powershell
+cd e:\proyectos\medilink360
+.\scripts\deploy-prod.ps1 -Force
+```
+
+**Migraciones manuales** (solo si tu PC alcanza RDS por VPN/bastión):
+
+```powershell
+cd e:\proyectos\medilink360\backend
+$env:DATABASE_URL = (aws secretsmanager get-secret-value --secret-id qlinexa360-prod-database-url --region us-east-2 --query SecretString --output text)
+npx prisma migrate deploy
+Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+```
+
+**Catálogo Smart Lab en PROD** (upsert de analitos; no toca usuarios ni formularios):
+
+```powershell
+cd e:\proyectos\medilink360\backend
+$env:DATABASE_URL = (aws secretsmanager get-secret-value --secret-id qlinexa360-prod-database-url --region us-east-2 --query SecretString --output text)
+npx ts-node -e "const { PrismaClient } = require('@prisma/client'); const { seedLabAnalyteCatalog } = require('./prisma/seeds/labAnalyteCatalog.seed'); const p = new PrismaClient(); seedLabAnalyteCatalog(p).finally(() => p.$disconnect());"
+Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+```
+
+**Verificación post-deploy:**
+
+```powershell
+Invoke-RestMethod -Uri "https://api.qlinexa360.com/health"
+```
+
+### Pre-vuelo obligatorio antes de Smart Lab
+
+1. Revisar que **no existan migraciones duplicadas** en `backend/prisma/migrations` (ver auditoría Smart Lab más abajo).
+2. `npm run build` en backend y frontend sin errores.
+3. Tests Smart Lab: `npm test -- --testPathPattern=smartLab` (opcional pero recomendado).
+4. **No** ejecutar seeds destructivos documentados en la sección de auditoría.
+
+---
+
+## Auditoría Smart Lab — migraciones (solo incrementales)
+
+| Migración | Operaciones | ¿Segura en PROD? |
+|-----------|-------------|------------------|
+| `20260708120000_add_smart_lab` | `CREATE TYPE` (5 enums), `CREATE TABLE` (LabReport, LabResult, LabAnalyteCatalog, LabAlert, LabHealthDashboardScore, LabAuditLog), índices, `ALTER TABLE … ADD CONSTRAINT` (FK a Patient/Doctor/users) | ✅ Aditiva — tablas nuevas, sin DROP/TRUNCATE |
+| `20260708200000_add_smart_lab` | **Duplicado** del anterior (mismos CREATE TYPE/TABLE) | ⚠️ **BLOQUEANTE** — fallará si la anterior ya se aplicó. Eliminar o vaciar esta carpeta antes del deploy |
+| `20260709160000_smart_lab_pipeline` | `ALTER TABLE … ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS` | ✅ Aditiva e idempotente |
+
+**Resumen SQL por migración:**
+
+- **20260708120000**: enums `LabReportStatus`, `LabAbnormalFlag`, `LabAlertType`, `LabSeverity`, `LabAuditAction` + 6 tablas nuevas + FKs con `ON DELETE RESTRICT`/`SET NULL` (no borra filas existentes).
+- **20260708200000**: repetición del mismo esquema — **no ejecutar en PROD** hasta resolver duplicado.
+- **20260709160000**: columnas `classifiedVendor`, `parserUsed`, `extractionTraceJson` en LabReport; `validationErrorsJson` en LabResult; `loincCode`, `allowedUnitsJson` en LabAnalyteCatalog.
+
+### Auditoría Smart Lab — seed
+
+| Script | Comportamiento | ¿Usar en PROD? |
+|--------|----------------|----------------|
+| `prisma/seeds/labAnalyteCatalog.seed.ts` | Upsert por `(category, name)`: update si existe, create si no | ✅ **Sí** — comando seguro arriba |
+| `prisma/seed.ts` | Sin deletes; crea usuarios de prueba solo si no existen; plantillas create-if-not-exists | ⚠️ Evitar — puede crear `doctor@test.com` |
+| `scripts/seed-form-templates-only.js` | `deleteMany` en FormTemplate y TemplateField | ❌ **No** — borra plantillas de especialidad |
+| `scripts/seed-test-users.js`, `seed-referral-history-demo.js`, `seed-affiliate-*.ts` | Borran usuarios/datos de demo | ❌ **No** — solo DEV |
+
+`DoctorFormTemplate` (formularios personalizados por doctor) **no se toca** en ningún seed de Smart Lab.
+
+---
+
 ## Orden de ejecución
 
 1. Corregir credenciales de BD (si hay error de autenticación)
@@ -119,6 +200,8 @@ Edita `scripts/migrate-dev-to-prod.ts` para añadir más usuarios.
 ---
 
 ## Cargar plantillas de formularios especiales (Nueva Consulta)
+
+> ⚠️ **DESTRUCTIVO:** `npm run db:seed:forms` y el endpoint `seed-form-templates` **eliminan todas** las `FormTemplate` y `TemplateField` existentes antes de recrearlas. **No ejecutar en PROD** si ya hay plantillas configuradas, salvo ventana acordada con backup. No afecta `DoctorFormTemplate`.
 
 Si en "Nueva Consulta" → "Formulario por Especialidad" aparece "No hay plantillas disponibles", hay que ejecutar el seed en la BD de producción.
 

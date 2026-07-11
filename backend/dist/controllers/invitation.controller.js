@@ -1,12 +1,14 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.resendPatientInvitation = exports.getDoctorInvitations = exports.completePatientRegistration = exports.validateInvitationToken = exports.createPatientInvitation = void 0;
-const client_1 = require("@prisma/client");
 const crypto_1 = require("crypto");
+const database_1 = __importDefault(require("../config/database"));
 const error_utils_1 = require("../utils/error.utils");
 const logger_utils_1 = require("../utils/logger.utils");
 const notification_service_1 = require("../services/notification.service");
-const prisma = new client_1.PrismaClient();
 // Generar token único para invitación
 const generateInvitationToken = () => {
     return (0, crypto_1.randomBytes)(32).toString('hex');
@@ -21,7 +23,7 @@ const createPatientInvitation = async (req, res) => {
             throw new error_utils_1.AppError('Autenticación requerida.', 401);
         }
         // Verificar que el doctor existe y está activo
-        const doctor = await prisma.doctor.findFirst({
+        const doctor = await database_1.default.doctor.findFirst({
             where: {
                 userId: doctorUserId,
                 id: doctorId
@@ -39,7 +41,7 @@ const createPatientInvitation = async (req, res) => {
             throw new error_utils_1.AppError('Doctor no encontrado o no autorizado.', 404);
         }
         // Verificar si el paciente ya existe
-        const existingPatient = await prisma.user.findUnique({
+        const existingPatient = await database_1.default.user.findUnique({
             where: { email },
             include: { patientProfile: true }
         });
@@ -48,7 +50,7 @@ const createPatientInvitation = async (req, res) => {
         }
         // Crear invitación
         const invitationToken = generateInvitationToken();
-        const invitation = await prisma.patientInvitation.create({
+        const invitation = await database_1.default.patientInvitation.create({
             data: {
                 token: invitationToken,
                 email,
@@ -87,7 +89,7 @@ exports.createPatientInvitation = createPatientInvitation;
 const validateInvitationToken = async (req, res) => {
     try {
         const { token } = req.params;
-        const invitation = await prisma.patientInvitation.findFirst({
+        const invitation = await database_1.default.patientInvitation.findFirst({
             where: {
                 token,
                 status: 'PENDING',
@@ -132,7 +134,7 @@ const completePatientRegistration = async (req, res) => {
     try {
         const { token, password, additionalData } = req.body;
         // Validar token
-        const invitation = await prisma.patientInvitation.findFirst({
+        const invitation = await database_1.default.patientInvitation.findFirst({
             where: {
                 token,
                 status: 'PENDING',
@@ -146,7 +148,7 @@ const completePatientRegistration = async (req, res) => {
             throw new error_utils_1.AppError('Invitación no válida o expirada.', 400);
         }
         // Verificar que el email no esté en uso
-        const existingUser = await prisma.user.findUnique({
+        const existingUser = await database_1.default.user.findUnique({
             where: { email: invitation.email }
         });
         if (existingUser) {
@@ -155,7 +157,7 @@ const completePatientRegistration = async (req, res) => {
         // Crear usuario y perfil de paciente
         const bcrypt = require('bcryptjs');
         const hashedPassword = await bcrypt.hash(password, 10);
-        const user = await prisma.user.create({
+        const user = await database_1.default.user.create({
             data: {
                 email: invitation.email,
                 password: hashedPassword,
@@ -165,11 +167,11 @@ const completePatientRegistration = async (req, res) => {
                 role: 'PATIENT'
             }
         });
-        const patient = await prisma.patient.create({
+        const patient = await database_1.default.patient.create({
             data: Object.assign(Object.assign(Object.assign({ userId: user.id, firstName: invitation.firstName, lastName: invitation.lastName, email: invitation.email, phone: invitation.phone, dateOfBirth: (additionalData === null || additionalData === void 0 ? void 0 : additionalData.birthDate) ? new Date(additionalData.birthDate) : new Date(), gender: (additionalData === null || additionalData === void 0 ? void 0 : additionalData.gender) || 'OTHER', dataConsent: true, dataConsentAt: new Date() }, ((additionalData === null || additionalData === void 0 ? void 0 : additionalData.bloodType) && { bloodType: additionalData.bloodType })), ((additionalData === null || additionalData === void 0 ? void 0 : additionalData.allergies) && { allergies: additionalData.allergies })), ((additionalData === null || additionalData === void 0 ? void 0 : additionalData.chronicDiseases) && { chronicDiseases: additionalData.chronicDiseases }))
         });
         // Crear relación doctor-paciente
-        await prisma.doctorPatient.create({
+        await database_1.default.doctorPatient.create({
             data: {
                 doctorId: invitation.doctorId,
                 patientId: patient.id,
@@ -179,7 +181,7 @@ const completePatientRegistration = async (req, res) => {
             }
         });
         // Marcar invitación como completada
-        await prisma.patientInvitation.update({
+        await database_1.default.patientInvitation.update({
             where: { id: invitation.id },
             data: {
                 status: 'COMPLETED',
@@ -207,13 +209,13 @@ const getDoctorInvitations = async (req, res) => {
         if (!doctorUserId) {
             throw new error_utils_1.AppError('Autenticación requerida.', 401);
         }
-        const doctor = await prisma.doctor.findUnique({
+        const doctor = await database_1.default.doctor.findUnique({
             where: { userId: doctorUserId }
         });
         if (!doctor) {
             throw new error_utils_1.AppError('Doctor no encontrado.', 404);
         }
-        const invitations = await prisma.patientInvitation.findMany({
+        const invitations = await database_1.default.patientInvitation.findMany({
             where: { doctorId: doctor.id },
             orderBy: { createdAt: 'desc' },
             include: {
@@ -248,7 +250,7 @@ const resendPatientInvitation = async (req, res) => {
             throw new error_utils_1.AppError('Autenticación requerida.', 401);
         }
         // Verificar que el doctor existe
-        const doctor = await prisma.doctor.findFirst({
+        const doctor = await database_1.default.doctor.findFirst({
             where: { userId: doctorUserId },
             include: {
                 user: {
@@ -263,7 +265,7 @@ const resendPatientInvitation = async (req, res) => {
             throw new error_utils_1.AppError('Doctor no encontrado.', 404);
         }
         // Verificar si ya existe una invitación válida para este email y doctor
-        const existingInvitation = await prisma.patientInvitation.findFirst({
+        const existingInvitation = await database_1.default.patientInvitation.findFirst({
             where: {
                 email: email.toLowerCase(),
                 doctorId: doctor.id,
@@ -275,7 +277,7 @@ const resendPatientInvitation = async (req, res) => {
             throw new error_utils_1.AppError('Ya existe una invitación válida para este email.', 400);
         }
         // Verificar si el paciente ya existe
-        const existingPatient = await prisma.user.findUnique({
+        const existingPatient = await database_1.default.user.findUnique({
             where: { email: email.toLowerCase() },
             include: { patientProfile: true }
         });
@@ -284,7 +286,7 @@ const resendPatientInvitation = async (req, res) => {
         }
         // Crear nueva invitación
         const invitationToken = generateInvitationToken();
-        const invitation = await prisma.patientInvitation.create({
+        const invitation = await database_1.default.patientInvitation.create({
             data: {
                 token: invitationToken,
                 email: email.toLowerCase(),

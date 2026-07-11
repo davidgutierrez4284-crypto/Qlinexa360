@@ -4,7 +4,14 @@ import { securityLogger } from '../utils/logger.utils';
 import { RecipePdfService } from '../services/recipePdf.service';
 import { NotificationService } from '../services/notification.service';
 import { AuthRequest } from '../middlewares/auth.middleware';
-import { fetchBufferFromUrl } from '../utils/file.utils';
+import { fetchBufferFromUrl, getS3SignedUrlIfExists } from '../utils/file.utils';
+import {
+  fromAddresses,
+  getLastSmtpError,
+  isSmtpConfigured,
+  sendEmailHtml,
+  verifySmtpConnection,
+} from '../utils/email.utils';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -382,9 +389,11 @@ export class RecipeController {
            
            // Construir URL de visualización
            const emissionDate = recetaCompleta.fechaEmision || new Date();
-           const hash = RecipePdfService.generateProductionHash(recetaCompleta.id, doctorId, emissionDate);
-           const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-           const viewUrl = `${baseUrl}/api/recipes/${recetaCompleta.id}/pdf-view?temp=${hash}&t=${Date.now()}`;
+           const viewUrl = RecipePdfService.buildPdfViewUrl(
+             recetaCompleta.id,
+             doctorId,
+             emissionDate
+           );
 
            // Enviar correo automáticamente
            const emailSent = await svc.sendRecipeToPatientEmail({
@@ -662,6 +671,62 @@ export class RecipeController {
   }
 
   /**
+   * Probar configuración SMTP (conexión + envío real al correo del usuario autenticado).
+   */
+  static async testSmtpConnection(req: AuthRequest, res: Response) {
+    try {
+      if (!req.user?.userId) {
+        return res.status(401).json({ success: false, message: 'No autenticado' });
+      }
+
+      if (!isSmtpConfigured()) {
+        return res.status(503).json({
+          success: false,
+          message: 'SMTP no configurado en el servidor (SMTP_HOST, SMTP_USER o SMTP_PASS)',
+        });
+      }
+
+      const verify = await verifySmtpConnection();
+      if (!verify.ok) {
+        return res.status(500).json({ success: false, message: verify.message, stage: 'verify' });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: req.user.userId },
+        select: { email: true },
+      });
+      if (!user?.email) {
+        return res.status(400).json({ success: false, message: 'No se encontró correo del usuario' });
+      }
+
+      const sent = await sendEmailHtml(
+        user.email,
+        'Prueba SMTP - Qlinexa360',
+        '<p>Si recibes este correo, el envío SMTP del servidor funciona correctamente.</p>',
+        fromAddresses.noReply
+      );
+
+      if (!sent) {
+        const detail = getLastSmtpError() || 'Error desconocido al enviar';
+        securityLogger.error('SMTP test send failed:', detail);
+        return res.status(500).json({
+          success: false,
+          message: `Conexión SMTP OK, pero falló el envío de prueba: ${detail}`,
+          stage: 'send',
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: `Correo de prueba enviado a ${user.email}. Si el envío a pacientes falla, puede ser bloqueo Zoho (550 5.4.6) al enviar a correos externos.`,
+      });
+    } catch (error) {
+      securityLogger.error('Error en test SMTP:', error);
+      return res.status(500).json({ success: false, message: 'Error interno al probar SMTP' });
+    }
+  }
+
+  /**
    * Enviar receta por email al paciente
    */
   static async emailRecipeToPatient(req: AuthRequest, res: Response) {
@@ -712,9 +777,7 @@ export class RecipeController {
         });
         if (tmpRes) {
           const emissionDate = tmpRes.fechaEmision || new Date('2025-08-11');
-          const hash = RecipePdfService.generateProductionHash(tmpRes.id, tmpRes.doctorId, emissionDate);
-          const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-          viewUrl = `${baseUrl}/api/recipes/${id}/pdf-view?temp=${hash}&t=${Date.now()}`;
+          viewUrl = RecipePdfService.buildPdfViewUrl(tmpRes.id, tmpRes.doctorId, emissionDate);
 
           // Enviar correo con enlace (sin adjunto)
           const svc = NotificationService.getInstance();
@@ -725,7 +788,11 @@ export class RecipeController {
             recipeId: recipe.id,
             viewUrl
           });
-          if (!sent) return res.status(500).json({ success: false, message: 'No se pudo enviar el correo' });
+          if (!sent) {
+            const detail = getLastSmtpError() || 'No se pudo enviar el correo';
+            securityLogger.error('Fallo SMTP al enviar receta:', detail);
+            return res.status(500).json({ success: false, message: detail });
+          }
           return res.json({ success: true, message: 'Receta enviada al paciente por correo' });
         }
       } catch (error) {
@@ -867,19 +934,14 @@ export class RecipeController {
 
       // Solución temporal: generar un hash simple en lugar de JWT
       const crypto = require('crypto');
-      const timestamp = Date.now();
       const emissionDate = receta.fechaEmision || new Date('2025-08-11');
-      const hash = RecipePdfService.generateProductionHash(receta.id, receta.doctorId, emissionDate);
-      
-      // Construir la URL de visualización
-      const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-      const viewUrl = `${baseUrl}/api/recipes/${id}/pdf-view?temp=${hash}&t=${timestamp}`;
+      const viewUrl = RecipePdfService.buildPdfViewUrl(receta.id, receta.doctorId, emissionDate);
 
       res.status(200).json({
         success: true,
         data: {
           viewUrl,
-          expiresIn: '7 días'
+          expiresIn: 'permanente (enlace con verificación segura)'
         }
       });
 
@@ -901,27 +963,17 @@ export class RecipeController {
   static async serveRecipePdf(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { temp, t } = req.query;
+      const { temp } = req.query;
       console.log('Serving PDF for recipe ID:', id);
 
-      // Verificar token temporal (hash+timestamp) - no requiere login de usuario
-      if (!temp || !t || typeof temp !== 'string' || typeof t !== 'string') {
+      if (!temp || typeof temp !== 'string') {
         return res.status(401).json({
           success: false,
           message: 'Token de visualización requerido.'
         });
       }
 
-      // Verificar que el timestamp no sea muy antiguo (7 días - el paciente puede abrir el link días después)
-      const timestamp = parseInt(t);
-      const now = Date.now();
-      const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 días
-      if (isNaN(timestamp) || now - timestamp > MAX_AGE_MS) {
-        return res.status(401).json({
-          success: false,
-          message: 'Token de visualización expirado.'
-        });
-      }
+      // El parámetro t (timestamp) en enlaces antiguos ya no caduca: la seguridad es el hash temp.
 
       // Obtener la receta para verificar que existe
       const receta = await prisma.recetaMedica.findUnique({
@@ -948,8 +1000,18 @@ export class RecipeController {
         });
       }
 
-      // Si el PDF está en S3: servir a través del backend (evita CORS y maneja NoSuchKey)
+      // Si el PDF está en S3: redirigir a URL firmada (rápido, evita 504 por proxy + buffer grande y reduce carga en ECS).
+      // El enlace del correo abre esta ruta; el navegador sigue el 302 y descarga el PDF directamente desde S3.
       if (receta.archivoPdf.startsWith('http')) {
+        try {
+          const maxPresign = 7 * 24 * 60 * 60; // 604800 s — máximo típico SigV4; alineado con validez del token temp (~7 días)
+          const signed = await getS3SignedUrlIfExists(receta.archivoPdf, maxPresign);
+          if (signed) {
+            return res.redirect(302, signed);
+          }
+        } catch (signErr) {
+          console.error('Error generando URL firmada para PDF de receta:', signErr);
+        }
         try {
           const { buffer } = await fetchBufferFromUrl(receta.archivoPdf);
           res.setHeader('Content-Type', 'application/pdf');
@@ -1307,8 +1369,7 @@ export class RecipeController {
       // Si es petición del navegador (no AJAX) y hay PDF: redirigir a la vista digital de la receta
       const isBrowserRequest = !req.headers.accept || !req.headers.accept.includes('application/json');
       if (isBrowserRequest && receta.archivoPdf) {
-        const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-        const pdfViewUrl = `${baseUrl}/api/recipes/${id}/pdf-view?temp=${hash}&t=${Date.now()}`;
+        const pdfViewUrl = RecipePdfService.buildPdfViewUrl(receta.id, receta.doctorId, emissionDate);
         return res.redirect(302, pdfViewUrl);
       }
 

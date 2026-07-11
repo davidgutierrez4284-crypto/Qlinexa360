@@ -10,6 +10,19 @@ const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const logger_utils_1 = require("../utils/logger.utils");
 const notification_service_1 = require("../services/notification.service");
 const prisma = new client_1.PrismaClient();
+function assistantErrorResponse(res, error, logLabel, fallbackMessage) {
+    console.error(logLabel, error);
+    if (error instanceof error_utils_1.AppError) {
+        return res.status(error.statusCode).json({ message: error.message });
+    }
+    const prismaCode = error && typeof error === 'object' && 'code' in error ? error.code : '';
+    if (prismaCode === 'P1001') {
+        return res.status(503).json({
+            message: 'No hay conexión con la base de datos. Comprueba que PostgreSQL esté en marcha y que DATABASE_URL apunte al puerto correcto.',
+        });
+    }
+    return res.status(500).json({ message: fallbackMessage });
+}
 class AssistantController {
     // Buscar asistentes por nombre o correo
     static async searchAssistants(req, res) {
@@ -106,8 +119,7 @@ class AssistantController {
             res.json(formattedAssistants);
         }
         catch (error) {
-            console.error('Error obteniendo asistentes vinculados:', error);
-            throw new error_utils_1.AppError('Error al obtener asistentes vinculados', 500);
+            assistantErrorResponse(res, error, 'Error obteniendo asistentes vinculados:', 'Error al obtener asistentes vinculados');
         }
     }
     // Vincular asistente al doctor
@@ -216,11 +228,7 @@ class AssistantController {
             });
         }
         catch (error) {
-            console.error('Error vinculando asistente:', error);
-            if (error instanceof error_utils_1.AppError) {
-                throw error;
-            }
-            throw new error_utils_1.AppError('Error al vincular asistente', 500);
+            assistantErrorResponse(res, error, 'Error vinculando asistente:', 'Error al vincular asistente');
         }
     }
     // Revocar acceso del asistente
@@ -276,8 +284,7 @@ class AssistantController {
             res.json({ message: 'Acceso del asistente revocado correctamente' });
         }
         catch (error) {
-            console.error('Error revocando acceso del asistente:', error);
-            throw new error_utils_1.AppError('Error al revocar acceso del asistente', 500);
+            assistantErrorResponse(res, error, 'Error revocando acceso del asistente:', 'Error al revocar acceso del asistente');
         }
     }
     // Verificar permisos del asistente para un módulo específico
@@ -326,8 +333,7 @@ class AssistantController {
             res.json({ hasPermission });
         }
         catch (error) {
-            console.error('Error verificando permisos del asistente:', error);
-            throw new error_utils_1.AppError('Error al verificar permisos del asistente', 500);
+            assistantErrorResponse(res, error, 'Error verificando permisos del asistente:', 'Error al verificar permisos del asistente');
         }
     }
     // Obtener información del asistente vinculado
@@ -374,8 +380,7 @@ class AssistantController {
             });
         }
         catch (error) {
-            console.error('Error obteniendo información del asistente:', error);
-            throw new error_utils_1.AppError('Error al obtener información del asistente', 500);
+            assistantErrorResponse(res, error, 'Error obteniendo información del asistente:', 'Error al obtener información del asistente');
         }
     }
     // Obtener doctores vinculados al asistente (para que el asistente vea sus doctores)

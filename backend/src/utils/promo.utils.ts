@@ -1,13 +1,24 @@
 import prisma from '../config/database';
 import { AppError } from './error.utils';
 
-export const normalizePromoCode = (code: string) => code.trim().toUpperCase();
+export const normalizePromoCode = (code: string) =>
+  code.trim().toUpperCase().replace(/\s+/g, '');
 
 export const getPromoCodeOrThrow = async (rawCode: string) => {
   const code = normalizePromoCode(rawCode);
+  if (!code) {
+    throw new AppError('Código promocional requerido', 400);
+  }
+
   const promo = await prisma.promoCode.findUnique({ where: { code } });
-  if (!promo || !promo.isActive) {
-    throw new AppError('Código promocional inválido', 400);
+  if (!promo) {
+    throw new AppError(
+      'Código promocional no registrado en el sistema. Verifica que esté escrito exactamente como te lo entregaron (ej. QLX-3M-XXXX).',
+      400
+    );
+  }
+  if (!promo.isActive) {
+    throw new AppError('Código promocional desactivado', 400);
   }
 
   const now = new Date();

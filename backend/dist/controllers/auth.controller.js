@@ -10,14 +10,87 @@ const jwt_utils_1 = require("../utils/jwt.utils");
 const env_1 = require("../config/env");
 const validation_utils_1 = require("../utils/validation.utils");
 const error_utils_1 = require("../utils/error.utils");
+const patientPortal_utils_1 = require("../utils/patientPortal.utils");
 const notification_service_1 = require("../services/notification.service");
 const consentPdf_service_1 = require("../services/consentPdf.service");
 const file_utils_1 = require("../utils/file.utils");
 const promo_utils_1 = require("../utils/promo.utils");
+const referral_utils_1 = require("../utils/referral.utils");
+const referralRegistration_utils_1 = require("../utils/referralRegistration.utils");
+const referral_service_1 = require("../services/referral.service");
+const affiliate_constants_1 = require("../constants/affiliate.constants");
 const speakeasy_1 = __importDefault(require("speakeasy"));
 const qrcode_1 = __importDefault(require("qrcode"));
 const crypto_1 = __importDefault(require("crypto"));
+const securityLoginAudit_service_1 = require("../services/securityLoginAudit.service");
 const TWO_FACTOR_TOKEN_EXPIRY = '10m';
+const MAX_PROFILE_PHOTO_BYTES = 5 * 1024 * 1024;
+/** Data URL desde el registro (jpg/png/webp). null si no hay foto o formato inválido. */
+function parseDoctorRegistrationProfilePictureDataUrl(raw) {
+    if (raw == null || typeof raw !== 'string')
+        return null;
+    const s = raw.trim();
+    if (!s)
+        return null;
+    const m = /^data:image\/(jpeg|jpg|png|webp);base64,([\s\S]+)$/i.exec(s);
+    if (!m)
+        return null;
+    const kind = m[1].toLowerCase();
+    const mimetype = kind === 'png' ? 'image/png' : kind === 'webp' ? 'image/webp' : 'image/jpeg';
+    const ext = kind === 'png' ? 'png' : kind === 'webp' ? 'webp' : 'jpg';
+    let buffer;
+    try {
+        buffer = Buffer.from(m[2].replace(/\s/g, ''), 'base64');
+    }
+    catch (_a) {
+        return null;
+    }
+    if (!buffer.length)
+        return null;
+    if (buffer.length > MAX_PROFILE_PHOTO_BYTES) {
+        throw new error_utils_1.AppError('La foto de perfil supera 5MB', 400);
+    }
+    return { buffer, mimetype, ext };
+}
+async function uploadDoctorRegistrationProfilePicture(userId, raw) {
+    try {
+        const parsed = parseDoctorRegistrationProfilePictureDataUrl(raw);
+        if (!parsed)
+            return null;
+        const { buffer, mimetype, ext } = parsed;
+        const fakeFile = {
+            fieldname: 'profilePicture',
+            originalname: `profile.${ext}`,
+            encoding: '7bit',
+            mimetype,
+            buffer,
+            size: buffer.length,
+            destination: '',
+            filename: '',
+            path: '',
+            stream: null,
+        };
+        const { url } = await (0, file_utils_1.uploadToS3)(fakeFile, 'doctor-profile-photos', userId);
+        return url;
+    }
+    catch (e) {
+        if (e instanceof error_utils_1.AppError)
+            throw e;
+        console.error('Registro doctor: no se pudo subir la foto de perfil a S3:', e);
+        return null;
+    }
+}
+function clientIp(req) {
+    var _a;
+    const x = req.headers['x-forwarded-for'];
+    if (typeof x === 'string')
+        return (_a = x.split(',')[0]) === null || _a === void 0 ? void 0 : _a.trim();
+    return req.socket.remoteAddress || undefined;
+}
+function clientUa(req) {
+    const ua = req.headers['user-agent'];
+    return typeof ua === 'string' ? ua : undefined;
+}
 const TWO_FACTOR_RECOVERY_EXPIRY_MS = 10 * 60 * 1000;
 const buildAuthResponse = async (user) => {
     let doctorId = null;
@@ -54,6 +127,24 @@ const buildAuthResponse = async (user) => {
     else if (user.role === 'ASISTENTE' || user.role === 'ADMIN') {
         profilePictureUrl = user.profilePictureUrl || null;
     }
+    // Capacidad "afiliado": cualquier usuario (paciente/doctor/etc.) puede además tener
+    // un perfil de afiliado. No depende del rol, sino de la existencia del perfil.
+    let affiliateProfileId = null;
+    try {
+        const affiliateProfile = await database_1.default.affiliateProfile.findUnique({
+            where: { userId: user.id },
+            select: { id: true }
+        });
+        if (affiliateProfile)
+            affiliateProfileId = affiliateProfile.id;
+    }
+    catch (affiliateError) {
+        console.error('Error al buscar perfil de afiliado:', affiliateError);
+    }
+    let clinicalHistoryPortalEnabled;
+    if (user.role === 'PATIENT' && patientId) {
+        clinicalHistoryPortalEnabled = await (0, patientPortal_utils_1.patientHasClinicalHistoryPortalAccess)(patientId);
+    }
     const tokenPayload = { userId: user.id, role: user.role };
     if (doctorId)
         tokenPayload.doctorId = doctorId;
@@ -62,16 +153,9 @@ const buildAuthResponse = async (user) => {
     const token = (0, jwt_utils_1.generateToken)(tokenPayload);
     return {
         token,
-        user: {
-            id: user.id,
-            email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            role: user.role,
-            doctorId,
+        user: Object.assign({ id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, doctorId,
             patientId,
-            profilePictureUrl
-        }
+            profilePictureUrl, hasAffiliateProfile: !!affiliateProfileId, affiliateProfileId }, (clinicalHistoryPortalEnabled !== undefined && { clinicalHistoryPortalEnabled }))
     };
 };
 const getTwoFactorUserFromRequest = async (req) => {
@@ -97,7 +181,7 @@ const getTwoFactorUserFromRequest = async (req) => {
     return { user, payload };
 };
 const register = async (req, res) => {
-    var _a, _b;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     try {
         (0, validation_utils_1.validateRegister)(req.body);
         const { email, password, firstName, lastName, role, phone } = req.body;
@@ -127,6 +211,57 @@ const register = async (req, res) => {
         });
         // Si el rol es DOCTOR, crear el perfil Doctor y la suscripción asociada
         if (role === 'DOCTOR') {
+            let registrationProfilePictureUrl = '';
+            try {
+                const uploadedUrl = await uploadDoctorRegistrationProfilePicture(user.id, req.body.profilePictureBase64);
+                if (uploadedUrl)
+                    registrationProfilePictureUrl = uploadedUrl;
+            }
+            catch (e) {
+                if (e instanceof error_utils_1.AppError)
+                    throw e;
+                console.error('Registro doctor: error inesperado con foto de perfil', e);
+            }
+            let referrerDoctorId;
+            const rawRef = (_c = (_b = req.body) === null || _b === void 0 ? void 0 : _b.referrerInviteCode) !== null && _c !== void 0 ? _c : (_d = req.body) === null || _d === void 0 ? void 0 : _d.ref;
+            const normalizedRef = (0, referral_utils_1.normalizeReferralCode)(typeof rawRef === 'string' ? rawRef : '');
+            if (normalizedRef) {
+                const referrer = await database_1.default.doctor.findFirst({
+                    where: { referralCode: normalizedRef },
+                    select: { id: true, userId: true },
+                });
+                if (referrer && referrer.userId !== user.id) {
+                    referrerDoctorId = referrer.id;
+                }
+            }
+            // Código de afiliado comercial (comisionista). Mutuamente excluyente con referido-doctor.
+            const rawAffiliateCode = (_f = (_e = req.body) === null || _e === void 0 ? void 0 : _e.affiliateCode) !== null && _f !== void 0 ? _f : (_g = req.body) === null || _g === void 0 ? void 0 : _g.aff;
+            const normalizedAffiliateCode = typeof rawAffiliateCode === 'string' ? rawAffiliateCode.trim().toUpperCase() : '';
+            let affiliateForReferral = null;
+            if (normalizedAffiliateCode) {
+                if (referrerDoctorId) {
+                    throw new error_utils_1.AppError('No puedes usar un código de afiliado y un código de referido al mismo tiempo.', 400);
+                }
+                const affiliate = await database_1.default.affiliateProfile.findUnique({
+                    where: { affiliateCode: normalizedAffiliateCode },
+                    select: {
+                        id: true,
+                        affiliateCode: true,
+                        status: true,
+                        userId: true,
+                        user: { select: { email: true } }
+                    }
+                });
+                if (!affiliate || affiliate.status !== 'ACTIVE') {
+                    throw new error_utils_1.AppError('El código de afiliado no es válido o está inactivo.', 400);
+                }
+                if (affiliate.userId === user.id ||
+                    (((_h = affiliate.user) === null || _h === void 0 ? void 0 : _h.email) || '').toLowerCase() === String(email).toLowerCase()) {
+                    throw new error_utils_1.AppError('Un afiliado no puede referirse a sí mismo.', 400);
+                }
+                affiliateForReferral = { id: affiliate.id, affiliateCode: affiliate.affiliateCode };
+            }
+            const ownReferralCode = await (0, referral_utils_1.generateUniqueReferralCode)(database_1.default);
             // Crear perfil Doctor (rellenar campos con datos reales si están en el formulario)
             const doctorProfile = await database_1.default.doctor.create({
                 data: {
@@ -139,6 +274,8 @@ const register = async (req, res) => {
                     taxId: req.body.taxId || '',
                     taxName: req.body.taxName || '',
                     taxAddress: req.body.taxStreet || '',
+                    taxPostalCode: req.body.taxZip || null,
+                    taxRegime: req.body.taxRegime || null,
                     taxCertificateUrl: '', // Puedes agregar lógica de subida de archivo si aplica
                     dataConsent: !!req.body.acceptPrivacy,
                     termsAccepted: !!req.body.acceptTerms,
@@ -148,18 +285,41 @@ const register = async (req, res) => {
                     trialEnd: promo && promo.type !== 'LIFETIME'
                         ? new Date(Date.now() + (0, promo_utils_1.getPromoDurationDays)(promo.type) * 24 * 60 * 60 * 1000)
                         : null,
-                    profilePictureUrl: '' // Puedes agregar lógica de subida de imagen si aplica
+                    profilePictureUrl: registrationProfilePictureUrl,
+                    referralCode: ownReferralCode,
+                    referrerDoctorId: referrerDoctorId !== null && referrerDoctorId !== void 0 ? referrerDoctorId : undefined,
                 }
             });
             const doctorId = doctorProfile.id;
+            // Registrar la relación afiliado→doctor (si vino un código de afiliado válido).
+            // La comisión solo se generará cuando PayPal confirme el primer pago (vía webhook).
+            if (affiliateForReferral) {
+                try {
+                    await database_1.default.affiliateReferral.create({
+                        data: {
+                            affiliateId: affiliateForReferral.id,
+                            doctorUserId: user.id,
+                            doctorEmail: email,
+                            doctorName: `${firstName} ${lastName}`.trim() || null,
+                            affiliateCodeUsed: affiliateForReferral.affiliateCode,
+                            trialDaysGranted: affiliate_constants_1.DEFAULT_AFFILIATE_TRIAL_DAYS,
+                            status: 'REGISTERED'
+                        }
+                    });
+                }
+                catch (affErr) {
+                    // No romper el registro del doctor si la vinculación con el afiliado falla.
+                    console.error('Error registrando AffiliateReferral:', affErr);
+                }
+            }
             const { paypalSubscriptionId, paypalPlanId } = req.body;
             const now = new Date();
             if (paypalSubscriptionId) {
-                // Con PayPal: pago directo o promo con trial (1M/3M) + PayPal
-                const isTrialPromo = promo && promo.type !== 'LIFETIME';
-                const endDate = isTrialPromo
-                    ? new Date(Date.now() + (0, promo_utils_1.getPromoDurationDays)(promo.type) * 24 * 60 * 60 * 1000)
-                    : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 días si pago directo
+                // Con PayPal: primer ciclo = días promo/referido + 15 días de uso gratuito plataforma (cobro desde día 16), salvo LIFETIME. Ver computePayPalFirstCycleDays.
+                const { totalDays } = (0, referralRegistration_utils_1.computePayPalFirstCycleDays)(promo, referrerDoctorId, {
+                    affiliateGrantsFreeMonth: !!affiliateForReferral
+                });
+                const endDate = new Date(Date.now() + totalDays * 24 * 60 * 60 * 1000);
                 const tx = [];
                 if (promo) {
                     tx.push(database_1.default.promoCode.update({
@@ -182,6 +342,7 @@ const register = async (req, res) => {
                     }
                 }));
                 await database_1.default.$transaction(tx);
+                await (0, referral_service_1.applyReferralRewardIfEligible)(doctorId);
             }
             else if (promo && promo.type === 'LIFETIME') {
                 // Solo LIFETIME sin PayPal
@@ -207,6 +368,7 @@ const register = async (req, res) => {
                         }
                     })
                 ]);
+                await (0, referral_service_1.applyReferralRewardIfEligible)(doctorId);
             }
             else if (promo) {
                 // Código de trial (1M/3M) sin PayPal: rechazar (deberían haber registrado PayPal)
@@ -216,34 +378,42 @@ const register = async (req, res) => {
             const tokenPayload = { userId: user.id, role: user.role, doctorId };
             const token = (0, jwt_utils_1.generateToken)(tokenPayload);
             // Generar PDFs de consentimiento, guardar en ConsentHistory y enviar a legal@qlinexa360.com
-            const signature = (_b = req.body.signature) === null || _b === void 0 ? void 0 : _b.trim();
+            const signature = (_j = req.body.signature) === null || _j === void 0 ? void 0 : _j.trim();
             if (signature && req.body.acceptPrivacy && req.body.acceptTerms && req.body.acceptContract) {
                 try {
                     const fullName = `${user.firstName} ${user.lastName}`.trim();
+                    const consentDate = new Date();
                     const pdfResults = await consentPdf_service_1.ConsentPdfService.generateConsentPdfs({
                         userId: user.id,
                         email: user.email,
                         fullName,
-                        signature
+                        signature,
+                        role: user.role,
+                        ipAddress: req.ip || req.socket.remoteAddress || 'IP no disponible',
+                        signedAt: consentDate
                     });
                     await database_1.default.consentHistory.createMany({
                         data: [
-                            { userId: user.id, type: 'PRIVACY_POLICY', version: '1.0', content: 'Aviso de Privacidad de Qlinexa360', pdfUrl: pdfResults.PRIVACY_POLICY.url },
-                            { userId: user.id, type: 'TERMS_OF_SERVICE', version: '1.0', content: 'Términos de Uso de Qlinexa360', pdfUrl: pdfResults.TERMS_OF_SERVICE.url },
-                            { userId: user.id, type: 'PLATFORM_CONTRACT', version: '1.0', content: 'Contrato de Uso de Plataforma de Qlinexa360', pdfUrl: pdfResults.PLATFORM_CONTRACT.url },
-                            { userId: user.id, type: 'DIGITAL_SIGNATURE', version: '1.0', content: `Firma digital: ${signature}` }
+                            { userId: user.id, type: 'PRIVACY_POLICY', version: '1.0', content: 'Aviso de Privacidad de Qlinexa360', acceptedAt: consentDate, pdfUrl: pdfResults.PRIVACY_POLICY.url },
+                            { userId: user.id, type: 'TERMS_OF_SERVICE', version: '1.0', content: 'Términos de Uso de Qlinexa360', acceptedAt: consentDate, pdfUrl: pdfResults.TERMS_OF_SERVICE.url },
+                            { userId: user.id, type: 'PLATFORM_CONTRACT', version: '1.0', content: 'Contrato de Uso de Plataforma de Qlinexa360', acceptedAt: consentDate, pdfUrl: pdfResults.PLATFORM_CONTRACT.url },
+                            { userId: user.id, type: 'DIGITAL_SIGNATURE', version: '1.0', content: `Firma digital: ${signature}`, acceptedAt: consentDate }
                         ]
                     });
-                    await notification_service_1.NotificationService.sendNewUserConsentToLegal({
+                    const consentEmailPayload = {
                         fullName,
                         email: user.email,
-                        role: 'DOCTOR',
+                        role: user.role,
                         pdfBuffers: {
                             aviso: pdfResults.PRIVACY_POLICY.buffer,
                             terminos: pdfResults.TERMS_OF_SERVICE.buffer,
                             contrato: pdfResults.PLATFORM_CONTRACT.buffer
                         }
-                    });
+                    };
+                    await Promise.all([
+                        notification_service_1.NotificationService.sendNewUserConsentToUser(consentEmailPayload),
+                        notification_service_1.NotificationService.sendNewUserConsentToLegal(consentEmailPayload)
+                    ]);
                 }
                 catch (consentError) {
                     console.error('Error generando consentimientos o enviando a legal:', consentError);
@@ -296,6 +466,9 @@ const register = async (req, res) => {
         }
     }
     catch (error) {
+        if (!(error instanceof error_utils_1.AppError)) {
+            console.error('Error inesperado en register:', error);
+        }
         const handled = error instanceof error_utils_1.AppError ? error : new error_utils_1.AppError('Error al registrar usuario', 500);
         res.status(handled.statusCode).json({ message: handled.message });
     }
@@ -313,6 +486,12 @@ const login = async (req, res) => {
         const user = await database_1.default.user.findUnique({ where: { email } });
         if (!user) {
             console.log('Usuario no encontrado');
+            void (0, securityLoginAudit_service_1.recordSecurityLoginAudit)({
+                email,
+                success: false,
+                ip: clientIp(req),
+                userAgent: clientUa(req),
+            });
             throw new error_utils_1.AppError('Credenciales inválidas', 401);
         }
         console.log('Usuario encontrado:', {
@@ -327,9 +506,23 @@ const login = async (req, res) => {
         const validPassword = await bcryptjs_1.default.compare(password, user.password);
         if (!validPassword) {
             console.log('Contraseña inválida');
+            void (0, securityLoginAudit_service_1.recordSecurityLoginAudit)({
+                userId: user.id,
+                email,
+                success: false,
+                ip: clientIp(req),
+                userAgent: clientUa(req),
+            });
             throw new error_utils_1.AppError('Credenciales inválidas', 401);
         }
         console.log('Contraseña válida');
+        void (0, securityLoginAudit_service_1.recordSecurityLoginAudit)({
+            userId: user.id,
+            email,
+            success: true,
+            ip: clientIp(req),
+            userAgent: clientUa(req),
+        });
         // Bypass 2FA solo en desarrollo cuando DISABLE_2FA_DEV=true (usuarios con email inexistente)
         const isDevBypass = env_1.env.NODE_ENV === 'development' && env_1.env.DISABLE_2FA_DEV;
         if (isDevBypass) {
@@ -441,6 +634,13 @@ const verifyTwoFactor = async (req, res) => {
         if (rememberDevice) {
             response.trustedDeviceToken = (0, jwt_utils_1.generateTrustedDeviceToken)(user.id);
         }
+        void (0, securityLoginAudit_service_1.recordSecurityLoginAudit)({
+            userId: user.id,
+            email: user.email,
+            success: true,
+            ip: clientIp(req),
+            userAgent: clientUa(req),
+        });
         res.json(response);
     }
     catch (error) {
@@ -706,18 +906,27 @@ const getCurrentUser = async (req, res) => {
         else if (user.role === 'ASISTENTE' || user.role === 'ADMIN') {
             profilePictureUrl = user.profilePictureUrl || null;
         }
+        let clinicalHistoryPortalEnabled;
+        if (user.role === 'PATIENT' && patientId) {
+            clinicalHistoryPortalEnabled = await (0, patientPortal_utils_1.patientHasClinicalHistoryPortalAccess)(patientId);
+        }
+        // Capacidad "afiliado" (independiente del rol): existe perfil de afiliado.
+        let affiliateProfileId = null;
+        try {
+            const affiliateProfile = await database_1.default.affiliateProfile.findUnique({
+                where: { userId: user.id },
+                select: { id: true }
+            });
+            if (affiliateProfile)
+                affiliateProfileId = affiliateProfile.id;
+        }
+        catch (affiliateError) {
+            console.error('Error al buscar perfil de afiliado:', affiliateError);
+        }
         res.json({
-            user: {
-                id: user.id,
-                email: user.email,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                role: user.role,
-                phone: user.phone,
-                doctorId,
+            user: Object.assign({ id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, phone: user.phone, doctorId,
                 patientId,
-                profilePictureUrl
-            }
+                profilePictureUrl, hasAffiliateProfile: !!affiliateProfileId, affiliateProfileId }, (clinicalHistoryPortalEnabled !== undefined && { clinicalHistoryPortalEnabled }))
         });
     }
     catch (error) {

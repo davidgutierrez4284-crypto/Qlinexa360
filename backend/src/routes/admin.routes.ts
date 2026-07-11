@@ -219,9 +219,70 @@ router.get('/users-dev-check', async (_req: Request, res: Response) => {
 });
 
 /**
- * b) Códigos promocionales migrados
- * GET /api/admin/reports/promo-codes
+ * Buscar un código concreto (soporte / diagnóstico)
+ * GET /api/admin/reports/promo-codes/lookup?code=QLX-3M-3PHABHTV
  */
+router.get('/promo-codes/lookup', async (req: Request, res: Response) => {
+  try {
+    const code = String(req.query.code || '').trim().toUpperCase();
+    if (!code) {
+      return res.status(400).json({ error: 'Parámetro code requerido' });
+    }
+    const promo = await prisma.promoCode.findUnique({
+      where: { code },
+      include: {
+        redemptions: {
+          select: { doctorId: true, redeemedAt: true },
+        },
+      },
+    });
+    if (!promo) {
+      return res.json({ found: false, code, message: 'No existe en la base de datos' });
+    }
+    res.json({
+      found: true,
+      code: promo.code,
+      type: promo.type,
+      isActive: promo.isActive,
+      usados: `${promo.redemptionCount}/${promo.maxRedemptions}`,
+      validFrom: promo.validFrom,
+      validUntil: promo.validUntil,
+      redemptions: promo.redemptions,
+    });
+  } catch (e) {
+    res.status(500).json({
+      error: 'Error al buscar código',
+      message: (e as Error).message,
+    });
+  }
+});
+
+/**
+ * Importar códigos desde promo-codes.csv (deben existir en BD PROD para que funcionen).
+ * POST /api/admin/reports/promo-codes/import-csv
+ */
+router.post('/promo-codes/import-csv', async (req: Request, res: Response) => {
+  try {
+    const { importPromoCodesFromCsv } = require('../../scripts/importPromoCodesFromCsv');
+    const csvPath =
+      (req.body?.csvPath as string) ||
+      path.join(process.cwd(), 'data', 'promo-codes.csv');
+    const result = await importPromoCodesFromCsv(csvPath);
+    res.json({
+      success: true,
+      message: 'Importación completada',
+      csvPath: path.resolve(csvPath),
+      result,
+    });
+  } catch (e) {
+    res.status(500).json({
+      error: 'Error importando códigos',
+      message: (e as Error).message,
+    });
+  }
+});
+
+/** Listado de códigos promocionales — GET /api/admin/reports/promo-codes */
 router.get('/promo-codes', async (_req: Request, res: Response) => {
   try {
     const promos = await prisma.promoCode.findMany({
@@ -355,5 +416,47 @@ router.get('/doctor-patients', listDoctorPatientsAdmin);
  * Header: X-Admin-Report-Token o X-Seed-Token
  */
 router.post('/unlink-incorrect-patient', unlinkPatientFromDoctor);
+
+/**
+ * Buscar pacientes/usuarios por email (para verificar datos en PROD).
+ * GET /api/admin/reports/check-patients?emails=dava42@hotmail.com,ext_dgutierrez@qmctelecom.com
+ * Header: X-Admin-Report-Token o X-Seed-Token
+ */
+router.get('/check-patients', async (req: Request, res: Response) => {
+  try {
+    const emailsParam = req.query.emails as string;
+    if (!emailsParam) {
+      return res.status(400).json({ error: 'Falta query param: emails (separados por coma)' });
+    }
+    const emails = emailsParam.split(',').map((e) => e.trim()).filter(Boolean);
+    const users = await prisma.user.findMany({
+      where: { email: { in: emails } },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        createdAt: true,
+        patientProfile: { select: { id: true, dateOfBirth: true, createdAt: true } },
+        doctorProfile: { select: { id: true } },
+      },
+    });
+    const patientsByEmail = await prisma.patient.findMany({
+      where: { email: { in: emails } },
+      include: { user: { select: { email: true, firstName: true, lastName: true } } },
+    });
+    res.json({
+      byUser: users,
+      byPatientEmail: patientsByEmail.map((p) => ({
+        patientId: p.id,
+        email: p.email,
+        user: p.user,
+      })),
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Error', message: (e as Error).message });
+  }
+});
 
 export default router;

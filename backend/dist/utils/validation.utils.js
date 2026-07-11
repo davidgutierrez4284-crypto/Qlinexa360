@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.validatePhone = exports.validatePassword = exports.validateEmail = exports.validateYouTubeUrl = exports.validateLogin = exports.validateRegister = void 0;
+exports.validatePhone = exports.getPasswordValidationMessage = exports.validatePassword = exports.validateEmail = exports.validateYouTubeUrl = exports.validateLogin = exports.validateRegister = void 0;
 const error_utils_1 = require("./error.utils");
 const validateRegister = (data) => {
     const { email, password, firstName, lastName, role } = data;
@@ -13,8 +13,8 @@ const validateRegister = (data) => {
             throw new error_utils_1.AppError('Se requiere paypalSubscriptionId o un código promocional válido para el registro de doctor', 400);
         }
     }
-    if (password.length < 6) {
-        throw new error_utils_1.AppError('La contraseña debe tener al menos 6 caracteres', 400);
+    if (!(0, exports.validatePassword)(password)) {
+        throw new error_utils_1.AppError('La contraseña debe tener al menos 8 caracteres e incluir al menos una mayúscula, una minúscula y un número', 400);
     }
     if (!isValidEmail(email)) {
         throw new error_utils_1.AppError('El email no es válido', 400);
@@ -46,11 +46,24 @@ const validateEmail = (email) => {
 };
 exports.validateEmail = validateEmail;
 const validatePassword = (password) => {
-    // Mínimo 8 caracteres, al menos una letra mayúscula, una minúscula y un número
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$/;
-    return passwordRegex.test(password);
+    // Mínimo 8 caracteres, al menos una mayúscula, una minúscula y un número (caracteres especiales permitidos)
+    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(password);
 };
 exports.validatePassword = validatePassword;
+const getPasswordValidationMessage = (password) => {
+    if (!password)
+        return 'Debes ingresar una contraseña.';
+    if (password.length < 8)
+        return 'La contraseña debe tener al menos 8 caracteres';
+    if (!/[a-z]/.test(password))
+        return 'Debe incluir al menos una letra minúscula';
+    if (!/[A-Z]/.test(password))
+        return 'Debe incluir al menos una letra mayúscula';
+    if (!/\d/.test(password))
+        return 'Debe incluir al menos un número';
+    return '';
+};
+exports.getPasswordValidationMessage = getPasswordValidationMessage;
 const validatePhone = (phone) => {
     // Formato: +XX XXXXXXXXXX
     const phoneRegex = /^\+\d{2}\s\d{10}$/;
