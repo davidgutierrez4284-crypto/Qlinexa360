@@ -8,9 +8,11 @@ import {
   DocumentDuplicateIcon,
   UserCircleIcon,
   ChartBarIcon,
-  QuestionMarkCircleIcon
+  QuestionMarkCircleIcon,
+  BeakerIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../context/AuthContext';
+import { isSmartLabEnabled } from '../../config/featureFlags';
 import { useSelectedDoctor } from '../../context/SelectedDoctorContext';
 import ModuleDoctorSelector from '../assistant/ModuleDoctorSelector';
 
@@ -63,11 +65,24 @@ const Sidebar = ({ onClose }) => {
     { name: 'Recetas', href: '/dashboard/prescriptions', icon: DocumentTextIcon, module: 'prescriptions' },
     { name: 'Zona de estudio', href: '/dashboard/documents', icon: FolderIcon, module: 'studies' },
     { name: 'Relación de facturación', href: '/dashboard/billing', icon: DocumentDuplicateIcon, module: 'billing' },
+    ...(isSmartLabEnabled()
+      ? [{ name: 'Laboratorio Inteligente', href: '/dashboard/laboratorio-inteligente', icon: BeakerIcon, module: 'studies' }]
+      : []),
     { name: 'Mi perfil', href: '/dashboard/profile', icon: UserCircleIcon, module: null },
     { name: 'Ayuda y tutoriales', href: '/dashboard/help', icon: QuestionMarkCircleIcon, module: null },
   ];
 
   // Doctor que también es paciente: enlace para ver su historial como paciente
+
+  const adminLabCatalogItem = isSmartLabEnabled()
+    ? {
+        name: 'Catálogo de parámetros de laboratorio',
+        href: '/dashboard/admin/lab-catalogo',
+        icon: BeakerIcon,
+        module: null,
+      }
+    : null;
+
   const doctorAsPatientLink = user?.role === 'DOCTOR' && user?.patientId
     ? { name: 'Mi historial como paciente', href: `/dashboard/medical-records?patientId=${user.patientId}`, icon: UserCircleIcon, module: 'clinicalHistory' }
     : null;
@@ -76,13 +91,14 @@ const Sidebar = ({ onClose }) => {
   const navigation = user?.role === 'DOCTOR' 
     ? [...allMenuItems, ...(doctorAsPatientLink ? [doctorAsPatientLink] : [])]
     : user?.role === 'ADMIN'
-    ? allMenuItems // Los administradores ven todos los menús
+    ? [...(adminLabCatalogItem ? [adminLabCatalogItem] : []), ...allMenuItems]
     : user?.role === 'ASISTENTE'
     ? allMenuItems // Los asistentes ven todos los menús
     : user?.role === 'PATIENT'
     ? [
         { name: 'Historial clínico', href: '/dashboard/medical-records', icon: DocumentTextIcon, module: null },
         { name: 'Zona de estudio', href: '/dashboard/documents', icon: FolderIcon, module: null },
+        ...(isSmartLabEnabled() ? [{ name: 'Laboratorio Inteligente', href: '/dashboard/laboratorio-inteligente', icon: BeakerIcon, module: null }] : []),
         { name: 'Relación de facturación', href: '/dashboard/billing', icon: DocumentDuplicateIcon, module: null },
         { name: 'Mi perfil', href: '/dashboard/profile', icon: UserCircleIcon, module: null },
         { name: 'Ayuda y tutoriales', href: '/dashboard/help', icon: QuestionMarkCircleIcon, module: null },

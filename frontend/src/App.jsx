@@ -36,6 +36,16 @@ import ConfirmAppointment from './pages/ConfirmAppointment';
 import ResumeSubscriptionPayment from './pages/ResumeSubscriptionPayment';
 import PreConsultation from './pages/PreConsultation';
 import NewConsultationPage from './pages/NewConsultationPage';
+import LaboratorioInteligente from './pages/smartLab/LaboratorioInteligente';
+import LabUploadPage from './pages/smartLab/LabUploadPage';
+import LabReportReview from './pages/smartLab/LabReportReview';
+import LabReportDetail from './pages/smartLab/LabReportDetail';
+import LabPatientDashboardPage from './pages/smartLab/LabPatientDashboardPage';
+import LabCompareStudies from './pages/smartLab/LabCompareStudies';
+import LabAnalyteHistory from './pages/smartLab/LabAnalyteHistory';
+import LabCatalogAdmin from './pages/admin/LabCatalogAdmin';
+import { isSmartLabEnabled } from './config/featureFlags';
+
 
 // Pacientes no deben acceder a "Mis Pacientes" (solo doctores/asistentes)
 const PatientsRoute = () => {
@@ -107,6 +117,18 @@ const AppRoutes = () => (
                 <Route path="billing" element={<Billing />} />
                 <Route path="help" element={<Benefits />} />
                 <Route path="resume-subscription" element={<ResumeSubscriptionPayment />} />
+                {isSmartLabEnabled() && (
+                  <>
+                    <Route path="laboratorio-inteligente" element={<LaboratorioInteligente />} />
+                    <Route path="laboratorio-inteligente/subir" element={<LabUploadPage />} />
+                    <Route path="laboratorio-inteligente/reportes/:id/revision" element={<LabReportReview />} />
+                    <Route path="laboratorio-inteligente/reportes/:id" element={<LabReportDetail />} />
+                    <Route path="laboratorio-inteligente/paciente/:patientId/dashboard" element={<LabPatientDashboardPage />} />
+                    <Route path="laboratorio-inteligente/paciente/:patientId/comparar" element={<LabCompareStudies />} />
+                    <Route path="laboratorio-inteligente/analitos/:analyteId/historial" element={<LabAnalyteHistory />} />
+                    <Route path="admin/lab-catalogo" element={<LabCatalogAdmin />} />
+                  </>
+                )}
                 <Route index element={<Navigate to="/dashboard/dashboard" replace />} />
                 <Route path="*" element={<Navigate to="/dashboard/dashboard" replace />} />
               </Routes>
