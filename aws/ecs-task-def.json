@@ -42,7 +42,7 @@
         { "name": "SMART_LAB_ENABLED", "value": "true" },
         { "name": "SMART_LAB_REVIEW_THRESHOLD", "value": "0.9" },
         { "name": "SMART_LAB_MAX_PDF_MB", "value": "15" },
-        { "name": "SMART_LAB_PATIENT_UPLOAD_ENABLED", "value": "false" },
+        { "name": "SMART_LAB_PATIENT_UPLOAD_ENABLED", "value": "true" },
         { "name": "SMART_LAB_EXTERNAL_OCR_ENABLED", "value": "false" },
         { "name": "SMART_LAB_AI_FALLBACK_ENABLED", "value": "false" },
         { "name": "SMART_LAB_MISSING_FOLLOWUP_MONTHS", "value": "6" }
