@@ -28,12 +28,24 @@
         { "name": "BASE_URL", "value": "https://api.qlinexa360.com" },
         { "name": "JWT_EXPIRES_IN", "value": "24h" },
         { "name": "PAYPAL_ENVIRONMENT", "value": "live" },
-        { "name": "SMTP_HOST", "value": "smtp.zoho.com" },
+        { "name": "SMTP_HOST", "value": "smtppro.zoho.com" },
         { "name": "SMTP_PORT", "value": "465" },
         { "name": "SMTP_SECURE", "value": "true" },
         { "name": "SMTP_FROM_NOREPLY", "value": "no-reply@qlinexa360.com" },
         { "name": "TZ", "value": "America/Mexico_City" },
-        { "name": "PRACTICE_TIMEZONE", "value": "America/Mexico_City" }
+        { "name": "PRACTICE_TIMEZONE", "value": "America/Mexico_City" },
+        { "name": "MERCADOPAGO_ENV", "value": "production" },
+        { "name": "MERCADOPAGO_REDIRECT_URI", "value": "https://api.qlinexa360.com/api/payments/mercadopago/callback" },
+        { "name": "GOOGLE_REDIRECT_URI", "value": "https://api.qlinexa360.com/api/calendar-sync/auth/google/callback" },
+        { "name": "OUTLOOK_REDIRECT_URI", "value": "https://api.qlinexa360.com/api/calendar-sync/auth/outlook/callback" },
+        { "name": "QLINEXA360_MARKETPLACE_FEE_PERCENTAGE", "value": "1" },
+        { "name": "SMART_LAB_ENABLED", "value": "true" },
+        { "name": "SMART_LAB_REVIEW_THRESHOLD", "value": "0.9" },
+        { "name": "SMART_LAB_MAX_PDF_MB", "value": "15" },
+        { "name": "SMART_LAB_PATIENT_UPLOAD_ENABLED", "value": "false" },
+        { "name": "SMART_LAB_EXTERNAL_OCR_ENABLED", "value": "false" },
+        { "name": "SMART_LAB_AI_FALLBACK_ENABLED", "value": "false" },
+        { "name": "SMART_LAB_MISSING_FOLLOWUP_MONTHS", "value": "6" }
       ],
       "secrets": [
         {
@@ -63,6 +75,42 @@
         {
           "name": "ADMIN_REPORT_TOKEN",
           "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-admin-report-token-msV1fe"
+        },
+        {
+          "name": "MERCADOPAGO_CLIENT_ID",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-mercadopago-client-id-sAI13V"
+        },
+        {
+          "name": "MERCADOPAGO_CLIENT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-mercadopago-client-secret-IPH3nD"
+        },
+        {
+          "name": "MERCADOPAGO_WEBHOOK_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-mercadopago-webhook-secret-YOZ5vV"
+        },
+        {
+          "name": "MERCADOPAGO_PLATFORM_ACCESS_TOKEN",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-mercadopago-platform-token-FeVb1I"
+        },
+        {
+          "name": "DATA_ENCRYPTION_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-data-encryption-key-obAlAO"
+        },
+        {
+          "name": "GOOGLE_CLIENT_ID",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-google-client-id-uQJF8z:value::"
+        },
+        {
+          "name": "GOOGLE_CLIENT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-google-client-secret-nrbDYJ:value::"
+        },
+        {
+          "name": "OUTLOOK_CLIENT_ID",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-outlook-client-id-BybS6w:value::"
+        },
+        {
+          "name": "OUTLOOK_CLIENT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:us-east-2:268675503474:secret:qlinexa360-prod-outlook-client-secret-PMgTmm:value::"
         }
       ],
       "logConfiguration": {
