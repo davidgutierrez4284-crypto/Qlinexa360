@@ -1,0 +1,62 @@
+www.chopo.com.mx
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+19/07/2017  06:31:06a. m.
+Resultados
+Análisis Clínicos
+TRANSAMINASA GLUT. OXALOACÉTICA (TGO) EN SUERO
+TGO (AST)
+25
+< 40 U/L
+Método: Fotometría automatizada
+BILIRRUBINAS EN SANGRE
+Bilirrubina total
+0.44
+< 1.2 mg/dL
+Bilirrubina directa
+0.16
+0.09 - 0.3 mg/dL
+Bilirrubina indirecta
+0.28
+0.01 - 0.9 mg/dL
+TRANSAMINASA GLUTÁMICO PIRÚVICA (ALT) SUERO
+TGP (ALT)
+43
+< 41 U/L
+FOSFATASA ALCALINA EN SUERO
+F. Alcalina total
+111
+40 - 130 U/L
+GAMMA GLUTAMIL TRANSPEPTIDASA EN SUERO
+Gama glutamil transpeptidasa
+35
+9 - 75 U/L
+PROTEÍNAS EN SUERO Y RELACIÓN A/G
+Proteínas totales
+7.1
+6.4 - 8.3 g/dL
+Albúmina
+4.4
+3.5 - 5.2 g/dL
+Globulinas
+2.7
+2.9 - 3.1 g/dL
+Relación A/G
+1.63
+1.2 - 1.67
+QUÍMICA DE 4 ELEMENTOS
+Glucosa
+82
+55 - 99 mg/dL
+Urea
+32.2
+16.6 - 48.5 mg/dL
+Creatinina
+1.08
+0.70 - 1.2 mg/dL
+Ácido úrico
+7.5
+3.4 - 7.0 mg/dL
+INSULINA EN SUERO
+Insulina basal
+14.68
+2.6 - 24.9 μUI/mL

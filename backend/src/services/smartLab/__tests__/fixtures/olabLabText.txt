@@ -1,0 +1,12 @@
+olab.com.mx
+Laboratorio OLAB
+BIOMETRIA HEMATICA
+Hemoglobina
+14.5
+12 - 16 g/dL
+Leucocitos
+7200
+4000 - 11000 /mm3
+Plaquetas
+250000
+150000 - 450000 /mm3

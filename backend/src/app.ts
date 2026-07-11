@@ -1,7 +1,8 @@
-// Configuración principal de la app Express para Medilink360
+﻿// ConfiguraciÃ³n principal de la app Express para Medilink360
+// Cargar .env antes de cualquier import que instancie Prisma u otro cliente con process.env.
+import './config/env';
 import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
+import cors, { CorsOptions } from 'cors';
 import authRoutes from './routes/auth.routes';
 import patientRoutes from './routes/patient.routes';
 import doctorRoutes from './routes/doctor.routes';
@@ -30,42 +31,71 @@ import assistantRoutes from './routes/assistant.routes';
 import passwordResetRoutes from './routes/passwordReset.routes';
 import consentRoutes from './routes/consent.routes';
 import appointmentConfirmationRoutes from './routes/appointmentConfirmation.routes';
+import teleconsultationRoutes from './routes/teleconsultation.routes';
 import scheduleRoutes from './routes/schedule.routes';
 import feedbackRoutes from './routes/feedback.routes';
 import tutorialVideoRoutes from './routes/tutorialVideo.routes';
 import preConsultationRoutes from './routes/preConsultation.routes';
+import clinicalIntakeRoutes from './routes/clinicalIntake.routes';
 import promoRoutes from './routes/promo.routes';
+import referralRoutes from './routes/referral.routes';
 import adminReportRoutes from './routes/admin.routes';
+import auditEvidenceRoutes from './routes/auditEvidence.routes';
+import affiliateAdminRoutes from './routes/affiliateAdmin.routes';
+import affiliateRoutes from './routes/affiliate.routes';
+import mercadoPagoRoutes from './routes/mercadoPago.routes';
+import adminBillingRoutes from './routes/adminBilling.routes';
+import caseShareInviteRoutes from './routes/caseShareInvite.routes';
+import smartLabRoutes from './routes/smartLab.routes';
 import { blockWriteOperationsIfCancelled } from './middlewares/subscription.middleware';
-import { authenticateToken } from './middlewares/auth.middleware';
+import { authenticateToken, optionalAuthenticate } from './middlewares/auth.middleware';
+import { enrichDoctorId } from './middlewares/enrichDoctorId.middleware';
 import prisma from './config/database';
-// Puedes importar aquí otras rutas si las necesitas
-
-dotenv.config();
+// Puedes importar aquÃ­ otras rutas si las necesitas
 
 const app = express();
 
-// Middlewares
-app.use(cors());
-app.use(express.json());
+// CORS: reflejar el origen (www vs apex) y credenciales.
+// No fijar allowedHeaders: el paquete cors refleja Access-Control-Request-Headers del preflight.
+// Si se lista a mano, cualquier cabecera extra del cliente (p. ej. Cache-Control en Calendar.jsx) rompe el preflight.
+const corsOptions: CorsOptions = {
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  optionsSuccessStatus: 204,
+};
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '8mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Middleware global para bloquear operaciones de escritura cuando la suscripción está cancelada
-// Se aplica después de las rutas de autenticación pero antes de las demás rutas
+// Middleware global para bloquear operaciones de escritura cuando la suscripciÃ³n estÃ¡ cancelada
+// Se aplica despuÃ©s de las rutas de autenticaciÃ³n pero antes de las demÃ¡s rutas
+// GET /api/case-share-invite/:token es pÃºblico (enlace por correo). Un JWT invÃ¡lido en el navegador
+// no debe bloquear con 403 antes de cargar el invite â€” usar autenticaciÃ³n opcional.
 app.use((req, res, next) => {
-  // Solo aplicar a rutas que requieren autenticación (excepto /api/auth)
   if (req.path.startsWith('/api/') && !req.path.startsWith('/api/auth')) {
-    // Verificar si hay token de autenticación
+    if (req.path.startsWith('/api/case-share-invite')) {
+      const isPublicCaseShare =
+        req.method === 'GET' ||
+        (req.method === 'POST' && /^\/api\/case-share-invite\/.+\/sign\/?$/.test(req.path));
+      if (isPublicCaseShare) {
+        return optionalAuthenticate(req, res, () => {
+          enrichDoctorId(req, res, () => {
+            blockWriteOperationsIfCancelled(req, res, next);
+          });
+        });
+      }
+    }
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     if (token) {
-      // Si hay token, autenticar y luego verificar suscripción
       authenticateToken(req, res, () => {
-        blockWriteOperationsIfCancelled(req, res, next);
+        enrichDoctorId(req, res, () => {
+          blockWriteOperationsIfCancelled(req, res, next);
+        });
       });
     } else {
-      // Si no hay token, continuar (otro middleware manejará la autenticación)
       next();
     }
   } else {
@@ -73,15 +103,16 @@ app.use((req, res, next) => {
   }
 });
 
-// Rutas de autenticación
+// Rutas de autenticaciÃ³n
 app.use('/api/auth', authRoutes);
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/api/patients', patientRoutes);
+app.use('/api/case-share-invite', caseShareInviteRoutes);
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/users', userRoutes);
 // Rutas para eventos internos del calendario (CRUD)
 app.use('/api/calendar', calendarRoutes);
-// Rutas para sincronización con calendarios externos (Google, Outlook, etc.)
+// Rutas para sincronizaciÃ³n con calendarios externos (Google, Outlook, etc.)
 app.use('/api/calendar-sync', calendarSyncRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
@@ -104,14 +135,24 @@ app.use('/api/assistants', assistantRoutes);
 app.use('/api/password-reset', passwordResetRoutes);
 app.use('/api/consent', consentRoutes);
 app.use('/api/appointment-confirmation', appointmentConfirmationRoutes);
+app.use('/api/teleconsultation', teleconsultationRoutes);
 app.use('/api/schedule', scheduleRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/tutorial-videos', tutorialVideoRoutes);
 app.use('/api/promo', promoRoutes);
+app.use('/api/referrals', referralRoutes);
 app.use('/api/pre-consultations', preConsultationRoutes);
+app.use('/api/clinical-intakes', clinicalIntakeRoutes);
 app.use('/api/admin/reports', adminReportRoutes);
+app.use('/api/admin/audit-evidence', auditEvidenceRoutes);
+app.use('/api/admin/affiliates', affiliateAdminRoutes);
+app.use('/api/admin/billing', adminBillingRoutes);
+app.use('/api/affiliate', affiliateRoutes);
+app.use('/api/payments/mercadopago', mercadoPagoRoutes);
+app.use('/api/smart-lab', smartLabRoutes);
+app.use('/api/labs', smartLabRoutes);
 
-// Ruta básica de prueba
+// Ruta bÃ¡sica de prueba
 app.get('/', (req, res) => {
   res.json({ message: 'Bienvenido a Medilink360 API' });
 });
@@ -125,7 +166,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Estadísticas de BD (usuarios, códigos promocionales) - para validar datos en PROD
+// EstadÃ­sticas de BD (usuarios, cÃ³digos promocionales) - para validar datos en PROD
 app.get('/api/admin/db-stats', async (_req, res) => {
   try {
     const [userCount, promoCount] = await Promise.all([

@@ -1,0 +1,39 @@
+www.chopo.com.mx
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+28/10/2021  08:03:26a. m.
+BIOMETRÍA HEMÁTICA
+Hemoglobina
+16.9
+14 - 18 g/dL
+Hemoglobina Corp. Media
+30.1
+27 - 31 pg
+Eosinófilos
+3.2
+0 - 6 %
+Eosinófilos (absoluto)
+0.25
+0.02 - 0.5 miles/µL
+Linfocitos
+28.5
+20 - 45 %
+Linfocitos (absoluto)
+2.1
+1.0 - 4.0 miles/µL
+HEMOGLOBINA GLICOSILADA A1c
+Hemoglobina glicosilada A1c
+5.9
+4 - 6 %
+PROTEÍNAS EN SUERO
+Globulinas
+2.7
+2.9 - 3.1 g/dL
+Inmunoglobulina A
+184
+70 - 400 mg/dL
+Inmunoglobulina G
+1061
+700 - 1600 mg/dL
+Inmunoglobulina M
+99
+40 - 230 mg/dL

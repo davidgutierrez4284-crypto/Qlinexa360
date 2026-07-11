@@ -1,0 +1,57 @@
+www.lapi.com.mx
+Laboratorio de Análisis Patológicos e Inmunológicos LAPI
+PERFIL PLUS
+PROMOCION CALL CENTER 2025
+GUTIERREZ GRADOS MARIANA F/N: 21/12/1988 Edad: 36 años 11 meses
+ExamenResultadoValores de Referencia
+P A C I E N T E:
+City Shops Del Valle
+ 749109
+ 5689
+Fechas: Atención / Toma Muestra / Emisión
+19/12/2025 19/12/2025 09:59:16 19/12/2025 20:23:01
+
+BIOMETRÍA HEMÁTICA
+Brincos
+Eritrocitos
+           5.07 3.87 - 5.4410^6uL
+Hemoglobina
+15.2 11.7 - 16.3g/dL
+Hematocrito
+45.6 35.1 - 48.9%
+Volumen Corpuscular Medio
+90.0 80.0 - 100.0fL
+Hemoglobina Corpuscular Media
+30.0 27.0 - 33.0pg
+Concentración de Hemoglobina Corpuscular Media
+33.3 32.0 - 36.0g/dL
+Indice de Distribución Eritrocitaria
+13.1 11.5 - 14.5%
+Leucocitos
+5.70 4.50 - 11.0010^3uL
+Neutrófilos
+58.0 40.0 - 70.0%
+Linfocitos
+32.0 20.0 - 45.0%
+Monocitos
+6.0 2.0 - 10.0%
+Eosinófilos
+3.0 0.0 - 6.0%
+Basófilos
+1.0 0.0 - 2.0%
+Neutrófilos Absolutos
+3.31 1.80 - 7.7010^3uL
+Linfocitos Absolutos
+1.82 1.00 - 4.8010^3uL
+Monocitos Absolutos
+0.34 0.20 - 1.0010^3uL
+Eosinófilos Absolutos
+0.17 0.00 - 0.6010^3uL
+Basófilos Absolutos
+0.06 0.00 - 0.2010^3uL
+Plaquetas
+245 150 - 45010^3uL
+Volumen Plaquetario Medio
+10.2 7.4 - 12.5fL
+Indice de Distribución Plaquetaria
+12.5 9.0 - 17.0%

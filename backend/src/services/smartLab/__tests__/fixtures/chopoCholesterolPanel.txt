@@ -1,0 +1,22 @@
+www.chopo.com.mx
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+28/10/2021  08:03:26a. m.
+PERFIL LIPÍDICO
+Colesterol
+237
+< 200 mg/dL
+Colesterol HDL
+41
+> 60 mg/dL
+Colesterol LDL
+169
+< 100 mg/dL
+VLDL colesterol
+41
+< 35 mg/dL
+Colesterol no-HDL
+196
+< 130 mg/dL
+Triglicéridos
+145
+< 150 mg/dL

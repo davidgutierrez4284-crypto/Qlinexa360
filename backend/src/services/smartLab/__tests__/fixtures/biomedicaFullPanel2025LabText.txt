@@ -1,0 +1,497 @@
+
+
+Página No: 1/6
+ 
+PACIENTE: 
+Gutierrez Grados Marisel
+ 
+SEXO: FEDAD:   40  AÑOSF.NAC:   30/11/1984
+REGISTRO: Centro de Toma:Del Valle (Felix Cuevas)
+Dr.(a):   
+Alejandra Correa Morales
+Código:14/149855
+Fecha Toma de Muestra:08/04/2025
+EXAMENRESULTADOUNIDADESVALOR DE REFERENCIA
+ 
+Biometria Hematica Completa, Sangre Total (CL010)
+         Método Impedancia Electrónica / VCS
+Eritrocitos4.88
+millones/mm3
+4.20 - 5.40
+Hemoglobina13.8
+g/dL
+12.5 - 16.8
+Hematocrito40.3
+%
+37.0 - 47.0
+Volumen Corpuscular Medio82.6
+fL
+81.0 - 99.0
+Hemoglobina Corpuscular Media28.2
+pg
+27.0 - 33.0
+Concentración Media de Hb Corpuscular34.2
+g/dL
+33.0 - 37.0
+Ancho de Distribución de Eritrocitos14.2
+%
+11.5 - 14.5
+Leucocitos8.4
+miles/mm3
+4.8 - 10.8
+Monocitos5.1
+%
+5.0 - 11.0
+Linfocitos26.2
+%
+20.0 - 45.0
+Eosinófilos3.3
+%
+0.0 - 5.0
+Basófilos0.4
+%
+0.0 - 1.0
+Neutrófilos65.0
+%
+43.0 - 65.0
+Monocitos en # Absoluto0.4
+miles/mm3
+0.0 - 0.8
+Linfocitos en # Absoluto2.2
+miles/mm3
+1.0 - 4.8
+Eosinófilos en # Absoluto0.3
+miles/mm3
+0.0 - 0.4
+Basófilos en # Absoluto0.0
+miles/mm3
+0.0 - 0.2
+Neutrófilos en # Absoluto5.5
+miles/mm3
+1.8 - 8.0
+Plaquetas283
+miles/mm3
+130 - 400
+Volumen Plaquetario Medio8.8
+fL
+7.4 - 10.4
+Colesterol No HDL, suero
+         Método Química Seca
+142
+mg/dl
+Valores del Colesterol No HDL 
+recomendados por la AMPAC y el NCEP
+Deseable            menor de 130 mg/dL
+Bajo Riesgo               131 - 159 mg/dL
+Limítrofe                    160 - 189 mg/dL
+Alto                     mayor de 190 mg/dL
+Globulina, Suero
+         Método Química Seca
+3.2
+g/dL
+2.0 - 4.0
+Lipoproteína de  Muy Baja Densidad (VLDL), Suero
+         Método Química Seca
+35
+mg/dL
+< 30 
+Valores de VLDL recomendados 
+por la AMPAC y el NCEP
+... Continúa ...
+
+Página No: 2/6
+ 
+PACIENTE: 
+Gutierrez Grados Marisel
+ 
+SEXO: FEDAD:   40  AÑOSF.NAC:   30/11/1984
+REGISTRO: Centro de Toma:Del Valle (Felix Cuevas)
+Dr.(a):   
+Alejandra Correa Morales
+Código:14/149855
+Fecha Toma de Muestra:08/04/2025
+EXAMENRESULTADOUNIDADESVALOR DE REFERENCIA
+ 
+Glucosa, Suero (CL010)
+         Método Química Seca
+84
+mg/dL
+70 - 100 
+Valor de referencia de acuerdo 
+a la Asociacion Americana de 
+Diabetes (ADA) y la OMS.
+Nitrogeno de Urea, Suero (CL010)
+         Método Química Seca
+16.0
+mg/dL
+7.0 - 17.0
+Creatinina, Suero (CL010)
+         Método Química Seca
+0.74
+mg/dL
+0.52 - 1.04
+Relación Nitrógeno de Urea/Creatinina
+21.6
+Acido Urico, Suero (CL010)
+         Método Química Seca
+5.2
+mg/dL
+2.5 - 6.2
+Colesterol Total, Suero (CL010)
+         Método Química Seca
+194
+mg/dL
+Valores de Colesterol recomendados 
+por la AMPAC y el NCEP
+Deseable            menor de 200 mg/dL
+Limitrofe                     200 - 239 mg/dL
+Alto                      mayor de 240 mg/dL
+Trigliceridos, Suero (CL010)
+         Método Química Seca
+177
+mg/dL
+Valores de Triglicéridos recomendados 
+por la AMPAC y el NCEP
+Deseable            menor de 150 mg/dL
+Limitrofe                     150 - 199 mg/dL
+Alto                            200 - 499 mg/dL
+Muy Alto              mayor de 500 mg/dL
+Lipoproteina de Alta Densidad (HDL), Suero (CL010)
+         Método Química Seca
+52
+mg/dL
+Valores del HDLC recomendados 
+por la AMPAC y el NCEP
+Deseable             mayor de 50 mg/dL
+Normal                         40 - 50 mg/dL
+Bajo                     menor de 40 mg/dL
+Lipoproteína de Baja Densidad (LDL), Suero
+         Método Química Seca
+107
+mg/dL
+Valores del LDL recomendados 
+por la AMPAC y el NCEP
+Deseable            menor de 100 mg/dL
+Bajo Riesgo               100 - 129 mg/dL
+Limítrofe                    130 - 159 mg/dL
+Alto                            160 - 189 mg/dL
+Muy Alto              mayor de 190 mg/dL
+Índice Aterogénico COL/HDL
+         Método Química Seca
+3.7
+0.0 - 4.5
+... Continúa ...
+
+Página No: 3/6
+ 
+PACIENTE: 
+Gutierrez Grados Marisel
+ 
+SEXO: FEDAD:   40  AÑOSF.NAC:   30/11/1984
+REGISTRO: Centro de Toma:Del Valle (Felix Cuevas)
+Dr.(a):   
+Alejandra Correa Morales
+Código:14/149855
+Fecha Toma de Muestra:08/04/2025
+EXAMENRESULTADOUNIDADESVALOR DE REFERENCIA
+ 
+Índice Colesterol/Triglicéridos
+1.10
+Bilirrubina Total, Suero
+         Método Química Seca
+0.5
+mg/dL
+0.2 - 1.3
+Bilirrubina Indirecta, Suero
+         Método Química Seca
+0.4
+mg/dL
+0.0 - 1.1
+Bilirrubina Directa, Suero
+         Método Química Seca
+0.1
+mg/dL
+0.0 - 0.4
+Proteinas Totales, Suero
+         Método Química Seca
+7.0
+g/dL
+6.3 - 8.2
+Albumina, Suero
+         Método Química Seca
+3.8
+g/dL
+3.0 - 5.0
+Relacion Albumina/Globulina
+         Método Química Seca
+1.2
+0.8 - 1.8
+Alaninoaminotransferasa (TGP), Suero
+         Método Química Seca
+15
+U/L
+0 - 35 
+Aspartatoaminotransferasa (TGO), Suero
+         Método Química Seca
+16
+U/L
+14 - 36
+Deshidrogenasa Lactica, Suero
+         Método Química Seca
+136
+U/L
+120 - 246 
+Fosfatasa Alcalina, Suero
+         Método Química Seca
+93
+U/L
+38 - 126 
+Gamaglutamiltransferasa, Suero
+         Método Química Seca
+20
+U/L
+12 - 43 
+Creatinquinasa, Suero
+         Método Química Seca
+66
+U/L
+30 - 135
+Lipasa, Suero
+         Método Química Seca
+69
+U/L
+23 - 300
+Amilasa, Suero
+         Método Química Seca
+58
+U/L
+30 - 110
+Sodio, Suero (CL010)
+         Método Química Seca
+139
+mmol/L
+137 - 145
+Potasio, Suero (CL010)
+         Método Química Seca
+4.8
+mmol/L
+3.6 - 5.5
+Cloro, Suero (CL010)
+         Método Química Seca
+104
+mmol/L
+98 - 107
+Bióxido de Carbono (CO2), Suero
+         Método Química Seca
+22
+mmol/L
+22 - 30
+... Continúa ...
+
+Página No: 4/6
+ 
+PACIENTE: 
+Gutierrez Grados Marisel
+ 
+SEXO: FEDAD:   40  AÑOSF.NAC:   30/11/1984
+REGISTRO: Centro de Toma:Del Valle (Felix Cuevas)
+Dr.(a):   
+Alejandra Correa Morales
+Código:14/149855
+Fecha Toma de Muestra:08/04/2025
+EXAMENRESULTADOUNIDADESVALOR DE REFERENCIA
+ 
+Calcio, Suero (CL010)
+         Método Química Seca
+9.0
+mg/dL
+8.6 - 10.6 
+Fosforo, Suero (CL010)
+         Método Química Seca
+3.4
+mg/dL
+3.2 - 4.9
+Magnesio, Suero (CL010)
+         Método Química Seca
+1.8
+mg/dL
+1.6 - 2.3
+Hierro Sérico, Suero
+         Método Química Seca
+154
+ug/dL
+37 - 170
+Capacidad de Fijación de Hierro, Suero
+         Método Química Seca
+299
+ug/dL
+250 - 450
+Saturación de Hierro, Suero
+*51.5
+%
+20.0 - 50.0
+Hemoglobina Glicosilada-A1c, Sangre Total
+         Método Turbidimetría
+5.3
+%
+0.0   -   5.6        Normal
+5.7   -   6.4        Prediabetes
+Mayor  6.5        Diabetes
+Osmolaridad, Suero
+         Método Química Seca
+269
+mOsmol/Kg
+261 - 280
+Ferritina, Suero
+         Método Quimioluminiscencia
+24.0
+ng/mL
+<50 años    6.24 - 137 
+>51 años    11.1 - 264
+Valor de referencia modificado
+a partir del 20 de junio de 2024
+por cambios analíticos.
+Proteina C Reactiva, Suero
+         Método Turbidimetría
+0.40
+mg/dL
+0.00 - 0.49 
+Valor de referencia modificado
+a partir del 20 de junio de 2024
+por cambios analíticos.
+... Continúa ...
+
+Página No: 5/6
+ 
+PACIENTE: 
+Gutierrez Grados Marisel
+ 
+SEXO: FEDAD:   40  AÑOSF.NAC:   30/11/1984
+REGISTRO: Centro de Toma:Del Valle (Felix Cuevas)
+Dr.(a):   
+Alejandra Correa Morales
+Código:14/149855
+Fecha Toma de Muestra:08/04/2025
+EXAMENRESULTADOUNIDADESVALOR DE REFERENCIA
+ 
+Insulina Basal, Suero
+         Método Quimioluminiscencia
+9.8
+μUI/mL
+2.3 - 26.0 
+Transferrina, Suero
+         Método Turbidimetría
+233
+mg/dL
+206 - 381 
+Valor de referencia modificado
+a partir del 20 de junio de 2024
+por cambios analíticos.
+Vitamina D 25 Hidroxy, Suero
+         Método Quimioluminiscencia
+53
+ng/mL
+<10          Bajo
+11 - 29     Moderado
+30 - 100   Ideal
+>101        Tóxico
+T3 (Triyodotironina) Total, Suero (CL010)
+         Método Quimioluminiscencia
+128.0
+ng/dL
+80.0 - 180.0 
+T4 (Tiroxina) Total, Suero (CL010)
+         Método Quimioluminiscencia
+8.1
+ug/dL
+4.5 - 12.6
+TSH-Sensitiva, Suero (CL010)
+         Método Quimioluminiscencia
+1.7810
+mUl/L
+0.4001 - 4.0490 
+Valor de referencia modificado a partir
+del 18 de marzo de 2025 por cambios
+analíticos.
+T4 (Tiroxina) Libre, Suero (CL010)
+         Método Quimioluminiscencia
+0.96
+ng/dL
+0.64 - 1.79 
+Iodo Proteico
+         Método Quimioluminiscencia
+5.3
+ug/dl
+4.0 - 8.0
+Resistencia a la Insulina (HOMA)
+2.0
+0.0 - 2.1
+... Continúa ...
+
+Página No: 6/6
+ 
+PACIENTE: 
+Gutierrez Grados Marisel
+ 
+SEXO: FEDAD:   40  AÑOSF.NAC:   30/11/1984
+REGISTRO: Centro de Toma:Del Valle (Felix Cuevas)
+Dr.(a):   
+Alejandra Correa Morales
+Código:14/149855
+Fecha Toma de Muestra:08/04/2025
+EXAMENRESULTADOUNIDADESVALOR DE REFERENCIA
+ 
+Examen General de Orina (CL010)
+         Método Fotometría de Reflectancia/Microscopía Automatizada
+ColorAmarillo
+Amarillo
+AspectoLigeramente Turbio
+Transparente
+pH7.0
+5.0 - 8.0
+Densidad1.015
+1.015 - 1.025
+LeucocitosNegativo
+Negativo
+NitritosNegativo
+Negativo
+ProteínasNegativo
+Negativo
+GlucosaNormal
+Normal
+Cuerpos CetónicosNegativo
+Negativo
+UrobilinogenoNormal
+Normal
+BilirrubinasNegativo
+Negativo
+HemoglobinaNegativo
+Negativo
+EXAMEN MICROSCOPICO :
+Células EpitelialesNo se observaron.
+Escasas
+Leucocitos2
+< 4 por campo
+Eritrocitos0
+< 3 por campo
+BacteriasEscasas
+No se observan
+Cristales de Fosfatos AmorfosRegulares
+Escasos
+ObservacionesMuestra de orina recolectada el día 22
+de abril de 2025.
+Filtrado Glomerular, Estimado (TFGe)
+         Método Calculo CKD-EPI 2021
+Creatinina Suero0.7
+mg/dL
+0.5 - 1.0
+Índice de Filtración Glomerular105
+mL/min/1.73 m2
+> 60
+ * (RESULTADOS FUERA DE RANGO NORMAL)
+ 
+ 
+Formato de fechas en 'Día/Mes/Año' Biomédica de Referencia S.A.P.I de C.V. BRE9205181I1
+AVISO DE PRIVACIDAD DE DATOS: En Biomédica de Referencia estamos comprometidos en mantener la confidencialidad de los datos
+de los usuarios, en cumplimiento de la “Ley federal de protección de datos personales en posesión de los particulares.
+Dudas,comentarios o sugerencias, voz_del_cliente@bioderef.com

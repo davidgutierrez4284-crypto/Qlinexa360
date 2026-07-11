@@ -73,6 +73,7 @@ COPY --from=builder /app/src/templates ./src/templates
 COPY --from=builder /app/src/templates ./dist/templates
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY scripts ./scripts
+COPY data ./data
 
 RUN mkdir -p /app/uploads/recipes
 

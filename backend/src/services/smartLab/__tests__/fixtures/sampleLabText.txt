@@ -1,0 +1,6 @@
+﻿Laboratorio Clinico Demo
+Fecha: 15/03/2024
+Hemoglobina 14.2 g/dL (12-16)
+Glucosa 95 mg/dL 70-100
+Creatinina 1.1 mg/dL ref: 0.6-1.2
+Colesterol total 180 mg/dL de 0 a 200
