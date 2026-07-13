@@ -19,7 +19,15 @@ const VENDOR_SIGNALS: VendorSignal[] = [
     vendor: 'salud_digna',
     laboratoryName: 'Salud Digna',
     weight: 1,
-    patterns: [/salud\s*digna/i, /salud-digna\.com/i, /saluddigna\.com/i],
+    patterns: [
+      /salud\s*digna/i,
+      /salud-digna\.(?:com|org)/i,
+      /saluddigna\.com/i,
+      /centro\s+anal[ií]tico\s+de\s+coyoac[aá]n/i,
+      /\bRSV\d{8,}\b/,
+      /reimpresi[oó]n\s+de\s+resultados/i,
+      /sysmex\s+xn-9000/i,
+    ],
   },
   {
     vendor: 'lapi',

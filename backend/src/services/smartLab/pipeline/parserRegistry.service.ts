@@ -2,11 +2,11 @@ import { chopoParser } from './parsers/chopo.parser';
 import { biomedicaParser } from './parsers/biomedica.parser';
 import { genericParser, parseWithRegisteredParsers } from './parsers/generic.parser';
 import { lapiParser } from './parsers/lapi.parser';
+import { saludDignaParser } from './parsers/saludDigna.parser';
 import {
   carpermorParser,
   laboratoriosRuizParser,
   olabParser,
-  saludDignaParser,
 } from './parsers/vendorStacked.parser';
 import type { LabParser } from './labParser.interface';
 

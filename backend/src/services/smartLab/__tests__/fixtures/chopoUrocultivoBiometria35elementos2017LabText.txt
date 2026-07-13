@@ -1,0 +1,473 @@
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 1 de 6
+LOPEZ HERNANDEZ BLANCA ESTELA
+Femenino 29
+ DR(A). GERARDO QUIROZ GARZA
+FB0140111
+17/04/2017  07:59:40a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 30928178 
+Orden:
+ID Paciente:
+11865773
+UROCULTIVO
+MICROSCOPIA
+___
+ 
+Leucocitos
+No Observados
+ 
+Bacterias
+No Observados
+ 
+Levaduras
+No Observados
+ 
+CULTIVO
+___
+ 
+Aislamiento
+Sin desarrollo microbiano
+ 
+Método: Cultivo bacteriológico en medios específicos
+SUPER QUIMICA DE 35 ELEMENTOS
+Glucosa
+88
+55 - 99 mg/dL
+Urea
+20.2
+16.6 - 48.5 mg/dL
+Nitrógeno de urea en sangre (BUN)
+9.3
+6 - 20 mg/dL
+Creatinina
+0.58
+0.5 - 1.2 mg/dL
+Relación BUN/creat
+16
+11.8 - 21.0 
+Ácido úrico
+3.3
+2.4 - 5.7 mg/dL
+Colesterol
+179
+< 200 mg/dL
+Límites de Referencia (mg/dL)
+=============================
+< 200     Deseable
+200 - 239 Limítrofe
+> o = 240 Alto
+Colesterol HDL
+75
+> 60 mg/dL
+Límites de Referencia (mg/dL)
+=============================
+< 40     Bajo
+> o = 60 Óptimo
+Triglicéridos
+111
+< 150 mg/dL
+Límites de Referencia (mg/dL)
+=============================
+< 150     Normal
+150 - 199 Moderadamente alto
+200 - 499 Alto
+> o = 500 Muy alto
+Colesterol LDL
+95
+< 100 mg/dL
+Límites de Referencia (mg/dL)
+=============================
+< 100     Óptimo
+100 - 129 Cercano al óptimo
+130 - 159 Limítrofe
+www.chopo.com.mx
+SUCURSAL GUADALUPE INN
+Av. Revolución No.1540   Col. GUADALUPE INN C.P.1020
+ALVARO OBREGON, DISTRITO FEDERAL
+Gracias por su preferencia.
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 2 de 6
+LOPEZ HERNANDEZ BLANCA ESTELA
+Femenino 29
+ DR(A). GERARDO QUIROZ GARZA
+FB0140111
+17/04/2017  07:59:40a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 30928178 
+Orden:
+ID Paciente:
+11865773
+160 - 189 Alto
+> o = 190 Muy alto
+VLDL colesterol
+22
+<35 mg/dL
+Colesterol no-HDL
+104
+< 130 mg/dL
+Límites de referencia Colesterol no-HDL (mg/dl)
+================================================
+< 130      Óptimo
+130 - 159  Cercano al óptimo
+160 - 189  Limítrofe
+190 - 219  Alto
+> o = 220  Muy alto
+Índice aterogénico
+2.4
+< 4.5 
+Límites de Referencia
+===================== 
+< 4.5 Óptimo
+Proteínas totales
+7.1
+6.4 - 8.3 g/dL
+Albúmina
+4.1
+3.5 - 5.2 g/dL
+Globulinas
+3.0
+2.9 - 3.1 g/dL
+Relación A/G
+1.37
+1.2 - 1.67 
+Bilirrubina total
+0.34
+<1.2 mg/dL
+Bilirrubina directa
+0.16
+0.09 - 0.3 mg/dL
+Bilirrubina indirecta
+0.18
+0.01 - 0.9 mg/dL
+TGO (AST)
+18
+<  32 U/L
+TGP (ALT)
+30
+<  33 U/L
+F. Alcalina total
+64
+35 - 105 U/L
+Gama glutamil transpeptidasa
+16
+9 - 75 U/L
+LDH
+131
+135 - 214 U/L
+Hierro
+101
+33 - 193 μg/dL
+UIBC
+245
+135 - 392 μg/dL
+Captación de hierro
+346
+250 - 450 μg/dL
+Porcentaje de saturación de Hierro
+29
+15-50 %
+Calcio
+9.2
+8.6 - 10 mg/dL
+Fósforo
+3.5
+2.5 - 4.5 mg/dL
+Magnesio en sangre
+1.96
+1.6 - 2.6 mg/dL
+Sodio
+138
+136 - 145 meq/L
+Potasio
+3.8
+3.5 - 5.1 meq/L
+Cloro
+101
+98 - 107 meq/L
+Inmunoglobulina A
+117
+70 - 400 mg/dL
+Inmunoglobulina G
+1192
+700 - 1600 mg/dL
+Inmunoglobulina M
+133
+40 - 230 mg/dL
+Proteína C Reactiva ultrasensible
+0.829
+< 0.5 mg/dL
+www.chopo.com.mx
+SUCURSAL GUADALUPE INN
+Av. Revolución No.1540   Col. GUADALUPE INN C.P.1020
+ALVARO OBREGON, DISTRITO FEDERAL
+Gracias por su preferencia.
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 3 de 6
+LOPEZ HERNANDEZ BLANCA ESTELA
+Femenino 29
+ DR(A). GERARDO QUIROZ GARZA
+FB0140111
+17/04/2017  07:59:40a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 30928178 
+Orden:
+ID Paciente:
+11865773
+Método: Fotometría automatizada
+BIOMETRÍA HEMÁTICA
+Leucocitos
+8.03
+3.6-11.6 miles/μL
+Eritrocitos
+4.78
+4.50-5.20 millones/μL
+Hemoglobina
+14.2
+12.0-16.0 g/dL
+Hematócrito
+41.7
+37.0-47.0 %
+Volumen Corp. Medio
+87.2
+78.0-99.0 fL
+Hemoglobina Corp. Media
+29.7
+27.0-31.0 pg
+Conc. Media de Hemoglobina Corp.
+34.1
+32.0-36.0 g/dL (%)
+Ancho de Distrib. de Eritrocitos (CV)
+13.6
+11.5 - 17.0 %
+Ancho de Distrib. de Eritrocitos (SD)
+43.5
+39 - 57 fL
+Plaquetas
+293
+150-500 miles/μL
+Volumen plaquetario medio
+10.5
+9.6 - 13.4 fL
+Neutrófilos
+61.8
+38.4-74.6 %
+Linfocitos
+28.3
+16.5-49.6 %
+Monocitos
+8.0
+4.6-12.7 %
+Eosinófilos
+1.7
+1.0-4.0 %
+Basófilos
+0.2
+0.0-1.0 %
+Neutrófilos
+4.96
+1.69-7.16 miles/μL
+Linfocitos
+2.27
+1.05-3.53 miles/μL
+Monocitos
+0.64
+0.25-0.90 miles/μL
+Eosinófilos
+0.14
+0.02-0.50 miles/μL
+Basófilos
+0.02
+0.01-0.10 miles/μL
+Método: Citometría de flujo
+AC  A  VIRUS  DE  INMUNODEFICIENCIA EN SUERO
+Anticuerpos anti-HIV  1-2
+No Reactivo
+No reactivo 
+La determinación de HIV 1-2 por este método es una prueba de escrutinio, los resultados reactivos o 
+indeterminados deben confirmarse por el método de Western blot (prueba confirmatoria)
+Método: Electroquimioluminiscencia
+V.D.R.L.
+V.D.R.L.
+Negativo
+Negativo 
+La determinación de VDRL es una prueba inespecífica, se sugiere que los casos positivos sean 
+confirmados utilizando un método treponémico.
+Muestra
+Suero
+ 
+Método: Aglutinación en placa
+www.chopo.com.mx
+SUCURSAL GUADALUPE INN
+Av. Revolución No.1540   Col. GUADALUPE INN C.P.1020
+ALVARO OBREGON, DISTRITO FEDERAL
+Gracias por su preferencia.
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 4 de 6
+LOPEZ HERNANDEZ BLANCA ESTELA
+Femenino 29
+ DR(A). GERARDO QUIROZ GARZA
+FB0140111
+17/04/2017  07:59:40a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 30928178 
+Orden:
+ID Paciente:
+11865773
+HORMONA ESTIMULANTE DE TIROIDES EN SUERO
+Hormona Estimulante de Tiroides (TSH)
+0.636
+0.27 - 4.2 μUI/mL
+Método: Electroquimioluminiscencia
+EXAMEN GENERAL DE ORINA
+EXAMEN FÍSICO
+___
+ 
+Color
+Amarillo
+Amarillo 
+Aspecto
+Claro
+Claro 
+Densidad
+1.026
+1.005 - 1.030 
+EXAMEN QUÍMICO
+___
+ 
+pH
+5.0
+5 - 7.5 
+Leucocitos
+Negativo
+Negativo ó < 10 leu/uL
+Nitritos
+Negativo
+Negativo 
+Proteínas
+Negativo
+Negativo ó < 10 mg/dL
+Glucosa
+Negativo
+Negativo mg/dL
+Cetonas
+5
+Negativo ó <5 mg/dL
+Bilirrubina
+Negativo
+Negativo ó < 0.2 
+Urobilinógeno
+Negativo
+Negativo ó < 1 mg/dL
+Hemoglobina
+Negativo
+Negativo ó < 5 eri/uL
+EXAMEN MICROSCÓPICO
+___
+ 
+Leucocitos
+Ausentes
+Ausentes ó 1 - 5 /campo
+Eritrocitos
+Ausentes
+Ausentes ó 1 - 2 /campo
+Eritrocitos dismórficos
+Ausentes
+Ausentes 
+Cilindros
+Ausentes
+Ausentes 
+Cristales
+Ausentes
+Ausentes 
+Células Pavimentosas
+Ausentes
+Ausentes - Escasas 
+Células de transición
+Ausentes
+Ausentes - Escasas 
+Células Tubulares Renales
+Ausentes
+Ausentes - Escasas 
+Redes Mucoides
+Ausentes
+Ausentes - Escasas 
+Bacterias
+Ausentes
+Ausentes 
+Levaduras
+Ausentes
+Ausentes 
+Método: Espectrofotometría de reflectancia y microscopía de contraste de fases
+INFORME FINAL ENVIADO POR CORREO ELECTRONICO
+Gracias por permitirnos servirle
+Responsable del Laboratorio de Análisis Clínicos
+Q.F.B. Mario García Sánchez  Cédula Profesional: 895854
+www.chopo.com.mx
+SUCURSAL GUADALUPE INN
+Av. Revolución No.1540   Col. GUADALUPE INN C.P.1020
+ALVARO OBREGON, DISTRITO FEDERAL
+Gracias por su preferencia.
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 5 de 6
+LOPEZ HERNANDEZ BLANCA ESTELA
+Femenino 29
+ DR(A). GERARDO QUIROZ GARZA
+FB0140111
+17/04/2017  07:59:40a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 30928178 
+Orden:
+ID Paciente:
+11865773
+En    caso    de    que    su    médico    tenga    la    necesidad    de    ratificar    el    resultado,    lo    podrá    solicitar    dentro    de    los    3    días 
+posteriores   a   la   fecha   de   entrega,   el   reproceso   del   estudio   se   realiza   en   la   misma   muestra.   Posterior   a   esta   fecha 
+el    resultado    entregado    se    tomará    como    aceptado.    Aplica    en    muestras    sanguíneas    con    proceso    analítico    de    24 
+horas.
+Este   formato   electrónico   de   resultados   no   sustituye   al   formato   original.   La   impresión   de   este   documento   no 
+puede   ser   utilizado   para   procesos   legales.   El   formato   original   podrá   ser   recogido   en   cualquiera   de   nuestras 
+unidades   en   un   periódo   no   mayor   a   los   3   meses   de   solicitado   la   orden,   en   términos   de   nuestro   contrato   de 
+adhesión, firmado y aceptado en nuestras órdenes de estudio.

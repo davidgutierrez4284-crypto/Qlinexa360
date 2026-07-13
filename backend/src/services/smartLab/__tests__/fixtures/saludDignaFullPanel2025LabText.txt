@@ -1,0 +1,554 @@
+
+
+254542760090
+Nº Cliente:
+19753917
+83
+A QUIEN CORRESPONDA
+Fecha de Nacimiento:
+Folio:
+Edad:
+Médico:
+15/07/1942
+Fecha de Toma:
+Fecha de Validación:
+Sexo:
+Mujer
+Paciente:
+GRADOS JIMENEZ, SELFA LIDIA
+RSV1110951888
+Años
+11/09/202508:11:40
+11/09/202509:57:49
+Av. División del Norte #3545 Col. San Pablo Tepetlapa, Coyoacan Ciudad de México C.P. 04620
+13/09/202517:16:56
+9
+1
+Reimpresión de resultados
+Valido:
+de
+Fecha:
+QBP ALEJANDRA MONSERRAT AVENDAÑO ARTEAGA
+Q.B.P. LUZ VERONICA ALBAÑIL SALMERON
+Q.B.P. ANGEL ANTONIO RUEDA MORALES.
+___________________________________________
+Q.B.P. Angel Antonio Rueda Morales
+Responsable de Laboratorio
+Cédula profesional: 12423917
+Universidad Autónoma de Guerrero
+*=RESULTADOS FUERA DE LOS LIMITES DE REFERENCIA PARA PACIENTES NORMALES
+**CIFRA DE ALERTA
+Estudios realizamos en Centro Analítico de Coyoacán
+HEMATOLOGÍA
+BIOMETRIA HEMATICA
+LEUCOCITOS5.60
+10^3/μL3.98 - 10.04
+ERITROCITOS4.22
+10^6/μL3.93 - 5.22
+HEMOGLOBINA13.50
+g/dL11.20 - 15.70
+HEMATOCRITO40.40
+%34.10 - 44.90
+VOLUMEN CORPUSCULAR MEDIO95.70
+*
+fL79.40 - 94.80
+HEMOGLOBINA CORPUSCULAR MEDIA32.00
+pg25.60 - 32.20
+CONC. MEDIA DE HB CORPUSCULAR33.4
+g/dL32.2 - 35.5
+ANCHO DE DISTRIBUCIÓN ERITROCITARIA (D.E.)46.9
+*
+fL36.4 - 46.3
+ANCHO DE DISTRIBUCIÓN ERITROCITARIA (C.V.)13.2
+%11.7 - 14.4
+PLAQUETAS349
+10^3/μL182 - 369
+VOLUMEN PLAQUETARIO MEDIO8.50
+*
+fL9.40 - 12.30
+LINFOCITOS (%)22.9
+%19.3 - 51.7
+MONOCITOS (%)7.1
+%4.7 - 12.5
+EOSINÓFILOS (%)1.6
+%0.7 - 5.8
+BASÓFILOS (%)0.7
+%0.1 - 1.2
+NEUTRÓFILOS (%)67.5
+%34.0 - 71.1
+LINFOCITOS1.28
+10^3/μL1.18 - 3.74
+MONOCITOS0.40
+10^3/μL0.24 - 0.86
+EOSINÓFILOS0.09
+10^3/μL0.04 - 0.36
+
+RSV1110951888
+Paciente:
+GRADOS JIMENEZ, SELFA LIDIA
+Fecha de Nacimiento:
+Médico:
+Folio:
+Nº Cliente:
+19753917
+254542760090
+15/07/1942
+A QUIEN CORRESPONDA
+Sexo:
+Fecha de Toma:
+Fecha de Validación:
+Mujer
+Edad:
+11/09/202509:57:49
+Años
+83
+11/09/202508:11:40
+Av. División del Norte #3545 Col. San Pablo Tepetlapa, Coyoacan Ciudad de México C.P. 04620
+13/09/202517:16:56
+9
+2
+Reimpresión de resultados
+Valido:
+de
+Fecha:
+QBP ALEJANDRA MONSERRAT AVENDAÑO ARTEAGA
+Q.B.P. LUZ VERONICA ALBAÑIL SALMERON
+Q.B.P. ANGEL ANTONIO RUEDA MORALES.
+___________________________________________
+Q.B.P. Angel Antonio Rueda Morales
+Responsable de Laboratorio
+Cédula profesional: 12423917
+Universidad Autónoma de Guerrero
+*=RESULTADOS FUERA DE LOS LIMITES DE REFERENCIA PARA PACIENTES NORMALES
+**CIFRA DE ALERTA
+Estudios realizamos en Centro Analítico de Coyoacán
+BASÓFILOS0.04
+10^3/μL0.01 - 0.08
+NEUTRÓFILOS3.78
+10^3/μL1.56 - 6.13
+Tipo de muestra: Sangre total con EDTA
+Método: Impedancia eléctrica, citometría de flujo y SLS
+Equipo: Sysmex XN-9000 
+QUIMICA CLINICA
+GLUCOSA91.5mg/dL82.0 - 115.0
+UREA26.4mg/dL16.6 - 48.5
+NITROGENO UREICO (BUN)12.3mg/dL6.0 - 25.0
+CREATININA EN SUERO0.69mg/dL0.50 - 0.90
+RELACIÓN BUN/CREATININA17.96.0 - 25.0
+ACIDO URICO EN SUERO4.1mg/dL2.4 - 5.7
+COLESTEROL TOTAL183.5mg/dL<200.0
+
+RSV1110951888
+Paciente:
+GRADOS JIMENEZ, SELFA LIDIA
+Fecha de Nacimiento:
+Médico:
+Folio:
+Nº Cliente:
+19753917
+254542760090
+15/07/1942
+A QUIEN CORRESPONDA
+Sexo:
+Fecha de Toma:
+Fecha de Validación:
+Mujer
+Edad:
+11/09/202509:57:49
+Años
+83
+11/09/202508:11:40
+Av. División del Norte #3545 Col. San Pablo Tepetlapa, Coyoacan Ciudad de México C.P. 04620
+13/09/202517:16:56
+9
+3
+Reimpresión de resultados
+Valido:
+de
+Fecha:
+QBP ALEJANDRA MONSERRAT AVENDAÑO ARTEAGA
+Q.B.P. LUZ VERONICA ALBAÑIL SALMERON
+Q.B.P. ANGEL ANTONIO RUEDA MORALES.
+___________________________________________
+Q.B.P. Angel Antonio Rueda Morales
+Responsable de Laboratorio
+Cédula profesional: 12423917
+Universidad Autónoma de Guerrero
+*=RESULTADOS FUERA DE LOS LIMITES DE REFERENCIA PARA PACIENTES NORMALES
+**CIFRA DE ALERTA
+Estudios realizamos en Centro Analítico de Coyoacán
+TRIGLICERIDOS83.0mg/dL<150.0
+COLESTEROL HDL83.5mg/dL>65.0
+Masculino
+Sin riesgo: > 55
+Riesgo moderado: 35-55
+Alto riesgo: <35
+Femenino
+Sin riesgo > 65
+Riesgo moderado: 45-65
+Alto riesgo: < 45
+COLESTEROL LDL91.3mg/dL<100.0
+COLESTEROL VLDL16.61mg/dL11.53 - 32.11
+Nota: Cambio de valores de referencia a partir
+ del 15 de mayo de 2025
+RELACION COLESTEROL LDL/COLESTEROL HDL1.09<2.50
+INDICE DE RIESGO ATEROGENICO2.2<4.0
+BILIRRUBINA TOTAL0.44mg/dL<1.20
+BILIRRUBINA DIRECTA0.18mg/dL≤0.20
+BILIRRUBINA INDIRECTA0.26mg/dL0.10 - 1.23
+
+RSV1110951888
+Paciente:
+GRADOS JIMENEZ, SELFA LIDIA
+Fecha de Nacimiento:
+Médico:
+Folio:
+Nº Cliente:
+19753917
+254542760090
+15/07/1942
+A QUIEN CORRESPONDA
+Sexo:
+Fecha de Toma:
+Fecha de Validación:
+Mujer
+Edad:
+11/09/202509:57:49
+Años
+83
+11/09/202508:11:40
+Av. División del Norte #3545 Col. San Pablo Tepetlapa, Coyoacan Ciudad de México C.P. 04620
+13/09/202517:16:56
+9
+4
+Reimpresión de resultados
+Valido:
+de
+Fecha:
+QBP ALEJANDRA MONSERRAT AVENDAÑO ARTEAGA
+Q.B.P. LUZ VERONICA ALBAÑIL SALMERON
+Q.B.P. ANGEL ANTONIO RUEDA MORALES.
+___________________________________________
+Q.B.P. Angel Antonio Rueda Morales
+Responsable de Laboratorio
+Cédula profesional: 12423917
+Universidad Autónoma de Guerrero
+*=RESULTADOS FUERA DE LOS LIMITES DE REFERENCIA PARA PACIENTES NORMALES
+**CIFRA DE ALERTA
+Estudios realizamos en Centro Analítico de Coyoacán
+ASPARTATO AMINOTRANSFERASA (TGO)(AST)20.6U/L≤32.0
+ALANINO AMINOTRANSFERASA (TGP)(ALT)14.3U/L≤33.0
+GAMMAGLUTAMIL TRANSPEPTIDASA (GGT)9.7U/L<40.0
+FOSFATASA ALCALINA (ALP)86.7U/L35.0 - 104.0
+DESHIDROGENASA LACTICA (LDH)222.7U/L<480.0
+PROTEÍNAS TOTALES SÉRICAS6.9g/dL6.4 - 8.3
+ALBÚMINA EN SUERO4.50g/dL3.97 - 4.94
+GLOBULINA2.40
+*
+g/dL2.50 - 3.50
+RELACION A/G1.91.2 - 2.1
+CALCIO EN SUERO9.2mg/dL8.8 - 10.2
+FOSFORO EN SUERO3.8mg/dL2.5 - 4.5
+MAGNESIO EN SUERO2.1mg/dL1.6 - 2.4
+
+RSV1110951888
+Paciente:
+GRADOS JIMENEZ, SELFA LIDIA
+Fecha de Nacimiento:
+Médico:
+Folio:
+Nº Cliente:
+19753917
+254542760090
+15/07/1942
+A QUIEN CORRESPONDA
+Sexo:
+Fecha de Toma:
+Fecha de Validación:
+Mujer
+Edad:
+11/09/202509:57:49
+Años
+83
+11/09/202508:11:40
+Av. División del Norte #3545 Col. San Pablo Tepetlapa, Coyoacan Ciudad de México C.P. 04620
+13/09/202517:16:56
+9
+5
+Reimpresión de resultados
+Valido:
+de
+Fecha:
+QBP ALEJANDRA MONSERRAT AVENDAÑO ARTEAGA
+Q.B.P. LUZ VERONICA ALBAÑIL SALMERON
+Q.B.P. ANGEL ANTONIO RUEDA MORALES.
+___________________________________________
+Q.B.P. Angel Antonio Rueda Morales
+Responsable de Laboratorio
+Cédula profesional: 12423917
+Universidad Autónoma de Guerrero
+*=RESULTADOS FUERA DE LOS LIMITES DE REFERENCIA PARA PACIENTES NORMALES
+**CIFRA DE ALERTA
+Estudios realizamos en Centro Analítico de Coyoacán
+HIERRO91.7μg/dL33.0 - 193.0
+AMILASA91.20U/L28.00 - 100.00
+LIPASA22.45U/L13.00 - 60.00
+NOTA: La lipasa es una enzima que se produce en varios órganos del cuerpo, existen variaciones inespecíficas y otras que se correlacionan con enfermedades particulares
+ como insuficiencia renal y afecciones hepáticas e intestinales. La interpretación del resultado debe ser realizada por un médico.
+Tipo de muestra: Suero
+Método: Fotometría
+Equipo: Cobas 8000
+SODIO142.5mmol/L136.0 - 145.0
+POTASIO4.3mmol/L3.5 - 5.1
+CLORURO104.2mmol/L98.0 - 107.0
+Tipo de muestra: Suero
+Método: Ion selectivo
+Equipo: Cobas 8000
+INMUNOLOGIA
+
+RSV1110951888
+Paciente:
+GRADOS JIMENEZ, SELFA LIDIA
+Fecha de Nacimiento:
+Médico:
+Folio:
+Nº Cliente:
+19753917
+254542760090
+15/07/1942
+A QUIEN CORRESPONDA
+Sexo:
+Fecha de Toma:
+Fecha de Validación:
+Mujer
+Edad:
+11/09/202509:57:49
+Años
+83
+11/09/202508:11:40
+Av. División del Norte #3545 Col. San Pablo Tepetlapa, Coyoacan Ciudad de México C.P. 04620
+13/09/202517:16:56
+9
+6
+Reimpresión de resultados
+Valido:
+de
+Fecha:
+QBP ALEJANDRA MONSERRAT AVENDAÑO ARTEAGA
+Q.B.P. LUZ VERONICA ALBAÑIL SALMERON
+Q.B.P. ANGEL ANTONIO RUEDA MORALES.
+___________________________________________
+Q.B.P. Angel Antonio Rueda Morales
+Responsable de Laboratorio
+Cédula profesional: 12423917
+Universidad Autónoma de Guerrero
+*=RESULTADOS FUERA DE LOS LIMITES DE REFERENCIA PARA PACIENTES NORMALES
+**CIFRA DE ALERTA
+Estudios realizamos en Centro Analítico de Coyoacán
+TSH (HORMONA ESTIMULANTE DE LA TIROIDES)1.990μUI/mL0.270 - 4.200
+T3 TOTAL (TRIYODOTIRONINA)0.78
+*
+ng/mL0.80 - 2.00
+T3 LIBRE (TRIYODOTIRONINA LIBRE)2.28pg/mL2.00 - 4.40
+Mujeres embarazadas
+1° Trimestre: 2.46 – 3.89 pg/mL
+2° Trimestres: 2.09 – 3.55 pg/mL
+3° Trimestre: 2.01 – 3.27 pg/mL                         
+              
+Mujeres con anticonceptivos: 2.55-4.46 pg/mL 
+   
+ 
+T4 TOTAL (TIROXINA)8.57μg/dL4.50 - 12.00
+T4 LIBRE (TIROXINA LIBRE)1.35ng/dL0.92 - 1.68
+Mujeres
+Embarazadas 1er trimestre: 0.94-1.52 ng/dL
+Embarazadas 2do trimestre: 0.75-1.32 ng/dL
+Embarazadas 3er trimestre: 0.65-1.24 ng/dL
+ 
+Tipo de muestra: Suero
+Método: Electroquimioluminiscencia
+Equipo: Cobas 8000
+
+RSV1110951888
+Paciente:
+GRADOS JIMENEZ, SELFA LIDIA
+Fecha de Nacimiento:
+Médico:
+Folio:
+Nº Cliente:
+19753917
+254542760090
+15/07/1942
+A QUIEN CORRESPONDA
+Sexo:
+Fecha de Toma:
+Fecha de Validación:
+Mujer
+Edad:
+11/09/202509:57:49
+Años
+83
+11/09/202508:11:40
+Av. División del Norte #3545 Col. San Pablo Tepetlapa, Coyoacan Ciudad de México C.P. 04620
+13/09/202517:16:56
+9
+7
+Reimpresión de resultados
+Valido:
+de
+Fecha:
+QBP ALEJANDRA MONSERRAT AVENDAÑO ARTEAGA
+Q.B.P. LUZ VERONICA ALBAÑIL SALMERON
+Q.B.P. ANGEL ANTONIO RUEDA MORALES.
+___________________________________________
+Q.B.P. Angel Antonio Rueda Morales
+Responsable de Laboratorio
+Cédula profesional: 12423917
+Universidad Autónoma de Guerrero
+*=RESULTADOS FUERA DE LOS LIMITES DE REFERENCIA PARA PACIENTES NORMALES
+**CIFRA DE ALERTA
+Estudios realizamos en Centro Analítico de Coyoacán
+UROÁNALISIS
+EXAMEN GENERAL DE ORINA
+EXAMEN FÍSICO
+COLORAmarillo claro
+*
+Amarillo
+ASPECTOClaroClaro
+EXAMEN QUÍMICO
+GRAVEDAD ESPECIFICA1.007
+*
+1.016 - 1.022
+REACCION pH7.004.80 - 7.40
+ESTERASA LEUCOCITARIANegativoCel/μLNegativo
+NITRITOSNegativoNegativo
+PROTEÍNASNegativomg/dLNegativo
+GLUCOSANormalmg/dLNormal
+
+RSV1110951888
+Paciente:
+GRADOS JIMENEZ, SELFA LIDIA
+Fecha de Nacimiento:
+Médico:
+Folio:
+Nº Cliente:
+19753917
+254542760090
+15/07/1942
+A QUIEN CORRESPONDA
+Sexo:
+Fecha de Toma:
+Fecha de Validación:
+Mujer
+Edad:
+11/09/202509:57:49
+Años
+83
+11/09/202508:11:40
+Av. División del Norte #3545 Col. San Pablo Tepetlapa, Coyoacan Ciudad de México C.P. 04620
+13/09/202517:16:56
+9
+8
+Reimpresión de resultados
+Valido:
+de
+Fecha:
+QBP ALEJANDRA MONSERRAT AVENDAÑO ARTEAGA
+Q.B.P. LUZ VERONICA ALBAÑIL SALMERON
+Q.B.P. ANGEL ANTONIO RUEDA MORALES.
+___________________________________________
+Q.B.P. Angel Antonio Rueda Morales
+Responsable de Laboratorio
+Cédula profesional: 12423917
+Universidad Autónoma de Guerrero
+*=RESULTADOS FUERA DE LOS LIMITES DE REFERENCIA PARA PACIENTES NORMALES
+**CIFRA DE ALERTA
+Estudios realizamos en Centro Analítico de Coyoacán
+                                     (<30 mg/dL)              
+                                                                      
+                 
+CETONASNegativomg/dLNegativo
+UROBILINÓGENONormalmg/dLNormal
+BILIRRUBINASNegativomg/dLNegativo
+SANGRE (ERIT. LISADOS)NegativoCel/μLNegativo
+Tipo de muestra: Orina
+Método: Fotometría
+Equipo: Cobas 6500
+EXAMEN MICROSCOPICO
+LEUCOCITOS1por campo0 - 2
+ERITROCITOS3por campo0 - 4
+BACTERIASAusentesAusentes
+CÉLULAS EPITELIALES NO ESCAMOSASAusentesAusentes
+
+RSV1110951888
+Paciente:
+GRADOS JIMENEZ, SELFA LIDIA
+Fecha de Nacimiento:
+Médico:
+Folio:
+Nº Cliente:
+19753917
+254542760090
+15/07/1942
+A QUIEN CORRESPONDA
+Sexo:
+Fecha de Toma:
+Fecha de Validación:
+Mujer
+Edad:
+11/09/202509:57:49
+Años
+83
+11/09/202508:11:40
+Valido:
+Fecha:
+13/09/202517:16:56
+QBP ALEJANDRA MONSERRAT AVENDAÑO ARTEAGA
+Q.B.P. LUZ VERONICA ALBAÑIL SALMERON
+Reimpresión de resultados
+Av. División del Norte #3545 Col. San Pablo Tepetlapa, Coyoacan Ciudad de México C.P. 04620
+9
+de
+9
+Q.B.P. ANGEL ANTONIO RUEDA MORALES.
+___________________________________________
+Q.B.P. Angel Antonio Rueda Morales
+Responsable de Laboratorio
+Cédula profesional: 12423917
+Universidad Autónoma de Guerrero
+*=RESULTADOS FUERA DE LOS LIMITES DE REFERENCIA PARA PACIENTES NORMALES
+**CIFRA DE ALERTA
+Estudios realizamos en Centro Analítico de Coyoacán
+CÉLULAS EPITELIALES ESCAMOSASAusentesAusentes
+FILAMENTO MUCOIDEAusentesAusentes
+CRISTALESAusentesAusentes
+LEVADURASAusentesAusentes
+CILINDROS HIALINOSAusentespor campoAusentes
+CILINDROS PATOLÓGICOSAusentespor campoAusentes
+Tipo de muestra: Orina
+Método: Microscopía
+Equipo: Cobas 6500
+
+
+
+GRADOS JIMENEZ SELFA LIDIA
+QUÍMICA CLÍNICA
+En esta hoja encontrarás el resumen comparativo de tu tres estudios más recientes de tu QUÍMICA CLÍNICA.
+Este registro es un referente útil para que tú y tu médico puedan dar seguimiento a tu salud y tomar decisiones informadas.
+07-ABR.-202511-SEP.-2025
+GLUCOSA-96.891.52mg/dL
+UREA-3026.39mg/dL
+CREATININA EN SUERO-0.780.69mg/dL
+ACIDO URICO EN SUERO-5.14.12mg/dL
+COLESTEROL TOTAL-217.1183.5mg/dL
+TRIGLICERIDOS-66.983.04mg/dL
+COLESTEROL HDL-93.183.49mg/dL
+COLESTEROL LDL-11091.3mg/dL
+ASPARTATO AMINOTRANSFERASA (TGO)(AST)-19.220.6mg/dL
+ALANINO AMINOTRANSFERASA (TGP)(ALT)-16.814.34mg/dL
+GAMMAGLUTAMIL TRANSPEPTIDASA (GGT)-12.29.67mg/dL
+FOSFATASA ALCALINA (ALP)-90.786.73mg/dL
+PROTEINAS TOTALES SÉRICAS-7.16.9mg/dL
+ALBUMINA EN SUERO-4.64.5mg/dL
+GLOBULINA-2.52.4mg/dL
+HIERRO-103.391.71mg/dL

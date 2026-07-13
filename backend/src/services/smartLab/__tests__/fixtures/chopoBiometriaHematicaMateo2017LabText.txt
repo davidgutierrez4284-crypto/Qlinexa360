@@ -1,0 +1,212 @@
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 1 de 3
+GUTIERREZ LOPEZ MATEO
+Masculino 2
+ DR(A). A QUIEN CORRESPONDA
+IJ0026127
+27/12/2017  08:38:58a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 33208974 
+Orden:
+ID Paciente:
+14297459
+BIOMETRÍA HEMÁTICA
+Leucocitos
+12.98
+3.8-14.8 miles/μL
+Eritrocitos
+4.72
+4.00-5.20 millones/μL
+Hemoglobina
+13.5
+11.5-15.5 g/dL
+Hematócrito
+39.2
+35.0-45.0 %
+Volumen Corp. Medio
+83.1
+70.0-99.0 fL
+Hemoglobina Corp. Media
+28.6
+27.0-31.0 pg
+Conc. Media de Hemoglobina Corp.
+34.4
+32.0-36.0 g/dL (%)
+Ancho de Distrib. de Eritrocitos (CV)
+14.2
+11.5 - 17.0 %
+Ancho de Distrib. de Eritrocitos (SD)
+43.5
+39 - 57 fL
+Plaquetas
+503
+150-500 miles/μL
+Volumen plaquetario medio
+8.7
+9.6 - 13.4 fL
+Neutrófilos
+39.3
+18.8-65.6 %
+Linfocitos
+48.3
+23.8-70.0 %
+Monocitos
+8.8
+4.4-13.7 %
+Eosinófilos
+3.3
+1.0-4.0 %
+Basófilos
+0.3
+0.0-1.0 %
+Neutrófilos
+5.10
+1.13-6.77 miles/μL
+Linfocitos
+6.27
+1.64-6.29 miles/μL
+Monocitos
+1.14
+0.27-1.09 miles/μL
+Eosinófilos
+0.43
+0.01-0.63 miles/μL
+Basófilos
+0.04
+0.00-0.10 miles/μL
+Método: Citometría de flujo
+INMUNOGLOBULINAS EN SUERO
+Inmunoglobulina A
+95
+20 - 100 mg/dL
+Inmunoglobulina G
+797
+453 - 916 mg/dL
+Inmunoglobulina M
+100
+19 - 146 mg/dL
+Método: Turbidimetría
+INMUNOGLOBULINA E (IgE) EN SUERO
+Inmunoglobulina E (IgE)
+798.3
+< 60 UI/mL
+Método: Electroquimioluminiscencia
+www.chopo.com.mx
+SUCURSAL GLORIETA LAS PALMAS
+SALTO DEL AGUA MZ.39 LT 6   Col. MANANTIALES C.P.62746
+CUAUTLA, MORELOS
+Gracias por su preferencia.
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 2 de 3
+GUTIERREZ LOPEZ MATEO
+Masculino 2
+ DR(A). A QUIEN CORRESPONDA
+IJ0026127
+27/12/2017  08:38:58a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 33208974 
+Orden:
+ID Paciente:
+14297459
+INMUNOGLOBULINA G SUBCLASES 1-4
+IgG 1
+720.0
+ mg/dL
+IgG 2
+128.0
+ mg/dL
+IgG 3
+10.6
+ mg/dL
+IgG 4
+55.1
+ mg/dL
+Límites de referencia IgG Subclases mg/dL
+================================================================
+Edad(Años)      IgG1         IgG2         IgG3         IgG4
+================================================================
+ 0 - 1        194 - 842     23 - 300    19 -  85     0.5 - 78     
+ 2 - 3        315 - 945     38 - 225    17 -  68     1.0 - 54     
+ 4 - 5        308 - 945     61 - 345    10 - 122     2.0 - 112     
+ 6 - 7        288 - 918     44 - 375    16 -  85     0.4 - 98     
+ 8 - 9        432 - 1020    72 - 430    13 -  85     2.0 - 95     
+10 - 11       423 - 1080    78 - 355    17 - 173     2.0 - 115    
+12 - 13       342 - 1150   100 - 455    28 - 258     4.0 - 136     
+14 - 17       315 -  855    64 - 495    23 - 198      11 - 157      
+>=18 años     382 -  929   241 - 700    22 - 178     4.0 - 86
+=================================================================
+Límites de referencia IgG Total (mg/dL)
+==========================================
+Edad                     IgG Total
+==========================================
+ Cordón umbilical        553 - 1360     
+ 1 mes                   213 - 765     
+ 2-5 meses               170 - 595     
+ 6-9 meses               187 - 765     
+ 10-12 meses             247 - 910         
+ 1-3 años                533 - 1078        
+ 4-6 años                592 - 1723   
+ 7-9 años                613 - 1734           
+ 10-11 años              821 - 1835 
+ 12-13 años              893 - 1823
+ 14-15 años              842 - 1618
+ >=16 años               694 - 1618
+==========================================
+IgG total
+913
+ mg/dL
+Muestra
+Suero
+ 
+Método: Nefelometría cinética
+www.chopo.com.mx
+SUCURSAL GLORIETA LAS PALMAS
+SALTO DEL AGUA MZ.39 LT 6   Col. MANANTIALES C.P.62746
+CUAUTLA, MORELOS
+Gracias por su preferencia.
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 3 de 3
+GUTIERREZ LOPEZ MATEO
+Masculino 2
+ DR(A). A QUIEN CORRESPONDA
+IJ0026127
+27/12/2017  08:38:58a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 33208974 
+Orden:
+ID Paciente:
+14297459
+INFORME FINAL ENVIADO POR CORREO ELECTRONICO
+Gracias por permitirnos servirle
+Responsable del Laboratorio de Análisis Clínicos
+Q.F.B. Mario García Sánchez  
+Universidad Autónoma Metropolitana        Cédula Profesional: 895854
+En    caso    de    que    su    médico    tenga    la    necesidad    de    ratificar    el    resultado,    lo    podrá    solicitar    dentro    de    los    3    días 
+posteriores   a   la   fecha   de   entrega,   el   reproceso   del   estudio   se   realiza   en   la   misma   muestra.   Posterior   a   esta   fecha 
+el    resultado    entregado    se    tomará    como    aceptado.    Aplica    en    muestras    sanguíneas    con    proceso    analítico    de    24 
+horas.

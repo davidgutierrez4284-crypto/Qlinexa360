@@ -1,0 +1,467 @@
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 1 de 6
+LOPEZ HERNANDEZ BLANCA ESTELA
+Femenino 32
+ DR(A). GERARDO QUIROZ GARZA
+PC0017565
+05/08/2020  06:26:02a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 41945994 
+Orden:
+ID Paciente:
+11865773
+QUÍMICA INTEGRAL DE 45 ELEMENTOS
+Glucosa
+85
+55 - 99 mg/dL
+FUNCIÓN RENAL
+___
+ 
+Urea
+25
+16.6 - 48.5 mg/dL
+Nitrógeno de urea en sangre (BUN)
+11.7
+6 - 20 mg/dL
+Creatinina
+0.70
+0.5 - 1.2 mg/dL
+Relación BUN/creat
+16
+11.8 - 21.0 
+Ácido úrico
+4.6
+2.4 - 5.7 mg/dL
+Fósforo
+3.6
+2.5 - 4.5 mg/dL
+Calcio
+9.3
+8.6 - 10 mg/dL
+Magnesio
+2.0
+1.6 - 2.6 mg/dL
+Sodio
+137
+136 - 145 meq/L
+Potasio
+3.8
+3.5 - 5.1 meq/L
+Cloro
+102
+98 - 107 meq/L
+Tasa de filtración glomerular
+114.6
+> 90 mL/min/1.73m2
+Criterios de Interpretación de la Tasa de Filtración glomerular (TFG)*: 
+======================================================================== 
+Estadio 1:     > 90  mL/min/1.73m2    TFG normal 
+Estadio 2:    60-89  mL/min/1.73m2    TFG levemente disminuida 
+Estadio 3a:   45-59  mL/min/1.73m2    TFG moderadamente disminuida 
+Estadio 3b:   30-44  mL/min/1.73m2    TFG moderadamente a severamente disminuida
+Estadio 4:    15-29  mL/min/1.73m2    TFG  severamente disminuida 
+Estadio 5:     <15  mL/min/1.73m2     Fallo renal 
+*Criterios:  Kidney Disease Improving Global Outcomes “KDIGO” Formula CKD-EPI
+Nota:
+La tasa de filtración glomerular (TFG) entre 89-60 ml/min/1.72 m2, se observa influenciada por: 
+superficie corporal total, índice de masa corporal y porcentaje de masa magra. Las guías KDIGO sugieren 
+3 determinaciones consecutivas de TFG, inferiores a 60 ml/min/1.72 m2 para considerar una posible 
+insuficiencia renal. 
+Esta guía recomienda determinar la microalbuminuria y/o Cistatina C,  como pruebas adicionales para 
+clarificar el estado renal del paciente
+RIESGO CARDIOVASCULAR
+___
+ 
+Colesterol
+192
+< 200 mg/dL
+Límites de Referencia (mg/dL)
+=============================
+< 200     Deseable
+200 - 239 Limítrofe
+> o = 240 Alto
+Colesterol HDL
+69
+40 - 60 mg/dL
+www.chopo.com.mx
+SUCURSAL AV. TOLUCA
+AVENIDA TOLUCA   Col. OLIVAR DE LOS PADRES C.P.01780
+ALVARO OBREGON, CIUDAD DE MÉXICO
+Gracias por su preferencia.
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 2 de 6
+LOPEZ HERNANDEZ BLANCA ESTELA
+Femenino 32
+ DR(A). GERARDO QUIROZ GARZA
+PC0017565
+05/08/2020  06:26:02a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 41945994 
+Orden:
+ID Paciente:
+11865773
+Colesterol LDL directo
+99
+< 100 mg/dL
+Límites de Referencia (mg/dL)
+=============================
+< 100     Óptimo
+100 - 129 Cercano al óptimo
+130 - 159 Limítrofe
+160 - 189 Alto
+> o = 190 Muy alto
+Triglicéridos
+164
+< 150 mg/dL
+Límites de Referencia (mg/dL)
+=============================
+< 150     Normal
+150 - 199 Moderadamente alto
+200 - 499 Alto
+> o = 500 Muy alto
+Colesterol no-HDL
+123
+< 130 mg/dL
+Límites de referencia Colesterol no-HDL (mg/dl)
+================================================
+< 130      Óptimo
+130 - 159  Cercano al óptimo
+160 - 189  Limítrofe
+190 - 219  Alto
+> o = 220  Muy alto
+Índice aterogénico
+2.8
+< 4.5 
+Límites de Referencia
+===================== 
+< 4.5 Óptimo
+Relación LDL/HDL
+1.4
+< 3.0 
+Límites de referencia
+===================
+< 3.0 Riesgo aterogénico bajo
+sd LDL
+2.38
+0 - 1.35 
+VLDL colesterol
+32
+<35 mg/dL
+Lípidos totales
+552
+380 - 748 mg/dL
+Fosfolípidos en suero
+208
+161 - 265 mg/dL
+Proteína C Reactiva ultrasensible
+1.26
+< 0.5 mg/dL
+FUNCIONAMIENTO HEPÁTICO
+___
+ 
+Bilirrubina total
+0.48
+<1.2 mg/dL
+Bilirrubina directa
+0.21
+0.09 - 0.3 mg/dL
+Bilirrubina indirecta
+0.27
+0.01 - 0.9 mg/dL
+AST (TGO)
+15
+<  32 U/L
+ALT (TGP)
+31
+<  33 U/L
+www.chopo.com.mx
+SUCURSAL AV. TOLUCA
+AVENIDA TOLUCA   Col. OLIVAR DE LOS PADRES C.P.01780
+ALVARO OBREGON, CIUDAD DE MÉXICO
+Gracias por su preferencia.
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 3 de 6
+LOPEZ HERNANDEZ BLANCA ESTELA
+Femenino 32
+ DR(A). GERARDO QUIROZ GARZA
+PC0017565
+05/08/2020  06:26:02a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 41945994 
+Orden:
+ID Paciente:
+11865773
+Relación: AST/ALT
+0.5
+< 2.0 
+Límites de referencia
+===================
+AST/ALT< 1.0 Relacionado con Hepatitis aguda viral o no alcohólica
+AST/ALT >2.0 Relacionado con Hepatitis aguda alcohólica
+Nota:
+La relación TGO/TGP tiene valor diagnóstico únicamente cuando la concentración de las transaminasas 
+están fuera de límite de referencia
+Gama glutamil transpeptidasa
+21
+9 - 75 U/L
+Proteínas totales
+7.2
+6.4 - 8.3 g/dL
+Albúmina
+4.1
+3.5 - 5.2 g/dL
+Globulinas
+3.1
+2.9 - 3.1 g/dL
+Relación A/G
+1.32
+1.2 - 1.67 
+F. Alcalina total
+64
+35 - 105 U/L
+LDH
+129
+135-214 U/L
+METABOLISMO DE HIERRO
+___
+ 
+Hierro
+115
+33 - 193 μg/dL
+UIBC
+207
+135 - 392 μg/dL
+Captación de hierro
+322
+250 - 450 μg/dL
+Porcentaje de saturación de Hierro
+35
+15-50 %
+RESPUESTA INMUNOLÓGICA
+___
+ 
+Inmunoglobulina G
+1303
+700 - 1600 mg/dL
+Inmunoglobulina A
+112
+70 - 400 mg/dL
+Inmunoglobulina M
+121
+40 - 230 mg/dL
+Método: Fotometría automatizada
+www.chopo.com.mx
+SUCURSAL AV. TOLUCA
+AVENIDA TOLUCA   Col. OLIVAR DE LOS PADRES C.P.01780
+ALVARO OBREGON, CIUDAD DE MÉXICO
+Gracias por su preferencia.
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 4 de 6
+LOPEZ HERNANDEZ BLANCA ESTELA
+Femenino 32
+ DR(A). GERARDO QUIROZ GARZA
+PC0017565
+05/08/2020  06:26:02a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 41945994 
+Orden:
+ID Paciente:
+11865773
+BIOMETRÍA HEMÁTICA
+Leucocitos
+8.25
+3.6-11.6 miles/μL
+Eritrocitos
+4.81
+4.50-5.20 millones/μL
+Hemoglobina
+14.4
+12.0-16.0 g/dL
+Hematócrito
+43.5
+37.0-47.0 %
+Volumen Corp. Medio
+90.4
+78.0-99.0 fL
+Hemoglobina Corp. Media
+29.9
+27.0-31.0 pg
+Conc. Media de Hemoglobina Corp.
+33.1
+32.0-36.0 g/dL (%)
+Ancho de Distrib. de Eritrocitos (CV)
+13.7
+11.5 - 17.0 %
+Ancho de Distrib. de Eritrocitos (SD)
+45.1
+39 - 57 fL
+Plaquetas
+308
+150-500 miles/μL
+Volumen plaquetario medio
+10.9
+9.6 - 13.4 fL
+Neutrófilos
+55.1
+38.4-74.6 %
+Linfocitos
+36.0
+16.5-49.6 %
+Monocitos
+7.4
+4.6-12.7 %
+Eosinófilos
+1.3
+1.0-4.0 %
+Basófilos
+0.2
+0.0-1.0 %
+Neutrófilos
+4.54
+1.69-7.16 miles/μL
+Linfocitos
+2.97
+1.05-3.53 miles/μL
+Monocitos
+0.61
+0.25-0.90 miles/μL
+Eosinófilos
+0.11
+0.02-0.50 miles/μL
+Basófilos
+0.02
+0.01-0.10 miles/μL
+Método: Citometría de flujo
+www.chopo.com.mx
+SUCURSAL AV. TOLUCA
+AVENIDA TOLUCA   Col. OLIVAR DE LOS PADRES C.P.01780
+ALVARO OBREGON, CIUDAD DE MÉXICO
+Gracias por su preferencia.
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 5 de 6
+LOPEZ HERNANDEZ BLANCA ESTELA
+Femenino 32
+ DR(A). GERARDO QUIROZ GARZA
+PC0017565
+05/08/2020  06:26:02a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 41945994 
+Orden:
+ID Paciente:
+11865773
+HORMONA GONADOTROFINA BETA CORIÓNICA
+Hormona Gonadotrofina Beta-Coriónica
+12940
+ mUI/mL
+Límites de referencia mUI/mL
+=========================
+No Embarazo:    =< 1 mUI/mL
+Postmenopausia: =< 7 mUI/mL
+Hombres:         < 2 mUI/mL
+Embarazo:
+===========
+ 
+3  Semanas     5.8 - 71.2
+4  Semanas     9.5 - 750
+5  Semanas     217 - 7138
+6  Semanas     158 - 31795
+7  Semanas    3697 - 163563 
+8  Semanas   32065 - 149571
+9  Semanas   63803 - 151410
+10 Semanas   46509 - 186977
+12 Semanas   27832 - 210612
+14 Semanas   13950 - 62530
+15 Semanas   12039 - 70971
+16 Semanas    9040 - 56451
+17 Semanas    8175 - 55868
+18 Semanas    8099 - 58176
+Muestra
+Suero
+ 
+Fecha de última regla
+No refiere
+ 
+Método: Electroquimioluminiscencia
+HORMONA ESTIMULANTE DE TIROIDES EN SUERO
+Hormona Estimulante de Tiroides (TSH)
+2.27
+0.19 - 4.92 μUI/mL
+Método: Electroquimioluminiscencia
+INFORME PARCIAL ENVIADO POR CORREO ELECTRONICO
+Q.F.B. Gabriela Olay Fuentes
+Universidad Nacional Autónoma de México  Cédula Profesional: 2737640
+Gracias por permitirnos servirle
+Responsable del Laboratorio de Análisis Clínicos
+www.chopo.com.mx
+SUCURSAL AV. TOLUCA
+AVENIDA TOLUCA   Col. OLIVAR DE LOS PADRES C.P.01780
+ALVARO OBREGON, CIUDAD DE MÉXICO
+Gracias por su preferencia.
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 6 de 6
+LOPEZ HERNANDEZ BLANCA ESTELA
+Femenino 32
+ DR(A). GERARDO QUIROZ GARZA
+PC0017565
+05/08/2020  06:26:02a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 41945994 
+Orden:
+ID Paciente:
+11865773
+En   caso   de   que   su   médico   tenga   la   necesidad   de   ratificar   el   resultado,   lo   podrá   solicitar   dentro   de   los   3   días 
+posteriores  a  la  fecha  de  entrega,  el  reproceso  del  estudio  se  realiza  en  la  misma  muestra.  Posterior  a  esta  fecha 
+el   resultado   entregado   se   tomará   como   aceptado.   Aplica   en   muestras   sanguíneas   con   proceso   analítico   de   24 
+horas.

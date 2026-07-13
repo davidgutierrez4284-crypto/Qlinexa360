@@ -8,7 +8,7 @@
 const STUDY_TYPE_PATTERNS: RegExp[] = [
   /(?:estudio|perfil|reporte\s+de)\s*:\s*([^\n\r]{3,80})/i,
   /\b(CURVA\s+DE\s+TOLERANCIA\s+A\s+LA\s+GLUCOSA[^\n\r]{0,40}|CURVA\s+DE\s+INSULINA[^\n\r]{0,40})\b/i,
-  /\b(QU[IÍ]MICA DE \d+ ELEMENTOS[^\n\r]{0,30}|INSULINA EN SUERO|BIOMETR[IÍ]A[^\n\r]{0,50})\b/i,
+  /\b((?:SUPER\s+)?QU[IÍ]MICA(?:\s+INTEGRAL)?\s+DE\s+\d+\s+ELEMENTOS[^\n\r]{0,30}|INSULINA EN SUERO|BIOMETR[IÍ]A[^\n\r]{0,50}|UROCULTIVO|EXAMEN GENERAL DE ORINA)\b/i,
   /\b(PERFIL\s+DE\s+LIP[IÍ]D(?:OS|ICO)(?:\s+EN\s+SUERO)?)\b/i,
   /\b(biometr[i\u00ed]a\s+hem[a\u00e1]tica|qu[i\u00ed]mica\s+sangu[i\u00ed]nea|hemograma\s+completo|perfil\s+lip[i\u00ed]dico|perfil\s+hep[a\u00e1]tico|perfil\s+renal|funci[o\u00f3]n\s+hep[a\u00e1]tica|funci[o\u00f3]n\s+renal|tiroides|electrolitos|uroan[a\u00e1]lisis|coprolog[i\u00ed]a)\b/i,
 ];
@@ -32,6 +32,10 @@ const TOMA_MUESTRA_DATE =
   /(?:fecha\s+(?:de\s+)?toma\s+(?:de\s+)?muestra|fecha\s+toma\s+de\s+muestra)[^\d\n]{0,25}(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i;
 const REPORT_DATE_LABELS =
   /(?:fecha\s+de\s+(?:resultado|reporte|impresi[o\u00f3]n|emisi[o\u00f3]n)|fecha\s+reporte|emisi[o\u00f3]n)\s*[:\-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i;
+
+/** Salud Digna: "Fecha de Toma:" y la fecha (+hora opcional) vienen en líneas posteriores. */
+const SALUD_DIGNA_TOMA_BLOCK =
+  /fecha\s+de\s+toma[\s\S]{0,400}?(\d{1,2}\/\d{1,2}\/\d{4})(?:\s*\d{2}:\d{2}:\d{2})?/i;
 
 const LAPI_FECHAS_HEADER =
   /fechas?\s*:\s*(?:atenci[o\u00f3]n\s*\/\s*toma\s*muestra\s*\/\s*emisi[o\u00f3]n)?/i;
@@ -69,6 +73,13 @@ function firstLines(text: string, n = 12): string[] {
 
 function pickLaboratoryName(text: string): string | undefined {
   if (/chopo\.com\.mx/i.test(text)) return 'CHOPO';
+  if (
+    /salud\s*digna|salud-digna\.(?:com|org)|saluddigna\.com|centro\s+anal[ií]tico\s+de\s+coyoac[aá]n|\bRSV\d{8,}\b/i.test(
+      text
+    )
+  ) {
+    return 'Salud Digna';
+  }
   for (const re of LAB_NAME_PATTERNS) {
     const m = text.match(re);
     const candidate = m?.[1]?.replace(/\s+/g, ' ').trim();
@@ -89,6 +100,14 @@ function sanitizeStudyType(raw: string): string {
 }
 
 function pickStudyType(text: string): string | undefined {
+  if (
+    /riesgo\s+de\s+fractura\s*\(?\s*FRISK|densitometr[ií]a|DMO\s+CUELLO\s+DE\s+F[EÉ]MUR|SCORE\s+DE\s+CA[IÍ]DAS/i.test(
+      text
+    )
+  ) {
+    return 'Riesgo de fractura (FRISK) / Densitometría';
+  }
+
   const glucoseCurve = text.match(CHOPO_CURVE_GLUCOSE)?.[1];
   const insulinCurve = text.match(CHOPO_CURVE_INSULIN)?.[1];
   if (glucoseCurve || insulinCurve) {
@@ -100,7 +119,7 @@ function pickStudyType(text: string): string | undefined {
   }
 
   const sectionMatch = text.match(
-    /\b(QU[IÍ]MICA DE \d+ ELEMENTOS[^\n\r]{0,30}|INSULINA EN SUERO|BIOMETR[IÍ]A[^\n\r]{0,50}|PERFIL\s+DE\s+LIP[IÍ]D(?:OS|ICO)(?:\s+EN\s+SUERO)?)\b/i
+    /\b((?:SUPER\s+)?QU[IÍ]MICA(?:\s+INTEGRAL)?\s+DE\s+\d+\s+ELEMENTOS[^\n\r]{0,30}|INSULINA EN SUERO|BIOMETR[IÍ]A[^\n\r]{0,50}|UROCULTIVO|EXAMEN GENERAL DE ORINA|PERFIL\s+DE\s+LIP[IÍ]D(?:OS|ICO)(?:\s+EN\s+SUERO)?)\b/i
   );
   if (sectionMatch?.[1]) {
     const cleaned = sanitizeStudyType(sectionMatch[1]);
@@ -133,6 +152,12 @@ function pickLabeledDate(text: string, labelRe: RegExp): Date | undefined {
   const m = text.match(labelRe);
   if (!m?.[1]) return undefined;
   return parseMxDateString(m[1]);
+}
+
+function pickSaludDignaStudyDate(text: string): Date | undefined {
+  const m = text.match(SALUD_DIGNA_TOMA_BLOCK);
+  if (m?.[1]) return parseMxDateString(m[1]);
+  return undefined;
 }
 
 function pickTomaMuestraStudyDate(text: string): Date | undefined {
@@ -173,6 +198,7 @@ function pickFirstDateExcludingBirth(text: string): Date | undefined {
 export function parseStudyMetadataFromText(text: string): LabStudyMetadata {
   const normalized = text.replace(/\r/g, '');
   const studyDate =
+    pickSaludDignaStudyDate(normalized) ??
     pickTomaMuestraStudyDate(normalized) ??
     pickLabeledDate(normalized, STUDY_DATE_LABELS) ??
     pickLapiStudyDate(normalized) ??

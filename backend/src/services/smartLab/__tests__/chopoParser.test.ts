@@ -185,6 +185,123 @@ describe('CHOPO lab parser', () => {
     expect(meta.laboratoryName).toBe('CHOPO');
     expect(meta.studyType?.toLowerCase()).toContain('perfil de lipidos en suero');
   });
+
+  it('parses biometría hemática + immunoglobulins (Mateo 2017)', () => {
+    const text = fs.readFileSync(
+      path.join(fixturesDir, 'chopoBiometriaHematicaMateo2017LabText.txt'),
+      'utf8'
+    );
+    const result = parseChopoStackedResults(text);
+    const byName = Object.fromEntries(result.map((p) => [p.analyteNameRaw.toLowerCase(), p]));
+
+    expect(isChopoReport(text)).toBe(true);
+    expect(result.length).toBeGreaterThanOrEqual(25);
+    expect(byName.leucocitos?.resultValue).toBeCloseTo(12.98);
+    expect(byName.leucocitos?.resultUnit).toMatch(/miles\/[μµ]L/i);
+    expect(byName.hemoglobina?.resultValue).toBeCloseTo(13.5);
+    expect(byName.plaquetas?.resultValue).toBeCloseTo(503);
+    expect(byName['inmunoglobulina e (ige)']?.resultValue).toBeCloseTo(798.3);
+    expect(byName['igg 4']?.resultValue).toBeCloseTo(55.1);
+  });
+
+  it('parses química de 4 elementos with hepatic panel (2018)', () => {
+    const text = fs.readFileSync(path.join(fixturesDir, 'chopoQuimica4Elementos2018LabText.txt'), 'utf8');
+    const result = parseChopoStackedResults(text);
+    const byName = Object.fromEntries(result.map((p) => [p.analyteNameRaw.toLowerCase(), p]));
+    const meta = parseStudyMetadataFromText(text);
+
+    expect(result.length).toBeGreaterThanOrEqual(15);
+    expect(byName.glucosa?.resultValue).toBeCloseTo(91);
+    expect(byName.urea?.resultValue).toBeCloseTo(28.7);
+    expect(byName.creatinina?.resultValue).toBeCloseTo(1.11);
+    expect(byName['ácido úrico']?.resultValue).toBeCloseTo(6.9);
+    expect(byName['tgo (ast)']?.resultValue).toBeCloseTo(19);
+    expect(byName['vitamina d (25,hidroxi)']?.resultValue).toBeCloseTo(32.64);
+    expect(meta.laboratoryName).toBe('CHOPO');
+    expect(meta.studyType?.toLowerCase()).toMatch(/qu[ií]mica de 4 elementos/);
+  });
+
+  it('parses química integral de 45 elementos (2020)', () => {
+    const text = fs.readFileSync(
+      path.join(fixturesDir, 'chopoQuimica45Elementos2020LabText.txt'),
+      'utf8'
+    );
+    const result = parseChopoStackedResults(text);
+    const byName = Object.fromEntries(result.map((p) => [p.analyteNameRaw.toLowerCase(), p]));
+
+    expect(result.length).toBeGreaterThanOrEqual(40);
+    expect(byName.glucosa?.resultValue).toBeCloseTo(85);
+    expect(byName.sodio?.resultValue).toBeCloseTo(137);
+    expect(byName.potasio?.resultValue).toBeCloseTo(3.8);
+    expect(byName['colesterol hdl']?.resultValue).toBeCloseTo(69);
+    expect(byName['tasa de filtración glomerular']?.resultValue).toBeCloseTo(114.6);
+    expect(byName['tasa de filtración glomerular']?.resultUnit).toMatch(/mL\/min\/1\.73/i);
+    expect(byName.hemoglobina?.resultValue).toBeCloseTo(14.4);
+  });
+
+  it('parses urocultivo + super química 35 + biometría (2017)', () => {
+    const text = fs.readFileSync(
+      path.join(fixturesDir, 'chopoUrocultivoBiometria35elementos2017LabText.txt'),
+      'utf8'
+    );
+    const result = parseChopoStackedResults(text);
+    const numeric = (name: string) =>
+      result.find((p) => p.analyteNameRaw.toLowerCase() === name && p.resultValue != null);
+    const culture = result.filter((p) =>
+      /aislamiento|no observados|sin desarrollo/i.test(
+        `${p.analyteNameRaw} ${p.resultValueText ?? ''}`
+      )
+    );
+
+    expect(result.length).toBeGreaterThanOrEqual(50);
+    expect(numeric('glucosa')?.resultValue).toBeCloseTo(88);
+    expect(numeric('leucocitos')?.resultValue).toBeCloseTo(8.03);
+    expect(numeric('hemoglobina')?.resultValue).toBeCloseTo(14.2);
+    expect(numeric('densidad')?.resultValue).toBeCloseTo(1.026);
+
+    const aislamiento = result.find((p) => /aislamiento/i.test(p.analyteNameRaw));
+    expect(aislamiento?.resultValue).toBeNull();
+    expect(aislamiento?.resultValueText).toMatch(/sin desarrollo microbiano/i);
+
+    const microLeuc = result.filter(
+      (p) => /leucocitos/i.test(p.analyteNameRaw) && /no observados/i.test(p.resultValueText ?? '')
+    );
+    expect(microLeuc.length).toBeGreaterThanOrEqual(1);
+    expect(culture.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('parses urocultivo + química 45 with EGO qualitative rows (2020)', () => {
+    const text = fs.readFileSync(
+      path.join(fixturesDir, 'chopoUrocultivo45Elementos2020LabText.txt'),
+      'utf8'
+    );
+    const result = parseChopoStackedResults(text);
+    const byName = Object.fromEntries(result.map((p) => [p.analyteNameRaw.toLowerCase(), p]));
+    const numericGlucosa = result.find(
+      (p) => /glucosa/i.test(p.analyteNameRaw) && p.resultValue != null
+    );
+
+    expect(numericGlucosa?.resultValue).toBeCloseTo(85);
+    expect(byName.aspecto?.resultValueText).toMatch(/turbio/i);
+    expect(byName.color?.resultValueText).toMatch(/[aá]mbar/i);
+    expect(byName.nitritos?.resultValueText).toMatch(/negativo/i);
+
+    const aislamiento = result.find((p) => /aislamiento/i.test(p.analyteNameRaw));
+    expect(aislamiento?.resultValueText).toMatch(/sin desarrollo microbiano/i);
+  });
+
+  it('parses biometría + química lipídica + coagulación', () => {
+    const text = fs.readFileSync(path.join(fixturesDir, 'chopoBiometriaYQuimicaLabText.txt'), 'utf8');
+    const result = parseChopoStackedResults(text);
+    const byName = Object.fromEntries(result.map((p) => [p.analyteNameRaw.toLowerCase(), p]));
+
+    expect(byName.glucosa?.resultValue).toBeCloseTo(79);
+    expect(byName.colesterol?.resultValue).toBeCloseTo(280);
+    expect(byName.triglicéridos?.resultValue).toBeCloseTo(282);
+    expect(byName.hemoglobina?.resultValue).toBeCloseTo(11.5);
+    expect(byName['tiempo de protrombina']?.resultValue).toBeCloseTo(11);
+    expect(byName.inr?.resultValue).toBeCloseTo(1);
+  });
 });
 
 describe('lab parser validation helpers', () => {

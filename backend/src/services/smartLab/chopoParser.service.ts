@@ -7,17 +7,24 @@ const FOOTER_SIGNATURE_PATTERN =
   /\b(q\.?\s*f\.?\s*b\.?|c[eé]dula\s+prof(?:esional)?|responsable\s+del\s+laboratorio)\b/i;
 
 const CHOPO_SKIP_LINE =
-  /^(hoja:|p[aá]gina|prueba$|paciente:|sexo:|fecha:|dirigido|edad:|orden:|id paciente|fecha de nacimiento|resultados$|an[aá]lisis cl[ií]nicos|bajo \(lr\)|dentro \(lr\)|sobre \(lr\)|l[ií]mites de referencia|a[nñ]os$|www\.|gracias por|grupo diagn[oó]stico|sucursal |av\.|cup[oó]n|vigencia|descuento|producto|c[oó]digo|estimado paciente|paciente id:|m[eé]todo:|informe final|responsable|acreditaci[oó]n|consulte el|recuerde que|descarga nuestra|en\s+caso\s+de|aviso importante|el\s+prestador|aplica en|posteriores|reproceso del|universidad|c[eé]dula|q\.?\s*f\.?\s*b\.?|te sugerimos|el descuento|precios sujetos|mientras m[aá]s)/i;
+  /^(hoja:|p[aá]gina|prueba$|paciente:|sexo:|fecha:|dirigido|edad:|orden:|id paciente|fecha de nacimiento|resultados$|an[aá]lisis cl[ií]nicos|bajo \(lr\)|dentro \(lr\)|sobre \(lr\)|l[ií]mites de referencia|a[nñ]os$|www\.|gracias por|grupo diagn[oó]stico|sucursal |av\.|cup[oó]n|vigencia|descuento|producto|c[oó]digo|estimado paciente|paciente id:|m[eé]todo:|informe final|responsable|acreditaci[oó]n|consulte el|recuerde que|descarga nuestra|en\s+caso\s+de|aviso importante|el\s+prestador|aplica en|posteriores|reproceso del|universidad|c[eé]dula|q\.?\s*f\.?\s*b\.?|te sugerimos|el descuento|precios sujetos|mientras m[aá]s|_{3,}$|criterios de interpretaci[oó]n|nota:$|esta gu[ií]a recomienda|la tasa de filtraci[oó]n)/i;
 
 const CHOPO_VALUE_LINE = /^[<>]?\s*[\d.,]+$/;
+
+/** Qualitative culture / EGO result tokens (non-numeric CHOPO stacked values). */
+const CHOPO_TEXT_VALUE_LINE =
+  /^(No Observados|Sin desarrollo microbiano|Negativo|Positivo|Ausentes?|Escasas?|Abundantes?|[AÁ]mbar|Amarillo|Turbio|Claro|Urato Amorfo|Oxalato de Calcio|Fosfato Amorfo)$/i;
+
+const CHOPO_TEXT_REF_LINE =
+  /^(Negativo|Positivo|Ausentes?|Escasas?|Abundantes?|Amarillo|Claro|Negativo\b|Ausentes?\b|.*\b(?:leu|eri)\/uL\b|.*\/campo\b|.*\bmg\/dL\b)/i;
 
 const DEMOGRAPHIC_LINE = /^(masculino|femenino|a quien corresponda)$/i;
 
 const CHOPO_SECTION_START =
-  /\b(CURVA\s+DE\s+TOLERANCIA\s+A\s+LA\s+GLUCOSA|CURVA\s+DE\s+INSULINA|QU[IÍ]MICA DE \d+ ELEMENTOS|INSULINA EN SUERO|BIOMETR[IÍ]A|HEMOGRAMA|PERFIL(?:\s+DE)?\s+LIP[IÍ]D(?:OS|ICO)(?:\s+EN\s+SUERO)?|PERFIL\s+[A-ZÁÉÍÓÚ]+|TRANSAMINASA|BILIRRUBINAS?\s+EN\s+SANGRE|FOSFATASA ALCALINA|GAMMA GLUTAMIL|PROTE[IÍ]NAS EN SUERO|TIROideos|ELECTROLITOS|COAGULACI[OÓ]N|UROAN[AÁ]LISIS)\b/i;
+  /\b(CURVA\s+DE\s+TOLERANCIA\s+A\s+LA\s+GLUCOSA|CURVA\s+DE\s+INSULINA|(?:SUPER\s+)?QU[IÍ]MICA(?:\s+INTEGRAL)?\s+DE\s+\d+\s+ELEMENTOS|INSULINA EN SUERO|BIOMETR[IÍ]A|HEMOGRAMA|PERFIL(?:\s+DE)?\s+LIP[IÍ]D(?:OS|ICO)(?:\s+EN\s+SUERO)?|PERFIL\s+[A-ZÁÉÍÓÚ]+|TRANSAMINASA|BILIRRUBINAS?\s+EN\s+SANGRE|FOSFATASA ALCALINA|GAMMA GLUTAMIL|PROTE[IÍ]NAS EN SUERO|TIROideos|ELECTROLITOS|COAGULACI[OÓ]N|UROAN[AÁ]LISIS|UROCULTIVO|EXAMEN GENERAL DE ORINA|EXAMEN F[IÍ]SICO|EXAMEN QU[IÍ]MICO|EXAMEN MICROSC[OÓ]PICO|FUNCI[OÓ]N RENAL|RIESGO CARDIOVASCULAR|INMUNOGLOBULINAS?\s+EN\s+SUERO)\b/i;
 
 const CHOPO_SECTION_TITLE =
-  /^(CURVA\s+DE\s+TOLERANCIA|CURVA\s+DE\s+INSULINA|TRANSAMINASA|BILIRRUBINAS?\s+EN\s+SANGRE|FOSFATASA ALCALINA|GAMMA GLUTAMIL|PROTE[IÍ]NAS EN SUERO|QU[IÍ]MICA DE \d+ ELEMENTOS|INSULINA EN SUERO|BIOMETR[IÍ]A|HEMOGRAMA|PERFIL(?:\s+DE)?\s+LIP[IÍ]D(?:OS|ICO)(?:\s+EN\s+SUERO)?|PERFIL\s+[A-ZÁÉÍÓÚ]+)/i;
+  /^(CURVA\s+DE\s+TOLERANCIA|CURVA\s+DE\s+INSULINA|TRANSAMINASA|BILIRRUBINAS?\s+EN\s+SANGRE|FOSFATASA ALCALINA|GAMMA GLUTAMIL|PROTE[IÍ]NAS EN SUERO|(?:SUPER\s+)?QU[IÍ]MICA(?:\s+INTEGRAL)?\s+DE\s+\d+\s+ELEMENTOS|INSULINA EN SUERO|BIOMETR[IÍ]A|HEMOGRAMA|PERFIL(?:\s+DE)?\s+LIP[IÍ]D(?:OS|ICO)(?:\s+EN\s+SUERO)?|PERFIL\s+[A-ZÁÉÍÓÚ]+|UROCULTIVO|EXAMEN GENERAL DE ORINA|EXAMEN F[IÍ]SICO|EXAMEN QU[IÍ]MICO|EXAMEN MICROSC[OÓ]PICO|FUNCI[OÓ]N RENAL|RIESGO CARDIOVASCULAR|MICROSCOPIA|CULTIVO$)/i;
 
 const CHOPO_CURVE_GLUCOSE_SECTION = /CURVA\s+DE\s+TOLERANCIA\s+A\s+LA\s+GLUCOSA/i;
 const CHOPO_CURVE_INSULIN_SECTION = /CURVA\s+DE\s+INSULINA/i;
@@ -38,7 +45,7 @@ const INSULIN_CURVE_REF_RANGES: Record<string, { low: number; high: number }> = 
 };
 
 const KNOWN_LAB_UNITS =
-  /^(mg\/dL|g\/dL|g\/l|mg\/l|mmol\/L|mEq\/L|meq\/L|U\/L|u\/l|μg\/dL|µg\/dL|ug\/dL|μUI\/mL|µUI\/mL|uUI\/mL|mUI\/L|UI\/L|%|pg\/mL|ng\/mL|fL|g\/dL|10\^3\/μL|10\^6\/μL|10\^3uL|10\^6uL|umol\/L|mm\/hr|copias\/mL|mm\/hr|s|seg|ratio|millones\/mm3|miles\/mm3|mUl\/L|μg\/L|ug\/L|mOsmol\/Kg|pg\/mL)$/i;
+  /^(mg\/dL|g\/dL(?:\s*\(%\))?|g\/l|mg\/l|mmol\/L|mEq\/L|meq\/L|U\/L|u\/l|μg\/dL|µg\/dL|ug\/dL|μUI\/mL|µUI\/mL|uUI\/mL|mUI\/L|UI\/L|UI\/mL|%|pg\/mL|ng\/mL|fL|10\^3\/μL|10\^6\/μL|10\^3uL|10\^6uL|umol\/L|mm\/hr|copias\/mL|s|seg|ratio|millones\/mm3|miles\/mm3|miles\/[μµ]L|millones\/[μµ]L|mUl\/L|μg\/L|ug\/L|mOsmol\/Kg|g\/cm2|g\/cm²|kg|m|mL\/min\/1\.73\s*m2|leu\/uL|eri\/uL)$/i;
 
 /** CHOPO 2012 PDFs often prefix unit lines with bullets/dots: ". mg/dL", "· mg/dL". */
 function stripUnitLinePrefix(line: string): string {
@@ -90,7 +97,7 @@ export function isRangeFragmentName(name: string): boolean {
   if (CHOPO_SECTION_TITLE.test(n)) return true;
   if (/^<\s*[\d.,]+\s*a[nñ]os\b/i.test(n)) return true;
   if (/^>\s*[\d.,]+\s*a[nñ]os\b/i.test(n)) return true;
-  if (/^(deseable|normal|bajo|alto|lim[ií]trofe|muy\s+alto|moderado|[oó]ptimo|ideal|t[oó]xico|negativo)\b/i.test(n)) return true;
+  if (/^(deseable|normal|bajo|alto|lim[ií]trofe|muy\s+alto|moderado|[oó]ptimo|ideal|t[oó]xico|negativo|ausentes?|escasas?|abundantes?)\b/i.test(n)) return true;
   if (/^(bajo|alto)\s+(riesgo|menor|mayor)\b/i.test(n)) return true;
   if (/^a\s+partir\s+del\s+\d+/i.test(n)) return true;
   if (/^fecha\s+toma\s+de\s+muestra/i.test(n)) return true;
@@ -99,6 +106,8 @@ export function isRangeFragmentName(name: string): boolean {
   if (/^\d+\s*[-–—]\s*\d+\s+(mg\/dL|mg\/dl|g\/dL|%)/i.test(n)) return true;
   if (/^mayor\s+de\s+\d+/i.test(n)) return true;
   if (/^menor\s+de\s+\d+/i.test(n)) return true;
+  if (CHOPO_TEXT_VALUE_LINE.test(n)) return true;
+  if (/^microscopia$|^cultivo$/i.test(n)) return true;
   return false;
 }
 
@@ -119,10 +128,13 @@ export function isValidLabUnit(unit: string | null | undefined): boolean {
   if (!unit) return true;
   const u = stripUnitLinePrefix(unit);
   if (!u) return true;
-  if (/\d{1,2}\/\d{1,2}/.test(u)) return false;
+  if (/\d{1,2}\/\d{1,2}/.test(u) && !/^mL\/min\/1\.73/i.test(u)) return false;
   if (/^\/\d/.test(u)) return false;
   if (/^(alto|bajo|normal|deseable|[oó]ptimo|lim[ií]trofe|elementos)$/i.test(u)) return false;
-  return KNOWN_LAB_UNITS.test(u) || /^[a-zA-Zμµ%\/\^°]+(?:\/[a-zA-Zμµ]+)?$/i.test(u);
+  if (KNOWN_LAB_UNITS.test(u)) return true;
+  if (/^mL\/min\/1\.73\s*m2$/i.test(u)) return true;
+  if (/^g\/dL\s*\(%\)$/i.test(u)) return true;
+  return /^[a-zA-Zμµ%\/\^°]+(?:\/[a-zA-Zμµ]+)?$/i.test(u);
 }
 
 function shouldSkipChopoLine(line: string): boolean {
@@ -529,6 +541,48 @@ export function parseChopoStackedResults(text: string): ParsedLabLine[] {
     }
 
     const valueLine = lines[valueLineIndex];
+
+    // Qualitative culture / EGO rows: name → text value → optional reference text
+    if (!CHOPO_VALUE_LINE.test(valueLine) && CHOPO_TEXT_VALUE_LINE.test(valueLine)) {
+      const valueRaw = valueLine.trim();
+      let rangeText: string | null = null;
+      let consumed = valueLineIndex - i + 1;
+      const rangeLineIndex = valueLineIndex + 1;
+      if (rangeLineIndex < lines.length) {
+        const maybeRef = lines[rangeLineIndex].trim();
+        if (
+          !CHOPO_VALUE_LINE.test(maybeRef) &&
+          !isValidAnalyteName(maybeRef) &&
+          (CHOPO_TEXT_REF_LINE.test(maybeRef) || CHOPO_TEXT_VALUE_LINE.test(maybeRef))
+        ) {
+          rangeText = maybeRef;
+          consumed = rangeLineIndex - i + 1;
+        } else if (
+          !isValidAnalyteName(maybeRef) &&
+          !shouldSkipChopoLine(maybeRef) &&
+          !detectSectionContext(maybeRef) &&
+          maybeRef.length <= 60
+        ) {
+          // Soft qualitative reference (e.g. "Amarillo", "Negativo ó < 10 leu/uL")
+          rangeText = maybeRef;
+          consumed = rangeLineIndex - i + 1;
+        }
+      }
+
+      pushChopoResult(results, seen, {
+        analyteNameRaw: line,
+        resultValue: null,
+        resultValueText: valueRaw,
+        resultUnit: null,
+        referenceRangeLow: null,
+        referenceRangeHigh: null,
+        referenceRangeText: rangeText,
+        rawTextSnippet: lines.slice(i, i + consumed).join(' | ').slice(0, 200),
+      });
+      i += consumed;
+      continue;
+    }
+
     if (!CHOPO_VALUE_LINE.test(valueLine)) {
       i++;
       continue;

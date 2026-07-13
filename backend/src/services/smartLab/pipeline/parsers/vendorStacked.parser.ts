@@ -8,22 +8,6 @@ const COMMON_SKIP =
 const SECTION_START =
   /\b(QU[IÍ]MICA|BIOMETR[IÍ]A|HEMOGRAMA|PERFIL\s+[A-ZÁÉÍÓÚ]+|UROAN[AÁ]LISIS|COPROLOG[IÍ]A|ORINA|TIROIDES|LIPIDOS|HEP[AÁ]TICO|RENAL)\b/i;
 
-export const saludDignaParser: LabParser = {
-  vendor: 'salud_digna',
-  name: 'SaludDignaParser',
-
-  canParse(classification: ClassifiedDocument): boolean {
-    return classification.vendor === 'salud_digna';
-  },
-
-  parse(text: string): ParameterCandidate[] {
-    return parseStackedLayout(text, {
-      sectionStart: SECTION_START,
-      skipLine: COMMON_SKIP,
-    });
-  },
-};
-
 export const olabParser: LabParser = {
   vendor: 'olab',
   name: 'OlabParser',
@@ -73,6 +57,6 @@ export const carpermorParser: LabParser = {
 };
 
 export function getVendorStackedParser(vendor: ClassifiedDocument['vendor']): LabParser | null {
-  const parsers = [saludDignaParser, olabParser, laboratoriosRuizParser, carpermorParser];
+  const parsers = [olabParser, laboratoriosRuizParser, carpermorParser];
   return parsers.find((p) => p.vendor === vendor) ?? null;
 }

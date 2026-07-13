@@ -1,0 +1,134 @@
+
+
+Fecha de nacimiento:
+Médico:
+Fecha de toma:
+Fecha de validación
+Paciente:Sexo:Edad:
+Somatometría:
+Sucursal:
+FEMENINO
+SELFA LIDIA GRADOS JIMENEZ
+A QUIEN CORRESPONDA
+*RSV1187556042*
+21/01/202615/07/1942
+21/01/2026
+83 años
+IMC:
+ 24.00
+Peso:Kg.
+Talla:m.
+1.45
+Denominación:
+Normal
+*Criterios de la Organización Mundial de la Salud (OMS)
+50.0
+COYOACÁN DIVISIÓN NORTE
+En Salud Digna nos interesamos por contribuir al diagnóstico oportuno de  nuestros pacientes, por eso contamos con un cálculo que 
+nos permite estimar el riesgo de fractura(FRISK) en los próximos dos años. Este cálculo se basa en factores de riesgos que pueden 
+existir en el historial clínico que nuestros pacientes nos proporcionan, además de los resultados de la densidad mineral de columna 
+lumbar(L2-L4) y el cuello del fémur
+Se realiza el estudio de densitometria en el equipo Lunar Prodigy advance DXA de General Electric, con el sistema operativo encore 
+V17/18, Obteniendo el siguiente resultado:
+PESO
+# FX PREVIAS >20 AÑOS
+Riesgo de fractura:
+SCORE DE CAÍDAS
+DMO CUELLO DE FÉMUR
+DMO COLUMNA LUMBAR
+FACTORES DE RIESGO
+RESULTADOS DE EVALUACIÓN
+TABLA DE INTERPRETACIÓN
+ 1
+ 4.44
+ 1
+50.0 kg
+0.9530  g/cm²
+0.8100 g/cm²
+Valores:Riesgo de fractura:
+Menor a 5.4
+Riesgo BAJO de fractura en los siguientes dos años
+Mayor o igual a 5.4
+Riesgo ALTO de fractura en los siguientes dos años
+CALCULO DE RIESGO DE FRACTURA
+Una vez realizado el cálculo de factor de riesgo de fractura se obtiene la siguiente puntación(ver tabla de interpretación)
+MUSCOLOSKELETAL IMAGING: Fracture Risk Score, Radiology: Volume 241: Number 1-October 2006.
+Estos resultados han sido descargados desde el sitio web salud-digna.org.
+
+ 
+ 
+ 
+ 
+Fecha :                
+Pacie nte:             
+Fecha d e na cimient o:   
+Edad:                     años 
+Sexo:                      
+Médic o s olicita nte:      
+Nombre  del est udi o:   Sucur sal:   
+ 
+  
+  
+  
+Fecha:              miércoles, 21 de enero de 2026 Reservación:     1187556043 
+Paciente:         GRADOS JIMENEZ, SELFA LIDIA Sexo:                   Femenino 
+Fecha de nacimiento:  15/Jul./1942 Edad:                   83 años 
+Médico solicitante:  A QUIEN CORRESPONDA 
+Sucursal:  COYOACAN DIVISION NORTE 
+Nombre del estudio: MASTOGRAFIA 
+  
+ 
+ 
+Patrón mastográfico tipo C del ACR: Las mamas son heterogéneamente densas, que puede ocultar 
+algunos nódulos pequeños. 
+BIRADS 0: Estudio incompleto, requiere evaluación adicional y/o comparación con estudios previos.  
+Nota: 
+Las mamas densas pueden ocultar lesiones, lo cual disminuye la sensibilidad de la mastografía y pueden requerirse estudios adicionales a la brevedad.  
+ La correlación histopatológica no debe evitarse de existir indicación clínica.  
+ En apoyo a su salud y a consideración de su médico tratante, le informamos que contamos con estudios de biopsias con diagnóstico histopatológico. Si está 
+interesado(a), puede comunicarse al (55)944-078-95.  
+ *En caso de haber recibido notificación solicitando tomas adicionales, usted cuenta con 15 días naturales posteriores a la emisión de este reporte para realizarlo.  
+   
+ 
+ ATENTAMENTE 
+ 
+ 
+ 
+ 
+ 
+ 
+ DRA. NANCY MARGARITA GUTIERREZ CASTAÑEDA 
+ Médico Especialista en Radiología e Imagen. Ced. Prof. 13164273 
+Certificado por el Consejo Mexicano de Radiología e Imagen 
+  
+ Página 1 de 1 
+La interpretación del resultado debe realizarse siempre por su médico, quien le dará una mejor orientación sobre su seguimiento y diagnóstico oportuno. 
+  
+ 
+ 
+  
+ 
+Técnica: Se realiza mastografía digital en proyecciones convencionales, cráneo caudal  y oblicuo medio 
+lateral. 
+Motivo del estudio:Tamizaje mamario 
+ 
+Hallazgos: 
+Piel con espesor conservado, sin engrosamientos focales o difusos. 
+Complejos areola pezón de morfología normal. 
+Composición global de tipo heterogéneamente denso. 
+En ambas mamas no se observa distorsión arquitectural, calcificaciones o nódulos de sospecha.  
+Calcificaciones puntiformes aisladas de distribución difusa típicamente benignas.  
+En CSE tercio medio de la mama derecha se identifica nódulo ovalado, con márgenes oscurecidos, 
+isodenso. 
+Región  retroglandular  y  músculos  pectorales de  morfología  y  densidad  normal,  no  se  observan 
+lesiones.  
+Axilas sin ganglios. 
+ 
+Comparación con estudios previos:Ninguno. 
+Recomendaciones:Valoración clínica por médico tratante. Se recomienda complementar con ultrasonido 
+mamario bilateral por la densidad del tejido y para caracterización de nódulo. 
+Conclusión diagnóstica:  
+Nódulo oscurecido en mama derecha, requiere correlación ecográfica.  
+Calcificaciones típicamente benignas. 
+ 
+IMÁGENES DIGITALES

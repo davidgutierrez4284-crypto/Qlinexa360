@@ -91,7 +91,14 @@ describe('clinicalValidator', () => {
 describe('lab extraction pipeline', () => {
   const cases: Array<{ fixture: string; vendor: string; analyte: string }> = [
     { fixture: 'chopoLabText.txt', vendor: 'chopo', analyte: 'glucosa' },
+    { fixture: 'chopoBiometriaHematicaMateo2017LabText.txt', vendor: 'chopo', analyte: 'hemoglobina' },
+    { fixture: 'chopoQuimica4Elementos2018LabText.txt', vendor: 'chopo', analyte: 'glucosa' },
+    { fixture: 'chopoQuimica45Elementos2020LabText.txt', vendor: 'chopo', analyte: 'sodio' },
+    { fixture: 'chopoUrocultivoBiometria35elementos2017LabText.txt', vendor: 'chopo', analyte: 'creatinina' },
+    { fixture: 'chopoUrocultivo45Elementos2020LabText.txt', vendor: 'chopo', analyte: 'colesterol' },
+    { fixture: 'chopoBiometriaYQuimicaLabText.txt', vendor: 'chopo', analyte: 'plaquetas' },
     { fixture: 'saludDignaLabText.txt', vendor: 'salud_digna', analyte: 'glucosa' },
+    { fixture: 'saludDignaFullPanel2025LabText.txt', vendor: 'salud_digna', analyte: 'leucocitos' },
     { fixture: 'lapiLabText.txt', vendor: 'lapi', analyte: 'colesterol' },
     { fixture: 'olabLabText.txt', vendor: 'olab', analyte: 'hemoglobina' },
     { fixture: 'laboratoriosRuizLabText.txt', vendor: 'laboratorios_ruiz', analyte: 'potasio' },

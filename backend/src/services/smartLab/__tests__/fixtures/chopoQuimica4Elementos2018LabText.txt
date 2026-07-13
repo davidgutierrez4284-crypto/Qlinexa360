@@ -1,0 +1,149 @@
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 1 de 4
+GUTIERREZ GRADOS DAVID ISAAC
+Masculino 35
+ DR(A). JOAQUIN GERARDO JOYA GALEANA
+FB0159641
+13/01/2018  07:53:55a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 33338942 
+Orden:
+ID Paciente:
+3204351
+TRANSAMINASA GLUT. OXALOACÉTICA (TGO) EN SUERO
+TGO (AST)
+19
+<  40 U/L
+Método: Fotometría automatizada
+BILIRRUBINAS EN SANGRE
+Bilirrubina total
+0.41
+<1.2 mg/dL
+Bilirrubina directa
+0.14
+0.09 - 0.3 mg/dL
+Bilirrubina indirecta
+0.27
+0.01 - 0.9 mg/dL
+Método: Fotometría automatizada
+TRANSAMINASA GLUTÁMICO PIRÚVICA (ALT) SUERO
+TGP (ALT)
+26
+<  41 U/L
+Método: Fotometría automatizada
+FOSFATASA ALCALINA EN SUERO
+F. Alcalina total
+86
+40 - 130 U/L
+Método: Fotometría automatizada
+GAMMA GLUTAMIL TRANSPEPTIDASA EN SUERO
+Gama glutamil transpeptidasa
+34
+9 - 75 U/L
+Método: Fotometría automatizada
+PROTEÍNAS EN SUERO Y RELACIÓN A/G
+Proteínas totales
+6.8
+6.4 - 8.3 g/dL
+Albúmina
+4.8
+3.5 - 5.2 g/dL
+Globulinas
+2.0
+2.9 - 3.1 g/dL
+Relación A/G
+2.40
+1.2 - 1.67 
+Método: Fotometría automatizada
+QUÍMICA DE 4 ELEMENTOS
+Glucosa
+91
+55 - 99 mg/dL
+Urea
+28.7
+16.6 - 48.5 mg/dL
+Creatinina
+1.11
+0.70 - 1.2 mg/dL
+Ácido úrico
+6.9
+3.4 - 7.0 mg/dL
+Método: Fotometría automatizada
+www.chopo.com.mx
+SUCURSAL GUADALUPE INN
+Av. Revolución No.1540   Col. GUADALUPE INN C.P.1020
+ALVARO OBREGON, DISTRITO FEDERAL
+Gracias por su preferencia.
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 2 de 4
+GUTIERREZ GRADOS DAVID ISAAC
+Masculino 35
+ DR(A). JOAQUIN GERARDO JOYA GALEANA
+FB0159641
+13/01/2018  07:53:55a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 33338942 
+Orden:
+ID Paciente:
+3204351
+INSULINA EN SUERO
+Insulina basal
+11.28
+2.6 - 24.9 μUI/mL
+Método: Electroquimioluminiscencia
+www.chopo.com.mx
+SUCURSAL GUADALUPE INN
+Av. Revolución No.1540   Col. GUADALUPE INN C.P.1020
+ALVARO OBREGON, DISTRITO FEDERAL
+Gracias por su preferencia.
+GRUPO DIAGNÓSTICO MÉDICO PROA S.A. DE C.V.
+
+Paciente:
+Sexo:
+Fecha:
+Dirigido a:
+Edad:
+Hoja: 3 de 4
+GUTIERREZ GRADOS DAVID ISAAC
+Masculino 35
+ DR(A). JOAQUIN GERARDO JOYA GALEANA
+FB0159641
+13/01/2018  07:53:55a. m.
+Resultados
+Análisis Clínicos
+   PruebaBajo (LR)Dentro (LR)Sobre (LR)   Límites de referencia
+años
+ 33338942 
+Orden:
+ID Paciente:
+3204351
+25 HIDROXI VITAMINA D TOTAL (CALCIFEROL)
+Vitamina D (25,hidroxi)
+32.64
+30 - 100 ng/mL
+Método: Electroquimioluminiscencia
+INFORME FINAL ENVIADO POR CORREO ELECTRONICO
+Gracias por permitirnos servirle
+Responsable del Laboratorio de Análisis Clínicos
+Q.F.B. Mario García Sánchez  
+Universidad Autónoma Metropolitana        Cédula Profesional: 895854
+En    caso    de    que    su    médico    tenga    la    necesidad    de    ratificar    el    resultado,    lo    podrá    solicitar    dentro    de    los    3    días 
+posteriores   a   la   fecha   de   entrega,   el   reproceso   del   estudio   se   realiza   en   la   misma   muestra.   Posterior   a   esta   fecha 
+el    resultado    entregado    se    tomará    como    aceptado.    Aplica    en    muestras    sanguíneas    con    proceso    analítico    de    24 
+horas.
