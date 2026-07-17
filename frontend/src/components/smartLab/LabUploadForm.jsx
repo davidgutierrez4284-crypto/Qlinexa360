@@ -32,7 +32,14 @@ const LabUploadForm = ({ patientId, onUploaded }) => {
       setFile(null);
       onUploaded?.(data?.report || data);
     } catch (err) {
-      const msg = err.response?.data?.message || 'No se pudo subir el reporte.';
+      const data = err.response?.data;
+      const msg =
+        data?.message ||
+        (typeof data?.error === 'string' && data.error !== 'Not found' ? data.error : null) ||
+        (err.response?.status === 404
+          ? 'Laboratorio inteligente no está habilitado en el servidor.'
+          : null) ||
+        'No se pudo subir el reporte.';
       toast.error(msg);
     } finally {
       setLoading(false);

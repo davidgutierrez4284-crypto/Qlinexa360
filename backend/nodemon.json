@@ -11,7 +11,7 @@
   "verbose": true,
   "colours": true,
   "signal": "SIGTERM",
-  "exitcrash": true,
+  "exitcrash": false,
   "crashDelay": 5000,
   "maxRestarts": 10,
   "legacyWatch": false

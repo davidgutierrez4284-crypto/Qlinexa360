@@ -14,7 +14,7 @@ import { assertReportAccess } from './labAccess.service';
 export async function processLabReport(reportId: string, actorUserId?: string | null) {
   const report = await prisma.labReport.findUnique({ where: { id: reportId } });
   if (!report) throw new AppError(LAB_ERRORS.REPORT_NOT_FOUND, 404);
-  if (!['uploaded', 'extraction_failed', 'pending_review'].includes(report.extractionStatus)) {
+  if (!['uploaded', 'extraction_failed', 'pending_review', 'processing'].includes(report.extractionStatus)) {
     throw new AppError(LAB_ERRORS.INVALID_STATUS, 400);
   }
 
@@ -278,8 +278,23 @@ export async function confirmLabReport(req: AuthRequest, reportId: string, corre
     });
   }
 
-  await refreshAlertsForPatient(confirmed.patientId);
-  await refreshDashboardForPatient(confirmed.patientId);
+  // Alertas/dashboard no deben tumbar la confirmación (p. ej. Prisma lento o fallo puntual en local).
+  try {
+    await refreshAlertsForPatient(confirmed.patientId);
+  } catch (e) {
+    console.warn(
+      'Smart Lab: refreshAlertsForPatient falló tras confirmar:',
+      e instanceof Error ? e.message : e
+    );
+  }
+  try {
+    await refreshDashboardForPatient(confirmed.patientId);
+  } catch (e) {
+    console.warn(
+      'Smart Lab: refreshDashboardForPatient falló tras confirmar:',
+      e instanceof Error ? e.message : e
+    );
+  }
 
   return confirmed;
 }

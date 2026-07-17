@@ -2,6 +2,8 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, Head
 import { Readable } from 'stream';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
 
 const s3ClientConfig: ConstructorParameters<typeof S3Client>[0] = {
   region: process.env.AWS_REGION || 'us-east-1',
@@ -18,6 +20,34 @@ const s3Client = new S3Client(s3ClientConfig);
 
 const BUCKET_NAME =
   process.env.AWS_S3_BUCKET_NAME || process.env.AWS_BUCKET_NAME || '';
+
+/** URLs relativas guardadas por el fallback de disco en desarrollo (`/uploads/...`). */
+export function isLocalUploadUrl(fileUrl: string): boolean {
+  if (!fileUrl) return false;
+  return fileUrl.startsWith('/uploads/') || fileUrl.startsWith('uploads/');
+}
+
+function localPathFromUploadUrl(fileUrl: string): string {
+  const rel = fileUrl.replace(/^\//, '');
+  return path.join(__dirname, '../../', rel);
+}
+
+/**
+ * Almacenamiento local (mismo patrón que Zona de Estudio / facturas).
+ * Usado como fallback en desarrollo cuando S3 no está disponible.
+ */
+export async function uploadToLocalStorage(
+  file: Express.Multer.File,
+  category: string,
+  userId: string
+): Promise<{ url: string; key: string }> {
+  const fileExtension = file.originalname.split('.').pop() || 'bin';
+  const key = `${category.toLowerCase()}/${userId}/${uuidv4()}.${fileExtension}`;
+  const filePath = path.join(__dirname, '../../uploads', key);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, file.buffer);
+  return { url: `/uploads/${key.replace(/\\/g, '/')}`, key: key.replace(/\\/g, '/') };
+}
 
 export const uploadToS3 = async (file: Express.Multer.File, category: string, userId: string): Promise<{ url: string, key: string }> => {
   if (!BUCKET_NAME) {
@@ -44,8 +74,10 @@ export const uploadToS3 = async (file: Express.Multer.File, category: string, us
     await s3Client.send(command);
     console.log('S3: Archivo subido exitosamente con ACL público');
   } catch (aclError: any) {
-    // Si falla por ACL, intentar sin ACL (asumiendo que el bucket tiene una política pública)
-    console.warn('S3: Error al subir con ACL público, intentando sin ACL:', aclError.message);
+    // No loguear el objeto AWS completo (incluye AWSAccessKeyId y stacks enormes).
+    const aclMsg = aclError?.message || String(aclError);
+    const aclCode = aclError?.name || aclError?.Code || 'Error';
+    console.warn('S3: Error al subir con ACL público, intentando sin ACL:', aclCode, aclMsg);
     if (aclError.name === 'AccessControlListNotSupported' || aclError.message?.includes('ACL')) {
       console.log('S3: El bucket no permite ACLs, subiendo sin ACL (asumiendo política de bucket pública)');
       command = new PutObjectCommand({
@@ -60,12 +92,15 @@ export const uploadToS3 = async (file: Express.Multer.File, category: string, us
         await s3Client.send(command);
         console.log('S3: Archivo subido exitosamente sin ACL (usando política de bucket)');
       } catch (error: any) {
-        console.error('S3: Error subiendo archivo sin ACL:', error);
+        console.error(
+          'S3: Error subiendo archivo sin ACL:',
+          error?.name || error?.Code || 'Error',
+          error?.message || String(error)
+        );
         throw error;
       }
     } else {
-      // Si es otro error, lanzarlo
-      console.error('S3: Error subiendo archivo:', aclError);
+      console.error('S3: Error subiendo archivo:', aclCode, aclMsg);
       throw aclError;
     }
   }
@@ -125,6 +160,12 @@ export const uploadBufferToS3 = async (
 };
 
 export const deleteFromS3 = async (url: string): Promise<void> => {
+  if (isLocalUploadUrl(url)) {
+    const localPath = localPathFromUploadUrl(url);
+    if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
+    return;
+  }
+
   const key = extractS3KeyFromUrl(url);
 
   const command = new DeleteObjectCommand({
@@ -161,6 +202,10 @@ export async function registerFileInDB(prisma: any, file: Express.Multer.File, u
 }
 
 export async function getS3SignedUrl(fileUrl: string, expiresInSeconds: number = 60 * 5): Promise<string> {
+  // PDFs de Smart Lab en development se guardan como `/uploads/...`
+  if (isLocalUploadUrl(fileUrl)) {
+    return fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
+  }
   const url = new URL(fileUrl);
   const key = url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname;
   const command = new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key });
@@ -170,6 +215,11 @@ export async function getS3SignedUrl(fileUrl: string, expiresInSeconds: number =
 /** Obtiene URL firmada si el objeto existe en S3; null si NoSuchKey (archivo no encontrado en dev) */
 export async function getS3SignedUrlIfExists(fileUrl: string, expiresInSeconds: number = 60 * 5): Promise<string | null> {
   try {
+    if (isLocalUploadUrl(fileUrl)) {
+      const localPath = localPathFromUploadUrl(fileUrl);
+      if (!fs.existsSync(localPath)) return null;
+      return fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
+    }
     const url = new URL(fileUrl);
     const key = url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname;
     await s3Client.send(new HeadObjectCommand({ Bucket: BUCKET_NAME, Key: key }));
@@ -207,6 +257,24 @@ export async function getS3ObjectHead(key: string): Promise<{ contentLength: num
  */
 export async function fetchBufferFromUrl(fileUrl: string): Promise<{ buffer: Buffer; contentType?: string }> {
   try {
+    if (isLocalUploadUrl(fileUrl)) {
+      const localPath = localPathFromUploadUrl(fileUrl);
+      if (!fs.existsSync(localPath)) {
+        throw new Error(`Archivo local no encontrado: ${fileUrl}`);
+      }
+      const buffer = fs.readFileSync(localPath);
+      const ext = path.extname(localPath).toLowerCase();
+      const contentType =
+        ext === '.pdf'
+          ? 'application/pdf'
+          : ext === '.png'
+            ? 'image/png'
+            : ext === '.jpg' || ext === '.jpeg'
+              ? 'image/jpeg'
+              : 'application/octet-stream';
+      return { buffer, contentType };
+    }
+
     const url = new URL(fileUrl);
     const isOurS3 = BUCKET_NAME && (
       url.hostname === `${BUCKET_NAME}.s3.amazonaws.com` ||

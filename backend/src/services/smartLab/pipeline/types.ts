@@ -6,6 +6,7 @@ export type LabVendor =
   | 'laboratorios_ruiz'
   | 'carpermor'
   | 'biomedica'
+  | 'laboratorio_polanco'
   | 'unknown';
 
 export type DocumentLayout = 'stacked' | 'tabular' | 'mixed';

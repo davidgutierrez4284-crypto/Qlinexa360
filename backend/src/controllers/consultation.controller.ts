@@ -450,8 +450,8 @@ export class ConsultationController {
         throw new AppError('Usuario no autenticado', 401);
       }
 
-      // Paciente accediendo a sus propias consultas: resolver 'self' al ID real
-      if (req.user?.role === 'PATIENT' && patientId === 'self') {
+      // Paciente: solo puede consultar su propio historial ('self' o su UUID)
+      if (req.user?.role === 'PATIENT') {
         const patient = await prisma.patient.findUnique({
           where: { userId },
           select: { id: true }
@@ -459,7 +459,11 @@ export class ConsultationController {
         if (!patient) {
           throw new AppError('Perfil de paciente no encontrado', 404);
         }
-        patientId = patient.id;
+        if (patientId === 'self') {
+          patientId = patient.id;
+        } else if (patientId !== patient.id) {
+          throw new AppError('Acceso denegado', 403);
+        }
       }
 
       const { clinicalCaseId } = req.query;
@@ -498,8 +502,8 @@ export class ConsultationController {
         throw new AppError('Usuario no autenticado', 401);
       }
 
-      // Paciente accediendo a sus propias estadísticas: resolver 'self' al ID real
-      if (req.user?.role === 'PATIENT' && patientId === 'self') {
+      // Paciente: solo puede consultar sus propias estadísticas ('self' o su UUID)
+      if (req.user?.role === 'PATIENT') {
         const patient = await prisma.patient.findUnique({
           where: { userId },
           select: { id: true }
@@ -507,7 +511,11 @@ export class ConsultationController {
         if (!patient) {
           throw new AppError('Perfil de paciente no encontrado', 404);
         }
-        patientId = patient.id;
+        if (patientId === 'self') {
+          patientId = patient.id;
+        } else if (patientId !== patient.id) {
+          throw new AppError('Acceso denegado', 403);
+        }
       }
 
       const { clinicalCaseId } = req.query;

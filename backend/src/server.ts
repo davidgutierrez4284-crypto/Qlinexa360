@@ -12,6 +12,12 @@ validateProductionSecrets();
 process.on('uncaughtException', (err) => {
   console.error('[FATAL] uncaughtException:', err);
   if (err && (err as Error).stack) console.error((err as Error).stack);
+  // En development no matar el proceso: nodemon tiene exitcrash=true y el backend
+  // quedaría abajo (upload/confirm fallan con "No se pudo confirmar").
+  if (String(process.env.NODE_ENV || '').toLowerCase() === 'development') {
+    console.error('[FATAL] Continuando en development (sin process.exit).');
+    return;
+  }
   process.exit(1);
 });
 

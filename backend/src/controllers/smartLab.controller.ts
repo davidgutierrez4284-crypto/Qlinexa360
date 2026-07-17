@@ -24,7 +24,7 @@ import {
   updateAnalyteCatalogEntry,
 } from '../services/smartLab/labCatalog.service';
 import prisma from '../config/database';
-import { getS3SignedUrl } from '../utils/file.utils';
+import { getS3SignedUrl, isLocalUploadUrl } from '../utils/file.utils';
 
 function sendError(res: Response, error: unknown) {
   const err = error instanceof AppError ? error : new AppError('Error en laboratorio inteligente', 500);
@@ -201,14 +201,16 @@ export const compareLabReports = async (req: AuthRequest, res: Response) => {
 export const downloadLabReportPdf = async (req: AuthRequest, res: Response) => {
   try {
     const report = await assertReportAccess(req, req.params.reportId);
-    const signedUrl = await getS3SignedUrl(report.sourcePdfUrl);
+    const downloadUrl = isLocalUploadUrl(report.sourcePdfUrl)
+      ? report.sourcePdfUrl
+      : await getS3SignedUrl(report.sourcePdfUrl);
     recordLabAuditFireAndForget({
       actorUserId: req.user?.userId,
       patientId: report.patientId,
       labReportId: report.id,
       action: 'download',
     });
-    res.json({ url: signedUrl });
+    res.json({ url: downloadUrl });
   } catch (e) {
     sendError(res, e);
   }

@@ -1,25 +1,8 @@
-import { PrismaClient, FieldType, UserRole } from '@prisma/client';
+import { PrismaClient, UserRole } from '@prisma/client';
 import { seedLabAnalyteCatalog } from './seeds/labAnalyteCatalog.seed';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
-
-type FormFieldData = {
-    label: string;
-    fieldType: FieldType; 
-    placeholder?: string;
-    options?: string[];
-    defaultValue?: string;
-    isRequired: boolean;
-    order: number;
-};
-
-type FormTemplateData = {
-    name: string;
-    specialty: string;
-    description?: string;
-    fields: FormFieldData[];
-};
 
 async function main() {
     console.log('Start seeding...');
@@ -71,15 +54,24 @@ async function main() {
                 dataConsent: true,
                 termsAccepted: true,
                 termsAcceptedAt: new Date(),
-                accessType: 'subscription',
+                // LIFETIME en local: evita bloqueos de suscripción/PayPal al probar
+                accessType: 'lifetime',
             },
         });
         console.log(`Created doctor profile for: ${doctorUser.email}`);
     } else {
-        console.log(`Doctor profile already exists for: ${doctorUser.email}`);
+        console.log(`Doctor user already exists: ${doctorUser.email}`);
+        if ((doctor.accessType || '').toLowerCase() !== 'lifetime') {
+            doctor = await prisma.doctor.update({
+                where: { id: doctor.id },
+                data: { accessType: 'lifetime' },
+            });
+            console.log(`Updated doctor accessType to lifetime: ${doctorUser.email}`);
+        }
     }
 
-    // Crear suscripción solo si no existe
+    // Suscripción LIFETIME (sin PayPal): mismo patrón que promo LIFETIME en registro
+    const lifetimeEnd = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000);
     const existingSubscription = await prisma.subscription.findFirst({
         where: { doctorId: doctor.id }
     });
@@ -90,14 +82,28 @@ async function main() {
                 doctorId: doctor.id,
                 status: 'ACTIVE',
                 startDate: new Date(),
-                endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
-                paypalSubscriptionId: 'seed_sub_id_premium',
-                paypalPlanId: 'seed_plan_id_premium',
+                endDate: lifetimeEnd,
+                paypalSubscriptionId: '',
+                paypalPlanId: '',
+                freeMonthUsed: false,
             },
         });
-        console.log(`Created subscription for doctor: ${doctorUser.email}`);
+        console.log(`Created LIFETIME subscription for doctor: ${doctorUser.email}`);
     } else {
-        console.log(`Subscription already exists for doctor: ${doctorUser.email}`);
+        await prisma.subscription.update({
+            where: { id: existingSubscription.id },
+            data: {
+                status: 'ACTIVE',
+                endDate: lifetimeEnd,
+                paypalSubscriptionId: '',
+                paypalPlanId: '',
+                cancelledAt: null,
+                cancellationReason: null,
+                freeMonthUsed: false,
+                resumeDate: null,
+            },
+        });
+        console.log(`Updated subscription to LIFETIME for doctor: ${doctorUser.email}`);
     }
 
     // --- Creación del Paciente de Prueba (solo si no existe) ---
@@ -165,213 +171,11 @@ async function main() {
         console.log(`Doctor-patient relationship already exists`);
     }
     
-    // --- Creación de Plantillas de Formulario ---
-    const formTemplatesData: FormTemplateData[] = [
-        {
-            name: 'Anestesiología',
-            specialty: 'Anestesiología',
-            fields: [
-                { label: 'Tipo de Cirugía', fieldType: FieldType.TEXT, isRequired: false, order: 1 },
-                { label: 'Evaluación Preoperatoria ASA', fieldType: FieldType.SELECT, options: ['ASA I', 'ASA II', 'ASA III', 'ASA IV', 'ASA V'], isRequired: false, order: 2 },
-                { label: 'Alergias Conocidas', fieldType: FieldType.TEXTAREA, isRequired: false, order: 3 },
-            ]
-        },
-        {
-            name: 'Cardiología',
-            specialty: 'Cardiología',
-            fields: [
-                { label: 'Presión Arterial (Sistólica)', fieldType: FieldType.NUMBER, isRequired: false, order: 1 },
-                { label: 'Presión Arterial (Diastólica)', fieldType: FieldType.NUMBER, isRequired: false, order: 2 },
-                { label: 'Colesterol Total (mg/dL)', fieldType: FieldType.NUMBER, isRequired: false, order: 3 },
-                { label: 'Antecedentes Familiares', fieldType: FieldType.SELECT, options: ['Sí', 'No', 'No sabe'], isRequired: false, order: 4 },
-                { label: 'Observaciones Adicionales', fieldType: FieldType.TEXTAREA, isRequired: false, order: 5 }
-            ]
-        },
-        {
-            name: 'Dermatología',
-            specialty: 'Dermatología',
-            fields: [
-                { label: 'Descripción de la Lesión', fieldType: FieldType.TEXTAREA, isRequired: false, order: 1 },
-                { label: 'Localización', fieldType: FieldType.TEXT, isRequired: false, order: 2 },
-                { label: 'Tratamiento Previo', fieldType: FieldType.TEXT, isRequired: false, order: 3 },
-            ]
-        },
-        {
-            name: 'Enfermería: Heridas, Estomas y Quemaduras',
-            specialty: 'Enfermería: Heridas, Estomas y Quemaduras',
-            fields: [
-                { label: 'Tipo de Lesión', fieldType: FieldType.SELECT, options: ['Herida', 'Estoma', 'Quemadura'], isRequired: false, order: 1 },
-                { label: 'Localización Anatómica', fieldType: FieldType.TEXT, isRequired: false, order: 2 },
-                { label: 'Estado de la Piel Perilesional', fieldType: FieldType.TEXTAREA, isRequired: false, order: 3 },
-                { label: 'Plan de Cuidados', fieldType: FieldType.TEXTAREA, isRequired: false, order: 4 },
-            ]
-        },
-        {
-            name: 'Gastroenterología',
-            specialty: 'Gastroenterología',
-            fields: [
-                { label: 'Síntoma Principal', fieldType: FieldType.TEXT, isRequired: false, order: 1 },
-                { label: 'Resultados de Endoscopia', fieldType: FieldType.TEXTAREA, isRequired: false, order: 2 },
-                { label: 'Prueba de H. Pylori', fieldType: FieldType.SELECT, options: ['Positivo', 'Negativo', 'No realizada'], isRequired: false, order: 3 },
-            ]
-        },
-         {
-            name: 'Ginecología y Obstetricia',
-            specialty: 'Ginecología y Obstetricia',
-            fields: [
-                { label: 'Fecha de Última Menstruación (FUM)', fieldType: FieldType.DATE, isRequired: false, order: 1 },
-                { label: 'Resultados de Papanicolau', fieldType: FieldType.TEXTAREA, isRequired: false, order: 2 },
-                { label: 'Semanas de Gestación', fieldType: FieldType.NUMBER, isRequired: false, order: 3 },
-            ]
-        },
-        {
-            name: 'Nefrología',
-            specialty: 'Nefrología',
-            fields: [
-                { label: 'Tasa de Filtración Glomerular (TFG)', fieldType: FieldType.NUMBER, isRequired: false, order: 1 },
-                { label: 'Nivel de Creatinina Sérica (mg/dL)', fieldType: FieldType.NUMBER, isRequired: false, order: 2 },
-                { label: 'Presencia de Proteinuria', fieldType: FieldType.SELECT, options: ['Sí', 'No'], isRequired: false, order: 3 },
-            ]
-        },
-        {
-            name: 'Neurología',
-            specialty: 'Neurología',
-            fields: [
-                { label: 'Escala de Coma de Glasgow (GCS)', fieldType: FieldType.NUMBER, isRequired: false, order: 1 },
-                { label: 'Reflejos Osteotendinosos', fieldType: FieldType.TEXT, isRequired: false, order: 2 },
-                { label: 'Descripción de Crisis Convulsiva', fieldType: FieldType.TEXTAREA, isRequired: false, order: 3 },
-            ]
-        },
-        {
-            name: 'Odontología',
-            specialty: 'Odontología',
-            fields: [
-                { label: 'Índice de Placa', fieldType: FieldType.TEXT, isRequired: false, order: 1 },
-                { label: 'Plan de Tratamiento Dental', fieldType: FieldType.TEXTAREA, isRequired: false, order: 2 },
-                { label: 'Piezas Dentales Afectadas', fieldType: FieldType.TEXT, isRequired: false, order: 3 },
-            ]
-        },
-        {
-            name: 'Oftalmología',
-            specialty: 'Oftalmología',
-            fields: [
-                { label: 'Agudeza Visual (Ojo Derecho)', fieldType: FieldType.TEXT, isRequired: false, order: 1 },
-                { label: 'Agudeza Visual (Ojo Izquierdo)', fieldType: FieldType.TEXT, isRequired: false, order: 2 },
-                { label: 'Presión Intraocular (PIO)', fieldType: FieldType.NUMBER, isRequired: false, order: 3 },
-            ]
-        },
-        {
-            name: 'Otorrinolaringología',
-            specialty: 'Otorrinolaringología',
-            fields: [
-                { label: 'Evaluación Auditiva (Audiometría)', fieldType: FieldType.TEXT, isRequired: false, order: 1 },
-                { label: 'Exploración de Faringe', fieldType: FieldType.TEXTAREA, isRequired: false, order: 2 },
-                { label: 'Síntomas de Vértigo', fieldType: FieldType.TEXT, isRequired: false, order: 3 },
-            ]
-        },
-        {
-            name: 'Pediatría',
-            specialty: 'Pediatría',
-            fields: [
-                { label: 'Percentil de Crecimiento (Peso)', fieldType: FieldType.NUMBER, isRequired: false, order: 1 },
-                { label: 'Percentil de Crecimiento (Talla)', fieldType: FieldType.NUMBER, isRequired: false, order: 2 },
-                { label: 'Esquema de Vacunación', fieldType: FieldType.SELECT, options: ['Completo', 'Incompleto'], isRequired: false, order: 3 },
-            ]
-        },
-        {
-            name: 'Psicología',
-            specialty: 'Psicología',
-            fields: [
-                { label: 'Motivo de Consulta', fieldType: FieldType.TEXTAREA, isRequired: false, order: 1 },
-                { label: 'Evaluación del Estado de Ánimo', fieldType: FieldType.TEXT, isRequired: false, order: 2 },
-                { label: 'Plan Terapéutico', fieldType: FieldType.TEXTAREA, isRequired: false, order: 3 },
-            ]
-        },
-        {
-            name: 'Psiquiatría',
-            specialty: 'Psiquiatría',
-            fields: [
-                { label: 'Diagnóstico DSM-5', fieldType: FieldType.TEXT, isRequired: false, order: 1 },
-                { label: 'Medicación Actual', fieldType: FieldType.TEXTAREA, isRequired: false, order: 2 },
-                { label: 'Riesgo Suicida', fieldType: FieldType.SELECT, options: ['Bajo', 'Medio', 'Alto', 'No evaluado'], isRequired: false, order: 3 },
-            ]
-        },
-        {
-            name: 'Radiología',
-            specialty: 'Radiología',
-            fields: [
-                { label: 'Tipo de Estudio', fieldType: FieldType.TEXT, isRequired: false, order: 1 },
-                { label: 'Hallazgos Radiológicos', fieldType: FieldType.TEXTAREA, isRequired: false, order: 2 },
-                { label: 'Impresión Diagnóstica', fieldType: FieldType.TEXTAREA, isRequired: false, order: 3 },
-            ]
-        },
-        {
-            name: 'Traumatología',
-            specialty: 'Traumatología',
-            fields: [
-                { label: 'Mecanismo de Lesión', fieldType: FieldType.TEXTAREA, isRequired: false, order: 1 },
-                { label: 'Rango de Movilidad', fieldType: FieldType.TEXT, isRequired: false, order: 2 },
-                { label: 'Plan de Rehabilitación', fieldType: FieldType.TEXTAREA, isRequired: false, order: 3 },
-            ]
-        },
-        {
-            name: 'Urología',
-            specialty: 'Urología',
-            fields: [
-                { label: 'Antígeno Prostático Específico (PSA)', fieldType: FieldType.NUMBER, isRequired: false, order: 1 },
-                { label: 'Síntomas del Tracto Urinario Inferior (IPSS)', fieldType: FieldType.TEXT, isRequired: false, order: 2 },
-                { label: 'Resultados de Uroflujometría', fieldType: FieldType.TEXTAREA, isRequired: false, order: 3 },
-            ]
-        }
-    ];
-
-    for (const templateData of formTemplatesData) {
-        const { fields, ...templateDetails } = templateData;
-        
-        // Verificar si la plantilla ya existe
-        let createdTemplate = await prisma.formTemplate.findFirst({
-            where: { 
-                name: templateDetails.name,
-                specialty: templateDetails.specialty
-            }
-        });
-
-        if (!createdTemplate) {
-            createdTemplate = await prisma.formTemplate.create({
-                data: templateDetails
-            });
-            console.log(`Created form template: ${createdTemplate.name}`);
-        } else {
-            console.log(`Form template already exists: ${createdTemplate.name}`);
-        }
-
-        // Crear campos solo si no existen
-        if (fields && fields.length > 0) {
-            for (const fieldData of fields) {
-                const existingField = await prisma.templateField.findFirst({
-                    where: {
-                        templateId: createdTemplate.id,
-                        label: fieldData.label
-                    }
-                });
-
-                if (!existingField) {
-                    await prisma.templateField.create({
-                        data: {
-                            templateId: createdTemplate.id,
-                            label: fieldData.label,
-                            fieldType: fieldData.fieldType,
-                            placeholder: fieldData.placeholder,
-                            options: fieldData.options,
-                            defaultValue: fieldData.defaultValue,
-                            isRequired: fieldData.isRequired,
-                            order: fieldData.order,
-                        },
-                    });
-                }
-            }
-        }
-    }
+    // Plantillas de formularios de especialidad (versión robusta / PROD):
+    // NO se cargan aquí. Tras `npm run db:seed`, ejecutar:
+    //   npm run db:seed:forms
+    // Ver: scripts/seed-form-templates-only.js y SEED_FORMULARIOS_PROD.md
+    console.log('Form templates: run `npm run db:seed:forms` for PROD specialty templates.');
 
     await seedLabAnalyteCatalog(prisma);
     console.log('Seeding finished.');

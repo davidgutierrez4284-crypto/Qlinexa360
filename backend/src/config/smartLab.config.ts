@@ -14,16 +14,19 @@ function envInt(key: string, defaultValue: number): number {
   return Number.isFinite(n) && n > 0 ? n : defaultValue;
 }
 
+/** En desarrollo el módulo se asume ON si no hay flag (el frontend ya lo muestra). En prod sigue OFF hasta ECS/env. */
 export function isSmartLabEnabled(): boolean {
-  return envBool('SMART_LAB_ENABLED', false);
+  const devDefault = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'development';
+  return envBool('SMART_LAB_ENABLED', devDefault);
 }
 
 export function getSmartLabMaxPdfMb(): number {
   return envInt('SMART_LAB_MAX_PDF_MB', 15);
 }
 
+/** Pacientes pueden subir PDFs por diseño cuando el módulo está activo; desactivar con SMART_LAB_PATIENT_UPLOAD_ENABLED=false. */
 export function isSmartLabPatientUploadEnabled(): boolean {
-  return envBool('SMART_LAB_PATIENT_UPLOAD_ENABLED', false);
+  return envBool('SMART_LAB_PATIENT_UPLOAD_ENABLED', true);
 }
 
 export function isSmartLabExternalOcrEnabled(): boolean {

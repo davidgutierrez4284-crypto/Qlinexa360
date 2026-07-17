@@ -45,6 +45,14 @@ const Calendar = () => {
   });
   const [scheduleConfig, setScheduleConfig] = useState(null);
   const [doctorName, setDoctorName] = useState('');
+  // Refs para evitar refetch storms / toasts duplicados cuando cambian deps
+  const scheduleConfigRef = useRef(null);
+  const providerStatusRef = useRef(providerStatus);
+  const eventsAbortRef = useRef(null);
+  const lastEventsErrorToastAtRef = useRef(0);
+
+  scheduleConfigRef.current = scheduleConfig;
+  providerStatusRef.current = providerStatus;
 
   // Cargar nombre del doctor
   useEffect(() => {
@@ -276,10 +284,24 @@ const Calendar = () => {
 
   // Cargar eventos del calendario
   const fetchEvents = useCallback(async (info = null) => {
+    // Cancelar petición anterior: FullCalendar / sync pueden disparar varios fetches solapados
+    if (eventsAbortRef.current) {
+      eventsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    eventsAbortRef.current = controller;
+
+    const showEventsErrorToast = (message, toastId) => {
+      const now = Date.now();
+      // Evitar tormenta de toasts idénticos (refetch + timeout 8–20s × N)
+      if (now - lastEventsErrorToastAtRef.current < 15000) {
+        return;
+      }
+      lastEventsErrorToastAtRef.current = now;
+      toast.error(message, { toastId, autoClose: 6000 });
+    };
+
     try {
-      // Si ya se cargaron eventos y no hay cambios en los filtros, retornar eventos existentes
-      // (optimización para evitar cargas innecesarias)
-      
       const params = new URLSearchParams();
       
       // Siempre proporcionar un rango de fechas para evitar consultas sin límite
@@ -317,7 +339,9 @@ const Calendar = () => {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`
         },
-        timeout: 8000
+        signal: controller.signal,
+        // Backend lista eventos desde DB; 20s da margen si hay muchos appointments
+        timeout: 20000
       });
 
       // Verificar que response.data sea un array
@@ -378,22 +402,46 @@ const Calendar = () => {
       const filteredEvents = calendarEvents;
 
       // Generar eventos de fondo para horarios de disponibilidad
-      const availabilityEvents = generateAvailabilityEvents(info, scheduleConfig);
+      const availabilityEvents = generateAvailabilityEvents(info, scheduleConfigRef.current);
       
       // Combinar eventos normales con eventos de disponibilidad
       return [...filteredEvents, ...availabilityEvents];
     } catch (error) {
+      const wasAborted =
+        controller.signal.aborted ||
+        error.code === 'ERR_CANCELED' ||
+        error.name === 'CanceledError' ||
+        error.name === 'AbortError' ||
+        axios.isCancel?.(error);
+
+      if (wasAborted) {
+        // No devolver []: eso vaciaría el calendario vía successCallback mientras otra petición sigue.
+        const abortErr = new Error('Calendar events fetch aborted');
+        abortErr.name = 'AbortError';
+        abortErr.code = 'ERR_CANCELED';
+        throw abortErr;
+      }
+
       console.error('Error al cargar eventos:', error);
       if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        toast.error('Tiempo de espera agotado. Intenta nuevamente.');
+        showEventsErrorToast(
+          'Tiempo de espera agotado. Intenta nuevamente.',
+          'calendar-events-timeout'
+        );
       } else if (error.response?.status === 401) {
-        toast.error('Sesión expirada. Por favor, inicia sesión nuevamente.');
+        showEventsErrorToast(
+          'Sesión expirada. Por favor, inicia sesión nuevamente.',
+          'calendar-events-401'
+        );
       } else {
-        toast.error('Error al cargar eventos del calendario');
+        showEventsErrorToast(
+          'Error al cargar eventos del calendario',
+          'calendar-events-error'
+        );
       }
       return [];
     }
-  }, [filters.origenEvento, filters.patientId, scheduleConfig]);
+  }, [filters.origenEvento, filters.patientId]);
 
   // Recargar eventos cuando cambian los filtros (excepto viewType que no afecta los datos)
   useEffect(() => {
@@ -416,39 +464,36 @@ const Calendar = () => {
   }, [filters.viewType]);
 
   // Sincronización automática periódica de calendarios (cada 7.5 minutos = 450,000ms)
-  // Solo cuando el usuario está en la sección de calendario
+  // Solo cuando el usuario está en la sección de calendario.
+  // Depende solo de activeSection: providerStatus vía ref evita reiniciar timers y refetch al cargar estado.
   useEffect(() => {
     if (activeSection !== 'calendar') {
-      return; // No sincronizar si no está en la sección de calendario
+      return;
     }
 
     const syncAllCalendars = async () => {
       try {
-        // Sincronizar todos los calendarios conectados en segundo plano (sin mostrar notificaciones)
-        const connectedProviders = Object.keys(providerStatus).filter(
-          provider => providerStatus[provider]
-        );
+        const status = providerStatusRef.current || {};
+        const connectedProviders = Object.keys(status).filter((provider) => status[provider]);
 
         if (connectedProviders.length === 0) {
-          return; // No hay calendarios conectados, no hacer nada
+          return;
         }
 
-        // Sincronizar cada proveedor conectado
         const syncPromises = connectedProviders.map(async (provider) => {
           try {
             await axios.post(`/api/calendar-sync/sync/${provider}`, {}, {
               headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-              timeout: 30000 // Timeout de 30 segundos para sincronización
+              timeout: 30000
             });
           } catch (error) {
-            // Silenciar errores de sincronización automática para no molestar al usuario
+            // Silenciar errores de sincronización automática (background)
             console.log(`Sincronización automática de ${provider} falló (no crítico):`, error.message);
           }
         });
 
         await Promise.allSettled(syncPromises);
 
-        // Después de sincronizar, refrescar los eventos del calendario
         if (calendarRef.current) {
           const calendarApi = calendarRef.current.getApi();
           if (calendarApi) {
@@ -456,29 +501,60 @@ const Calendar = () => {
           }
         }
 
-        // Actualizar el estado de los proveedores
         fetchProviderStatus();
       } catch (error) {
         console.error('Error en sincronización automática:', error);
-        // No mostrar error al usuario, es una sincronización en segundo plano
       }
     };
 
-    // Sincronizar inmediatamente cuando se monta el componente (si está en la sección de calendario)
-    // Y luego cada 7.5 minutos (450,000ms = 7.5 minutos)
-    const syncInterval = setInterval(syncAllCalendars, 450000); // 7.5 minutos
-    
-    // Sincronizar inmediatamente después de 2 segundos (para dar tiempo a que la página cargue)
+    const syncInterval = setInterval(syncAllCalendars, 450000);
+    // Dar tiempo a la carga inicial de /api/calendar/events antes de sync+refetch
     const initialSyncTimeout = setTimeout(() => {
       syncAllCalendars();
-    }, 2000);
+    }, 8000);
 
     return () => {
       clearInterval(syncInterval);
       clearTimeout(initialSyncTimeout);
     };
-  }, [activeSection, providerStatus, fetchProviderStatus]);
+  }, [activeSection, fetchProviderStatus]);
   
+  // Fuente de eventos estable: evita que FullCalendar refetch en cada re-render del padre
+  const loadCalendarEvents = useCallback((info, successCallback, failureCallback) => {
+    fetchEvents(info)
+      .then((events) => {
+        successCallback(events);
+      })
+      .catch((error) => {
+        const aborted =
+          error?.name === 'AbortError' ||
+          error?.code === 'ERR_CANCELED';
+        if (aborted) {
+          return;
+        }
+        console.error('Error en fetchEvents:', error);
+        failureCallback(error);
+      });
+  }, [fetchEvents]);
+
+  // Cuando llega la config de horarios, refrescar una vez para pintar bloques de disponibilidad
+  useEffect(() => {
+    if (!scheduleConfig || !calendarRef.current) return;
+    const calendarApi = calendarRef.current.getApi();
+    if (calendarApi) {
+      calendarApi.refetchEvents();
+    }
+  }, [scheduleConfig]);
+
+  // Abortar fetch pendiente al desmontar
+  useEffect(() => {
+    return () => {
+      if (eventsAbortRef.current) {
+        eventsAbortRef.current.abort();
+      }
+    };
+  }, []);
+
   // Manejar el cambio de vista del calendario
   const handleViewChange = (view) => {
     if (view.view && calendarRef.current) {
@@ -778,17 +854,7 @@ const Calendar = () => {
                       center: 'title',
                       right: ''
                     }}
-                    events={(info, successCallback, failureCallback) => {
-                      // Cargar eventos de forma asíncrona
-                      fetchEvents(info)
-                        .then((events) => {
-                          successCallback(events);
-                        })
-                        .catch((error) => {
-                          console.error('Error en fetchEvents:', error);
-                          failureCallback(error);
-                        });
-                    }}
+                    events={loadCalendarEvents}
                     datesSet={(dateInfo) => {
                       // Este callback se llama cuando cambian las fechas visibles
                       // Útil para debugging (solo en desarrollo)

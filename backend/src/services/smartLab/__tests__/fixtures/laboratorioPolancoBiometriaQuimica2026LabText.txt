@@ -1,0 +1,275 @@
+
+
+
+Sexo:Edad:
+Toma:
+Expediente:
+Impresión:
+Médico:
+1621727 / 41
+A QUIEN CORRESPONDA
+14/07/2026 09:55
+Masculino
+13/07/2026 14:03
+ParticularABRAHAM GUTIERREZ HERNANDEZPaciente:
+Factura:PL-284634
+Empresa:
+Estatus:**Completo
+82 años
+Plaza Miramontes (LMP)Sucursal:
+Nacimiento:
+16/03/1944
+Nacionalidad:MEXICANA
+BIOMETRIA HEMATICA
+Centro de proceso:
+CDMX
+ExamenIntervalo de referencia
+Bajo intervalo
+de referencia
+Dentro intervalo
+de referencia
+Sobre intervalo
+de referencia
+Indicador
+Muestra:
+Sangre Total
+Método:
+Impedancia, fotometría, volumen-conductividad-dispersión
+LEUCOCITOS
+8.0
+3.84 - 9.79  10^3/μL
+ERITROCITOS
+4.38
+4.39 - 6.10  10^6/μL
+HEMOGLOBINA
+12.2
+13.8 - 18.5  g/dL
+HEMATOCRITO
+38.1
+35.4 - 49.4   %
+VOLUMEN GLOBULAR MEDIO
+87.0
+84.4 - 100  fl
+HEMOGLOBINA CORPUSCULAR MEDIA
+27.9
+27.1 - 33.5  pg
+CONCENTRAC. HEMOG. CORPUSCULAR MEDIA
+32.0
+31.6 - 34.8  g/dL
+ANCHO DE DISTRIBUCIÓN ERITROCITOS
+16.1
+11.8 - 17.6   %
+PLAQUETAS
+259.0
+147 - 384  10^3/μL
+VOLUMEN PLAQUETARIO MEDIO
+9.4
+7.0 - 12.0  fl
+NEUTROFILOS
+85.6
+39.6 - 76.10   %
+LINFOCITOS
+3.2
+15.5 - 48.6   %
+MONOCITOS
+10.7
+3.4 - 10.1   %
+EOSINOFILOS
+0.2
+0.3 - 4.5   %
+BASOFILOS
+0.3
+0.0 - 1.6   %
+NEUTROFILOS ABSOLUTOS
+6.85
+1.71 - 6.48  10^3/μL
+1/3
+
+
+Sexo:Edad:
+Toma:
+Expediente:
+Impresión:
+Médico:
+1621727 / 41
+A QUIEN CORRESPONDA
+14/07/2026 09:55
+Masculino
+13/07/2026 14:03
+ParticularABRAHAM GUTIERREZ HERNANDEZPaciente:
+Factura:PL-284634
+Empresa:
+Estatus:**Completo
+82 años
+Plaza Miramontes (LMP)Sucursal:
+Nacimiento:
+16/03/1944
+Nacionalidad:MEXICANA
+ExamenIntervalo de referencia
+Bajo intervalo
+de referencia
+Dentro intervalo
+de referencia
+Sobre intervalo
+de referencia
+Indicador
+Muestra:
+Sangre Total
+Método:
+Impedancia, fotometría, volumen-conductividad-dispersión
+LINFOCITOS ABSOLUTOS
+0.26
+0.99 - 3.24  10^3/μL
+MONOCITOS ABSOLUTOS
+0.86
+0.19 - 0.71  10^3/μL
+EOSINOFILOS ABSOLUTOS
+0.02
+0.02 - 0.32  10^3/μL
+BASOFILOS ABSOLUTOS
+0.02
+0.0 - 0.09  10^3/μL
+FROTIS
+No se observaron formas inmaduras o alteraciones en la morfología
+de los leucocitos. Poiquilocitosis 1+: ovalocitos escasos, equinocitos
+1+.
+
+PROCALCITONINA. ^
+Centro de proceso:
+CDMX
+ExamenIntervalo de referencia
+Bajo intervalo
+de referencia
+Dentro intervalo
+de referencia
+Sobre intervalo
+de referencia
+Indicador
+Muestra:
+Plasma
+Método:
+Electroquimioluminiscencia
+PROCALCITONINA
+0.33
+< 0.5  ng/ml
+QUIMICA SANGUINEA DE 6 ELEMENTOS
+Centro de proceso:
+CDMX
+ExamenIntervalo de referencia
+Bajo intervalo
+de referencia
+Dentro intervalo
+de referencia
+Sobre intervalo
+de referencia
+Indicador
+Muestra:
+Suero
+GLUCOSA
+198
+ Normal:                          70 -  99 mg/dL
+Intolerancia en ayuno: 100 - 125 mg/dL
+Diabetes:                         >=126  mg/dL
+FotometríaMétodo:
+NITROGENO DE UREA
+22.4
+7-25  mg/dL
+FotometríaMétodo:
+CREATININA
+1.1
+0.60 - 1.30 mg/dL
+FotometríaMétodo:
+RELACION NITROGENO UREICO/CREATININA
+20.4
+10 - 20
+CálculoMétodo:
+ACIDO URICO
+7.4
+4.4 - 7.6  mg/dL
+FotometríaMétodo:
+COLESTEROL TOTAL
+152
+Deseable:           <200 mg/dL
+Límite alto :  200 - 239 mg/dL
+FotometríaMétodo:
+2/3
+
+
+Sexo:Edad:
+Toma:
+Expediente:
+Impresión:
+Médico:
+1621727 / 41
+A QUIEN CORRESPONDA
+14/07/2026 09:55
+Masculino
+13/07/2026 14:03
+ParticularABRAHAM GUTIERREZ HERNANDEZPaciente:
+Factura:PL-284634
+Empresa:
+Estatus:**Completo
+82 años
+Plaza Miramontes (LMP)Sucursal:
+Nacimiento:
+16/03/1944
+Nacionalidad:MEXICANA
+ExamenIntervalo de referencia
+Bajo intervalo
+de referencia
+Dentro intervalo
+de referencia
+Sobre intervalo
+de referencia
+Indicador
+Muestra:
+Suero
+Alto:                   >=240 mg/dL
+TRIGLICERIDOS
+111
+Normal:              < 150 mg/dL
+Límite alto:    150 - 199 mg/dL
+Alto:              200 - 499 mg/dL
+Muy alto:             > 499 mg/dL
+FotometríaMétodo:
+PROTEINA C REACTIVA^
+Centro de proceso:
+CDMX
+ExamenIntervalo de referencia
+Bajo intervalo
+de referencia
+Dentro intervalo
+de referencia
+Sobre intervalo
+de referencia
+Indicador
+Muestra:
+Suero
+Método:
+Fotometría
+PROTEINA C REACTIVA
+135.4
+ Menor o igual a 10 mg/L
+
+ Inflamación leve: 10-50 mg/L
+ inflamación más grave: 50-100 mg/L
+procesos serios (infección bacteriana): >100  mg/L
+
+resultado confirmado por análisis repetido.
+
+
+3/3
+
+LABORATORIO MEDICO POLANCO, S.A. DE C.V. CDMX: Laguna de Tamiahua 204, Col. Anahuac, Ciudad de Mexico, México.
+Ced. Profesional: 2100191
+Q.F.B. Miriam Cecilia Canché Valle
+Dirección De Laboratorio
+Garantía de calidad:  Verificación sin costo de todo resultado imprevisto en un plazo de 3 días, previa solicitud escrita del médico tratante.
+Para los médicos el cálculo de la incertidumbre de los resultados cuantitativos está disponible previa solicitud por escrito.
+Seleccionar intervalo de acuerdo a la condicion del paciente
+En el intervalo de referenciaDebajo del intervaloArriba del intervalo*
+Diferente a valor de referencia
+^ Prueba no acreditada con ISO 15189:2022
+Los resultados  obtenidos durante el proceso de verificación del  método de cada una  de las pruebas procesadas se encuentran disponibles previa solicitud por
+Verificar resultados
+Laboratorio de ensayo acreditado por ema, a.c. con acreditación No CL-088.

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import { Dialog, Switch } from '@headlessui/react';
 import { XMarkIcon, ClipboardDocumentIcon, ArrowUpTrayIcon, PaperClipIcon, InformationCircleIcon, PlusCircleIcon, TrashIcon, LinkIcon } from '@heroicons/react/24/outline';
 import { toast } from 'react-toastify';
@@ -95,7 +95,8 @@ const NewConsultationModal = ({ isOpen, onClose, onSubmit, patientName, padecimi
   const [studyResults, setStudyResults] = readOnly ? [initialData.files?.STUDY_RESULT || [], undefined] : useState(initialData.files?.STUDY_RESULT || []);
   const [patientPhotos, setPatientPhotos] = readOnly ? [initialData.files?.PATIENT_PHOTO || [], undefined] : useState(initialData.files?.PATIENT_PHOTO || []);
   const [links, setLinks] = readOnly ? [initialData.links || [], undefined] : useState(initialData.links || []);
-  const [formData, setFormData] = readOnly ? [initialData.formData || {}, undefined] : useState(initialData.formData || {});
+  const [formData] = readOnly ? [initialData.formData || {}, undefined] : useState(initialData.formData || {});
+  const specialtyFormDataRef = useRef(initialData.formData || {});
   
   // Generar campos de especialidad basándose en formData cuando está en modo solo lectura
   const specialtyFields = readOnly && initialData.formData ? 
@@ -109,7 +110,7 @@ const NewConsultationModal = ({ isOpen, onClose, onSubmit, patientName, padecimi
       })) : 
     (initialData.specialtyFields || []);
   
-  // Para modo solo lectura, usar initialData.formData directamente
+  // Solo lectura o values iniciales: no reinyectar formData en cada tecla (evita saltos)
   const smartFormValues = readOnly ? (initialData.formData || {}) : formData;
   
   console.log('Campo specialtyFields:', initialData.specialtyFields);
@@ -162,7 +163,7 @@ const NewConsultationModal = ({ isOpen, onClose, onSubmit, patientName, padecimi
     setStudyResults([]);
     setPatientPhotos([]);
     setLinks([]);
-    setFormData({});
+    specialtyFormDataRef.current = {};
     setTags('');
     setNotes('');
     setReason('');
@@ -196,8 +197,9 @@ const NewConsultationModal = ({ isOpen, onClose, onSubmit, patientName, padecimi
     const validLinks = links.filter(link => link.url && link.description);
 
     // El payload que se envía a la página padre
-    console.log('formData antes de enviar:', formData);
-    console.log('Object.keys(formData):', Object.keys(formData || {}));
+    const specialtyPayload = specialtyFormDataRef.current || {};
+    console.log('formData antes de enviar:', specialtyPayload);
+    console.log('Object.keys(formData):', Object.keys(specialtyPayload));
     const consultationData = {
       date,
       reason,
@@ -212,7 +214,7 @@ const NewConsultationModal = ({ isOpen, onClose, onSubmit, patientName, padecimi
         STUDY_RESULT: studyResults,
         PATIENT_PHOTO: patientPhotos,
       },
-      formData: formData || {}, // Siempre enviar un objeto, aunque esté vacío
+      formData: specialtyPayload, // Siempre enviar un objeto, aunque esté vacío
     };
 
     onSubmit(consultationData).finally(() => {
@@ -352,7 +354,9 @@ const NewConsultationModal = ({ isOpen, onClose, onSubmit, patientName, padecimi
             <SmartForm 
               fields={specialtyFields}
               values={smartFormValues}
-              onChange={setFormData}
+              onChange={(data) => {
+                specialtyFormDataRef.current = data;
+              }}
               readOnly={readOnly}
             />
 

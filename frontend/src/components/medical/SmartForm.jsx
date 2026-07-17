@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getFormTemplates } from '../../services/doctorService';
 import { getDoctorFormTemplates } from '../../services/doctorFormTemplateService';
 import { toast } from 'react-toastify';
@@ -226,6 +226,25 @@ const mapDoctorFieldToFormField = (f) => ({
   isRequired: false,
 });
 
+const mapDoctorTemplates = (customTemplates) =>
+  (customTemplates || []).map(t => ({
+    ...t,
+    source: 'doctor',
+    fields: (t.fields || []).map(f => ({
+      ...f,
+      fieldType: f.fieldType === 'numeric' ? 'NUMBER' : 'TEXT',
+    })),
+  }));
+
+const pickTemplatesWithValues = (allTemplates, data) => {
+  if (!data || Object.keys(data).length === 0) return [];
+  return allTemplates.filter(template =>
+    Object.keys(data).some(key =>
+      (template.fields || []).some(field => field.id === key)
+    )
+  );
+};
+
 // Componente principal del formulario inteligente
 const SmartForm = ({ fields = [], values = {}, onChange, onDoctorFormDataChange, readOnly = false }) => {
   const [templates, setTemplates] = useState([]);
@@ -234,47 +253,76 @@ const SmartForm = ({ fields = [], values = {}, onChange, onDoctorFormDataChange,
   const [formData, setFormData] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Solo hidratar con el values inicial: si values va en deps del fetch, cada tecla
+  // re-dispara loading/spinner y provoca saltos de layout/scroll en la consulta.
+  const initialValuesRef = useRef(values);
+  const didHydrateFromValuesRef = useRef(false);
 
-  // Cargar plantillas del sistema y del doctor
+  // Cargar plantillas una sola vez (no re-fetch al escribir en campos)
   useEffect(() => {
+    let cancelled = false;
+
     const fetchTemplates = async () => {
       setIsLoading(true);
       setError(null);
-      
+
       try {
         const [systemTemplates, customTemplates] = await Promise.all([
           getFormTemplates(),
           getDoctorFormTemplates().catch(() => []),
         ]);
-        
+        if (cancelled) return;
+
+        const mappedDoctor = mapDoctorTemplates(customTemplates);
         setTemplates(systemTemplates);
-        setDoctorTemplates((customTemplates || []).map(t => ({
-          ...t,
-          source: 'doctor',
-          fields: (t.fields || []).map(f => ({ ...f, fieldType: f.fieldType === 'numeric' ? 'NUMBER' : 'TEXT' })),
-        })));
-        
-        if (readOnly && values && Object.keys(values).length > 0) {
-          const allTemplates = [...systemTemplates, ...(customTemplates || []).map(t => ({ ...t, source: 'doctor', fields: (t.fields || []).map(f => ({ ...f, fieldType: f.fieldType === 'numeric' ? 'NUMBER' : 'TEXT' })) }))];
-          const templatesWithData = allTemplates.filter(template => 
-            Object.keys(values).some(key => 
-              (template.fields || []).some(field => field.id === key)
-            )
-          );
-          setSelectedTemplates(templatesWithData);
-          setFormData(values);
+        setDoctorTemplates(mappedDoctor);
+
+        const initialValues = initialValuesRef.current;
+        if (initialValues && Object.keys(initialValues).length > 0) {
+          const allTemplates = [...systemTemplates, ...mappedDoctor];
+          const templatesWithData = pickTemplatesWithValues(allTemplates, initialValues);
+          if (templatesWithData.length > 0) {
+            setSelectedTemplates(templatesWithData);
+            setFormData(initialValues);
+            didHydrateFromValuesRef.current = true;
+          }
         }
       } catch (err) {
+        if (cancelled) return;
         console.error('Error al cargar plantillas:', err);
         setError(err.message || 'Error al cargar las plantillas de formulario');
         toast.error('Error al cargar formularios especiales');
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     fetchTemplates();
-  }, [readOnly, values]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Hidratar una sola vez cuando values tiene datos (async / edición).
+  // No depende de teclas posteriores: didHydrate evita re-aplicar y saltos.
+  useEffect(() => {
+    if (didHydrateFromValuesRef.current) return;
+    if (!values || Object.keys(values).length === 0) return;
+    const allTemplates = [...templates, ...doctorTemplates];
+    if (allTemplates.length === 0) return;
+    // Si el usuario ya eligió plantillas, no pisar su trabajo
+    if (selectedTemplates.length > 0) {
+      didHydrateFromValuesRef.current = true;
+      return;
+    }
+
+    const templatesWithData = pickTemplatesWithValues(allTemplates, values);
+    if (templatesWithData.length > 0) {
+      setSelectedTemplates(templatesWithData);
+      setFormData(values);
+      didHydrateFromValuesRef.current = true;
+    }
+  }, [values, templates, doctorTemplates, selectedTemplates.length]);
 
   const allTemplates = [...templates, ...doctorTemplates];
 
@@ -319,15 +367,16 @@ const SmartForm = ({ fields = [], values = {}, onChange, onDoctorFormDataChange,
   const handleTemplateRemoval = (templateId) => {
     const template = allTemplates.find(t => t.id === templateId);
     if (template) {
-      setSelectedTemplates(prev => prev.filter(t => t.id !== templateId));
+      const nextSelected = selectedTemplates.filter(t => t.id !== templateId);
+      setSelectedTemplates(nextSelected);
       setFormData(prev => {
         const newData = { ...prev };
         (template.fields || []).forEach(field => {
           delete newData[field.id];
         });
+        notifyChanges(newData, nextSelected);
         return newData;
       });
-      notifyChanges(newData, selectedTemplates.filter(t => t.id !== templateId));
     }
   };
 

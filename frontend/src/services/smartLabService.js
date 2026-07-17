@@ -21,6 +21,8 @@ export async function uploadLabReport(patientId, file, onUploadProgress) {
     {
       headers: { ...headers(), 'Content-Type': 'multipart/form-data' },
       onUploadProgress,
+      // Upload + parseo local puede tardar varios segundos
+      timeout: 180000,
     }
   );
   return data;
@@ -55,7 +57,10 @@ export async function confirmLabReport(reportId, results) {
   const { data } = await axios.post(
     getApiUrl(API_BASE + '/reports/' + reportId + '/confirm'),
     body,
-    { headers: headers({ 'Content-Type': 'application/json' }) }
+    {
+      headers: headers({ 'Content-Type': 'application/json' }),
+      timeout: 120000,
+    }
   );
   return data;
 }

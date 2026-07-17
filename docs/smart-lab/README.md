@@ -31,9 +31,9 @@ Flujo principal: **upload** → validacion PDF → almacenamiento → **process*
 
 | Variable | Default | Efecto |
 |----------|---------|--------|
-| `SMART_LAB_ENABLED` | `false` | Si es falso, todas las rutas `/api/smart-lab` responden 404 |
+| `SMART_LAB_ENABLED` | `false` (prod); `true` si `NODE_ENV=development` y no hay flag | Si es falso, todas las rutas `/api/smart-lab` responden 404 |
 | `SMART_LAB_MAX_PDF_MB` | `15` | Tamano maximo del PDF |
-| `SMART_LAB_PATIENT_UPLOAD_ENABLED` | `false` | Permite que rol PATIENT suba PDFs |
+| `SMART_LAB_PATIENT_UPLOAD_ENABLED` | `true` | Permite que rol PATIENT suba PDFs (poner `false` para desactivar) |
 | `SMART_LAB_EXTERNAL_OCR_ENABLED` | `false` | OCR externo (stub; requiere integracion) |
 | `SMART_LAB_REVIEW_THRESHOLD` | `0.9` | Umbral de confianza por fila (UI revision) |
 | `SMART_LAB_AI_FALLBACK_ENABLED` | `false` | IA JSON fallback cuando parser determinístico falla |

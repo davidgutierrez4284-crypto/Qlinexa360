@@ -1706,6 +1706,11 @@ const MedicalRecords = () => {
     ? usePatientClinicalCases() 
     : useClinicalCases(patientId);
   
+  // Paciente debe usar patientId='self' (el middleware de consultas solo permite eso / su propio id).
+  // Pasar el UUID real hacía fallar con 403 y toast "Error al cargar las consultas".
+  const dividedConsultationsPatientId =
+    user?.role === 'PATIENT' ? 'self' : (patient?.id || null);
+
   // Hook para consultas divididas (después de que selectedCase esté disponible)
   const {
     consultations: dividedConsultations,
@@ -1716,7 +1721,7 @@ const MedicalRecords = () => {
     addAttachmentsToConsultation,
     markConsultationComplete,
     refresh: refreshDividedConsultations
-  } = useDividedConsultations(patient?.id, selectedCase?.id || null);
+  } = useDividedConsultations(dividedConsultationsPatientId, selectedCase?.id || null);
   
   const [isNewCaseModalOpen, setIsNewCaseModalOpen] = useState(false);
   const [isCreatingCase, setIsCreatingCase] = useState(false);
@@ -2730,10 +2735,22 @@ const MedicalRecords = () => {
           ) : (
             <div className="text-center py-10 border-2 border-dashed border-gray-300 rounded-lg">
               {user?.role === 'PATIENT' ? (
-                <>
-                  <h2 className="text-xl font-semibold text-gray-700">Cargando tu historial clínico...</h2>
-                  <p className="mt-1 text-gray-500">Por favor espera mientras se cargan tus datos médicos.</p>
-                </>
+                loadingCases || !patient ? (
+                  <>
+                    <h2 className="text-xl font-semibold text-gray-700">Cargando tu historial clínico...</h2>
+                    <p className="mt-1 text-gray-500">Por favor espera mientras se cargan tus datos médicos.</p>
+                  </>
+                ) : clinicalCases.length === 0 ? (
+                  <>
+                    <h2 className="text-xl font-semibold text-gray-700">Aún no hay historial clínico visible</h2>
+                    <p className="mt-1 text-gray-500">Cuando tu médico registre consultas y habilite el acceso, aparecerán aquí.</p>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-xl font-semibold text-gray-700">Selecciona un caso clínico</h2>
+                    <p className="mt-1 text-gray-500">Elige un caso arriba para ver su evolución y consultas.</p>
+                  </>
+                )
               ) : (
                 <>
                   <h2 className="text-xl font-semibold text-gray-700">Seleccione un caso clínico para ver su evolución y consultas.</h2>

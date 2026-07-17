@@ -2,6 +2,7 @@ import { chopoParser } from './parsers/chopo.parser';
 import { biomedicaParser } from './parsers/biomedica.parser';
 import { genericParser, parseWithRegisteredParsers } from './parsers/generic.parser';
 import { lapiParser } from './parsers/lapi.parser';
+import { laboratorioPolancoParser } from './parsers/laboratorioPolanco.parser';
 import { saludDignaParser } from './parsers/saludDigna.parser';
 import {
   carpermorParser,
@@ -15,6 +16,7 @@ export const REGISTERED_LAB_PARSERS: LabParser[] = [
   saludDignaParser,
   lapiParser,
   biomedicaParser,
+  laboratorioPolancoParser,
   olabParser,
   laboratoriosRuizParser,
   carpermorParser,

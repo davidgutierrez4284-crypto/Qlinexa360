@@ -30,7 +30,10 @@ const router = Router();
 
 router.use((_req: Request, res: Response, next: NextFunction) => {
   if (!isSmartLabEnabled()) {
-    return res.status(404).json({ error: 'Not found' });
+    return res.status(404).json({
+      error: 'Not found',
+      message: 'Laboratorio inteligente no está habilitado en este entorno.',
+    });
   }
   next();
 });

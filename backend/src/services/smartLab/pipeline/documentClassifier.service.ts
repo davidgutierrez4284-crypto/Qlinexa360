@@ -64,6 +64,17 @@ const VENDOR_SIGNALS: VendorSignal[] = [
       /bioderef\.com/i,
     ],
   },
+  {
+    vendor: 'laboratorio_polanco',
+    laboratoryName: 'Laboratorio Médico Polanco',
+    weight: 1,
+    patterns: [
+      /laboratorio\s+m[eé]dico\s+polanco/i,
+      /plaza\s+miramontes\s*\(lmp\)/i,
+      /factura\s*:\s*pl-?\d{4,}/i,
+      /acreditaci[oó]n\s+no\s*\.?\s*cl-088/i,
+    ],
+  },
 ];
 
 const STACKED_MARKERS =

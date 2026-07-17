@@ -37,6 +37,15 @@ const REPORT_DATE_LABELS =
 const SALUD_DIGNA_TOMA_BLOCK =
   /fecha\s+de\s+toma[\s\S]{0,400}?(\d{1,2}\/\d{1,2}\/\d{4})(?:\s*\d{2}:\d{2}:\d{2})?/i;
 
+/**
+ * Laboratorio Médico Polanco: pdf-parse desordena el bloque de encabezado; las etiquetas
+ * (Sexo/Edad/Toma/Expediente/Impresión/Médico) salen primero y luego los valores en otro
+ * orden: Expediente, Médico, Impresión (fecha+hora), Sexo, Toma (fecha+hora).
+ * Se usa "Impresión:" ... fecha ... Masculino/Femenino ... fecha como ancla del bloque.
+ */
+const LMP_HEADER_DATE_BLOCK =
+  /impresi[oó]n:[\s\S]{0,200}?(\d{1,2}\/\d{1,2}\/\d{4})(?:\s+\d{1,2}:\d{2})?[\s\S]{0,60}?(?:masculino|femenino)[\s\S]{0,20}?(\d{1,2}\/\d{1,2}\/\d{4})(?:\s+\d{1,2}:\d{2})?/i;
+
 const LAPI_FECHAS_HEADER =
   /fechas?\s*:\s*(?:atenci[o\u00f3]n\s*\/\s*toma\s*muestra\s*\/\s*emisi[o\u00f3]n)?/i;
 const LAPI_TOMA_MUESTRA_DATE = /toma\s*muestra[^\d\n]{0,40}(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i;
@@ -80,6 +89,11 @@ function pickLaboratoryName(text: string): string | undefined {
   ) {
     return 'Salud Digna';
   }
+  if (
+    /laboratorio\s+m[eé]dico\s+polanco|plaza\s+miramontes\s*\(lmp\)|factura\s*:\s*pl-?\d{4,}/i.test(text)
+  ) {
+    return 'Laboratorio Médico Polanco';
+  }
   for (const re of LAB_NAME_PATTERNS) {
     const m = text.match(re);
     const candidate = m?.[1]?.replace(/\s+/g, ' ').trim();
@@ -119,7 +133,7 @@ function pickStudyType(text: string): string | undefined {
   }
 
   const sectionMatch = text.match(
-    /\b((?:SUPER\s+)?QU[IÍ]MICA(?:\s+INTEGRAL)?\s+DE\s+\d+\s+ELEMENTOS[^\n\r]{0,30}|INSULINA EN SUERO|BIOMETR[IÍ]A[^\n\r]{0,50}|UROCULTIVO|EXAMEN GENERAL DE ORINA|PERFIL\s+DE\s+LIP[IÍ]D(?:OS|ICO)(?:\s+EN\s+SUERO)?)\b/i
+    /\b((?:SUPER\s+)?QU[IÍ]MICA(?:\s+INTEGRAL|\s+SANGU[IÍ]NEA)?\s+DE\s+\d+\s+ELEMENTOS[^\n\r]{0,30}|INSULINA EN SUERO|BIOMETR[IÍ]A[^\n\r]{0,50}|UROCULTIVO|EXAMEN GENERAL DE ORINA|PERFIL\s+DE\s+LIP[IÍ]D(?:OS|ICO)(?:\s+EN\s+SUERO)?|PROTE[IÍ]NA\s+C\s+REACTIVA|PROCALCITONINA)\b/i
   );
   if (sectionMatch?.[1]) {
     const cleaned = sanitizeStudyType(sectionMatch[1]);
@@ -156,6 +170,18 @@ function pickLabeledDate(text: string, labelRe: RegExp): Date | undefined {
 
 function pickSaludDignaStudyDate(text: string): Date | undefined {
   const m = text.match(SALUD_DIGNA_TOMA_BLOCK);
+  if (m?.[1]) return parseMxDateString(m[1]);
+  return undefined;
+}
+
+function pickPolancoStudyDate(text: string): Date | undefined {
+  const m = text.match(LMP_HEADER_DATE_BLOCK);
+  if (m?.[2]) return parseMxDateString(m[2]);
+  return undefined;
+}
+
+function pickPolancoReportDate(text: string): Date | undefined {
+  const m = text.match(LMP_HEADER_DATE_BLOCK);
   if (m?.[1]) return parseMxDateString(m[1]);
   return undefined;
 }
@@ -199,11 +225,13 @@ export function parseStudyMetadataFromText(text: string): LabStudyMetadata {
   const normalized = text.replace(/\r/g, '');
   const studyDate =
     pickSaludDignaStudyDate(normalized) ??
+    pickPolancoStudyDate(normalized) ??
     pickTomaMuestraStudyDate(normalized) ??
     pickLabeledDate(normalized, STUDY_DATE_LABELS) ??
     pickLapiStudyDate(normalized) ??
     pickFirstDateExcludingBirth(normalized);
   const reportDate =
+    pickPolancoReportDate(normalized) ??
     pickLabeledDate(normalized, REPORT_DATE_LABELS) ??
     pickLabeledDate(normalized, LAPI_EMISION_DATE);
   return {

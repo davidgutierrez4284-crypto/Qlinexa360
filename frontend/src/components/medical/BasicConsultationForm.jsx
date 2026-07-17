@@ -1,9 +1,8 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import SmartForm from './SmartForm';
 import { Dialog } from '@headlessui/react';
 import { XMarkIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
 import { toast } from 'react-toastify';
-import { debounce } from 'lodash';
 
 // --- Componente Tooltip ---
 const Tooltip = ({ text, children }) => (
@@ -33,14 +32,12 @@ const BasicConsultationForm = ({
     const fd = initialData.formData;
     return Object.fromEntries(Object.entries(fd).filter(([k]) => !BASIC_FORM_KEYS.includes(k)));
   };
-  const [specialtyFormData, setSpecialtyFormData] = useState(getInitialSpecialtyData);
-  const [doctorCustomFormData, setDoctorCustomFormData] = useState(() => initialData.doctorCustomFormData || []);
-  // Refs con datos más recientes (para submit sin esperar debounce)
+  const [specialtyFormData] = useState(getInitialSpecialtyData);
+  // Refs con datos más recientes (para submit sin re-render del padre al teclear)
   const latestSpecialtyRef = useRef(getInitialSpecialtyData());
   const latestDoctorCustomRef = useRef(initialData.doctorCustomFormData || []);
-  // Debounce 150ms: reduce re-renders y saltos al escribir (cada tecla no dispara re-render del padre)
-  const debouncedSetSpecialty = useCallback(debounce((data) => setSpecialtyFormData(data), 150), []);
-  const debouncedSetDoctorCustom = useCallback(debounce((data) => setDoctorCustomFormData(data), 150), []);
+  // No subir specialtyFormData al state en cada tecla: evita re-render del modal/página
+  // y saltos de scroll mientras se escribe en formularios de especialidad.
 
   // Función para obtener la fecha actual en formato YYYY-MM-DD
   const getCurrentDate = () => {
@@ -357,17 +354,15 @@ const BasicConsultationForm = ({
             </div>
             </form>
 
-            {/* Formularios por Especialidad - debounce + overflow-anchor evitan saltos al teclear */}
+            {/* Formularios por Especialidad — estado interno en SmartForm; padre solo recibe refs al cambiar */}
             <div className="mt-4" style={{ overflowAnchor: 'none', contain: 'layout' }}>
               <SmartForm
               values={specialtyFormData}
               onChange={(data) => {
                 latestSpecialtyRef.current = data;
-                debouncedSetSpecialty(data);
               }}
               onDoctorFormDataChange={(data) => {
                 latestDoctorCustomRef.current = data;
-                debouncedSetDoctorCustom(data);
               }}
             />
             </div>

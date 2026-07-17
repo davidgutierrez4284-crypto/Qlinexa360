@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import axios from 'axios';
@@ -45,6 +45,7 @@ const PreConsultation = () => {
   const [patientPhotos, setPatientPhotos] = useState([]);
   const [links, setLinks] = useState([]);
   const [formData, setFormData] = useState({});
+  const specialtyFormDataRef = useRef({});
 
   // Opciones de evolución clínica
   const clinicalEvolutionOptions = [
@@ -105,6 +106,7 @@ const PreConsultation = () => {
               }
             });
             setFormData(specialtyData);
+            specialtyFormDataRef.current = specialtyData;
           }
         } else {
           toast.error(response.data.message || 'Error al cargar la pre-consulta');
@@ -203,7 +205,7 @@ const PreConsultation = () => {
         tags: processedTags,
         links: validLinks,
         files: uploadedFiles,
-        ...formData
+        ...specialtyFormDataRef.current
       };
       
       await axios.put(`/api/pre-consultations/token/${effectiveToken}/save`, {
@@ -300,7 +302,7 @@ const PreConsultation = () => {
         tags: processedTags,
         links: validLinks,
         files: uploadedFiles,
-        ...formData
+        ...specialtyFormDataRef.current
       };
       
       const response = await axios.post(`/api/pre-consultations/token/${effectiveToken}/complete`, {
@@ -497,7 +499,9 @@ const PreConsultation = () => {
             {/* Formularios Inteligentes */}
             <SmartForm 
               values={formData}
-              onChange={setFormData}
+              onChange={(data) => {
+                specialtyFormDataRef.current = data;
+              }}
               readOnly={false}
             />
 

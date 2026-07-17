@@ -22,9 +22,22 @@ export class AssistantMiddleware {
           return next();
         }
 
-        // Si es paciente y accede a sus propios datos (patientId='self'), permitir
-        if (userRole === 'PATIENT' && req.params.patientId === 'self') {
-          return next();
+        // Paciente: permitir 'self' o su propio patientId (nunca el de otro paciente)
+        if (userRole === 'PATIENT') {
+          const paramPatientId = req.params.patientId;
+          if (paramPatientId === 'self') {
+            return next();
+          }
+          if (paramPatientId) {
+            const ownPatient = await prisma.patient.findUnique({
+              where: { userId },
+              select: { id: true }
+            });
+            if (ownPatient && ownPatient.id === paramPatientId) {
+              return next();
+            }
+          }
+          throw new AppError('Acceso denegado', 403);
         }
 
         // Si es asistente, verificar permisos
